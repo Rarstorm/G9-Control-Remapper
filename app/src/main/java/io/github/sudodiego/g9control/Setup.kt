@@ -57,12 +57,14 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                     }
                     Step(
                         3, s.autoServiceOn, tr("Cambio automático (opcional)", "Automatic switching (optional)"),
-                        tr("Para que el control cambie solo a X-Input o DS5 al abrir un juego, y para la guía de Vista + Menú, " +
-                            "activa el servicio de accesibilidad de G9 Control. Solo detecta qué app está en pantalla: no lee " +
-                            "su contenido, no ve lo que escribes y no se conecta a internet.",
-                            "To switch the controller to X-Input or DS5 automatically when you open a game, and for the View + Menu " +
-                                "guide, turn on G9 Control's accessibility service. It only detects which app is on screen: it doesn't " +
-                                "read its content, doesn't see what you type and doesn't connect to the internet.")
+                        tr("Para que el control cambie solo a X-Input o DS5 al abrir un juego, para la guía de Vista + Menú y para " +
+                            "el panel de juego (L3 + R3), activa el servicio de accesibilidad de G9 Control. Solo detecta qué app " +
+                            "está en pantalla y ve los botones del control; desde el panel puede sacar capturas y abrir Game Assistant " +
+                            "con un deslizamiento. No lee el contenido de la pantalla, no ve lo que escribes y no se conecta a internet.",
+                            "To switch the controller to X-Input or DS5 automatically when you open a game, for the View + Menu " +
+                                "guide and for the game panel (L3 + R3), turn on G9 Control's accessibility service. It only detects which " +
+                                "app is on screen and sees the controller's buttons; from the panel it can take screenshots and open Game " +
+                                "Assistant with a swipe. It doesn't read screen content, doesn't see what you type and doesn't connect to the internet.")
                     ) {
                         if (!s.autoServiceOn) OutlinedButton(onClick = { AutoRules.openServiceSettings(a) }) {
                             Text(tr("Abrir accesibilidad", "Open accessibility"))

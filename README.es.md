@@ -53,7 +53,7 @@ Además hace cosas que la oficial no puede:
 
 ### Sobre el servicio de accesibilidad
 
-El cambio automático por juego, la guía de Vista + Menú y los íconos de ajustes rápidos (desde X-Input/DS5) usan un servicio de accesibilidad. **Solo detecta qué app está en pantalla** (cambios de ventana) y ve los botones del control, para seguir Vista + Menú en la guía y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla. No lee el contenido de la pantalla, no ve lo que escribes y la app no tiene permiso de internet.
+El cambio automático por juego, la guía de Vista + Menú, los íconos de ajustes rápidos (desde X-Input/DS5) y el panel de juego (L3 + R3) usan un servicio de accesibilidad. **Solo detecta qué app está en pantalla** (cambios de ventana) y ve los botones del control, para seguir Vista + Menú en la guía, abrir y manejar el panel de juego y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla. Desde el panel de juego también puede sacar una captura de pantalla y hacer un solo gesto: el deslizamiento que abre el Game Assistant de la tablet (Lenovo ZUI) desde su pestaña lateral. No lee el contenido de la pantalla, no ve lo que escribes y la app no tiene permiso de internet.
 
 Si Android muestra **«Ajuste restringido»** al activarlo: Ajustes → Apps → G9 Control → ⋮ (arriba a la derecha) → **Permitir ajustes restringidos**, y vuelve a intentarlo.
 

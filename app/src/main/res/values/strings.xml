@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">G9 Control</string>
     <string name="auto_service_label">G9 Control: automatic mode switching</string>
-    <string name="auto_service_description">Switches the G9 to X-Input or DS5 when you open the apps you choose in G9 Control. It only detects which app is on screen; it doesn\'t read its content.</string>
+    <string name="auto_service_description">Switches the G9 to X-Input or DS5 when you open the apps you choose in G9 Control and opens the game panel with L3 + R3. It only detects which app is on screen and sees the controller\'s buttons; it doesn\'t read screen content.</string>
 </resources>

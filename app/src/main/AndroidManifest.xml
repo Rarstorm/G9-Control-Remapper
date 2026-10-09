@@ -17,6 +17,8 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
         </intent>
+        <!-- Game Assistant de ZUI: saber si está instalado y abrir sus ajustes. -->
+        <package android:name="com.zui.game.service" />
     </queries>
 
     <application

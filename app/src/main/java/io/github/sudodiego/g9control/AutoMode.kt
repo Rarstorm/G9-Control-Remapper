@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
@@ -90,6 +91,14 @@ object AutoRules {
     fun showLabel(ctx: Context) = sp(ctx).getBoolean("show_label", true)
     fun setShowLabel(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("show_label", v).apply()
 
+    /** L3 + R3 abre el panel de juego (captura, Game Assistant, modo del control). */
+    fun gamePanel(ctx: Context) = sp(ctx).getBoolean("game_panel", true)
+    fun setGamePanel(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("game_panel", v).apply()
+
+    /** En DS5, M dos veces (llega como un toque del touchpad) saca la captura limpia del panel de juego. */
+    fun touchpadShot(ctx: Context) = sp(ctx).getBoolean("touchpad_shot", true)
+    fun setTouchpadShot(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("touchpad_shot", v).apply()
+
     fun noticePos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("notice_pos", null)!!) }
         .getOrDefault(NoticePos.TOP_END)
     fun setNoticePos(ctx: Context, v: NoticePos) = sp(ctx).edit().putString("notice_pos", v.name).apply()
@@ -153,11 +162,15 @@ class AutoModeService : AccessibilityService() {
     /** App con regla que está (o estuvo) al frente; al salir de ella se recuerda volver a Android. */
     private var ruleApp: String? = null
     private lateinit var guide: ModeGuide
+    private lateinit var panel: GamePanel
     /** Se salió de una app con regla y el control aún no vuelve a Android. */
     private var returnPending = false
     /** G9 Control está al frente: tiene su propia franja de modo, así que la guía se quita. */
     private var appInFront = false
     private var hiddenForApp = false
+    /** Ventana de la app al frente (del último cambio de ventana), o -1. La usa la captura del panel de juego. */
+    @Volatile var appWindowId = -1
+        private set
 
     /**
      * Pantalla apagada: la guía se quita (no tiene sentido en la pantalla de bloqueo). Al desbloquear,
@@ -207,6 +220,7 @@ class AutoModeService : AccessibilityService() {
         override fun onInputDeviceChanged(id: Int) = changed()
         private fun changed() {
             ModeTileService.refreshAll(this@AutoModeService)
+            updateTouchpad()
             if (ModeSwitcher.detect() == PadMode.ANDROID) returnPending = false
             guide.update()
         }
@@ -216,6 +230,9 @@ class AutoModeService : AccessibilityService() {
         super.onServiceConnected()
         Lang.load(this)
         guide = ModeGuide(this)
+        panel = GamePanel(this)
+        updateTouchpad()
+        getSharedPreferences("g9", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, main)
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -237,12 +254,16 @@ class AutoModeService : AccessibilityService() {
             if (guide.isGuiding) { guide.hide(); hiddenForApp = true }
             return
         }
-        if (pkg == lastPackage || isTransient(pkg)) return
+        if (isTransient(pkg)) return
+        // Ventana de la app al frente, para capturarla sola (sin puntero ni superposiciones). -1 si Android no la entrega.
+        appWindowId = event.windowId
+        if (pkg == lastPackage) return
         appInFront = false
         val wasHidden = hiddenForApp
         hiddenForApp = false
         lastPackage = pkg
-        Log.d(TAG, "app al frente: $pkg (${event.className}), modo ${ModeSwitcher.detect()}")
+        panel.hide()
+        Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
         if (!AutoRules.enabled(this)) return
 
         val target = AutoRules.rules(this)[pkg]
@@ -298,6 +319,8 @@ class AutoModeService : AccessibilityService() {
                 main.post { l(copy) }
             }
         }
+        if (panelChord(event)) return true
+        if (panel.isOpen && panel.onKey(event)) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -312,6 +335,87 @@ class AutoModeService : AccessibilityService() {
             KeyEvent.ACTION_UP -> held.remove(k) || guide.isRetaining
             else -> false
         }
+    }
+
+    private var lastTouchpad = 0L
+    private var touchpadOn = false
+    /** Al cambiar la opción en Ajustes se aplica enseguida (no recién al reconectar el control). */
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "touchpad_shot") updateTouchpad()
+    }
+
+    /**
+     * Recibir los eventos de mouse (así llega el touchpad del G9) solo en DS5 y con la opción activa. Android 14
+     * y 15 no permiten solo mirarlos: el servicio se los queda, así que un mouse real tampoco funciona en DS5.
+     */
+    private fun updateTouchpad() {
+        if (android.os.Build.VERSION.SDK_INT < 34) return
+        val want = AutoRules.touchpadShot(this) && ModeSwitcher.detect() == PadMode.DS5
+        if (want == touchpadOn) return
+        runCatching { serviceInfo = serviceInfo.apply { motionEventSources = if (want) InputDevice.SOURCE_MOUSE else 0 } }
+            .onSuccess { touchpadOn = want; Log.d(TAG, "touchpad del G9: ${if (want) "capturas" else "normal"}") }
+            .onFailure { Log.w(TAG, "no se pudo pedir el touchpad", it) }
+    }
+
+    /**
+     * Touchpad del G9 en DS5. El control no tiene touchpad: solo llega M dos veces, como un toque corto
+     * (que además muestra el puntero). El primer evento tras 1,5 s sin ninguno saca la captura limpia. Solo
+     * llegan mientras [updateTouchpad] los pidió.
+     */
+    override fun onMotionEvent(event: MotionEvent) {
+        if (!event.isFromSource(InputDevice.SOURCE_MOUSE)) return
+        val now = android.os.SystemClock.uptimeMillis()
+        val quiet = now - lastTouchpad > 1500
+        lastTouchpad = now
+        if (!quiet || !AutoRules.touchpadShot(this)) return
+        if (event.device?.name?.contains("g9", true) != true || ModeSwitcher.detect() != PadMode.DS5) return
+        Log.d(TAG, "M dos veces en DS5 (touchpad): captura")
+        panel.capture()
+    }
+
+    /** L3 y R3 apretados ahora mismo. */
+    private val sticksDown = mutableSetOf<Int>()
+    /** El stick que completó L3 + R3: ni su presión ni su soltar llegan al juego. */
+    private var chordKey = -1
+    /** L3 + R3 apretados y todavía sin decidir si es toque (panel) o mantener (captura). */
+    private var chordPending = false
+
+    /** L3 + R3 mantenidos medio segundo: captura directa, sin abrir el panel. */
+    private val chordHold = Runnable {
+        if (!chordPending) return@Runnable
+        chordPending = false
+        Log.d(TAG, "L3 + R3 mantenidos: captura")
+        panel.hide()
+        panel.capture()
+    }
+
+    /**
+     * L3 + R3: tocarlos abre o cierra el panel de juego; mantenerlos 0,5 s saca la captura directamente.
+     * El primero de los dos llega al juego como siempre (no se sabe todavía si viene el otro); el segundo
+     * se lo queda el panel. No funciona mientras está la guía.
+     */
+    private fun panelChord(e: KeyEvent): Boolean {
+        val k = e.keyCode
+        if (k != KeyEvent.KEYCODE_BUTTON_THUMBL && k != KeyEvent.KEYCODE_BUTTON_THUMBR) return false
+        when (e.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (e.repeatCount > 0) return k == chordKey
+                sticksDown += k
+                if (sticksDown.size == 2 && AutoRules.gamePanel(this) && !guide.isGuiding) {
+                    chordKey = k
+                    chordPending = true
+                    main.postDelayed(chordHold, 500)
+                    return true
+                }
+            }
+            KeyEvent.ACTION_UP -> {
+                sticksDown -= k
+                // Se soltó antes del medio segundo: era un toque.
+                if (chordPending) { chordPending = false; main.removeCallbacks(chordHold); panel.toggle() }
+                if (k == chordKey) { chordKey = -1; return true }
+            }
+        }
+        return false
     }
 
     private val transientCache = mutableMapOf<String, Boolean>()
@@ -336,10 +440,11 @@ class AutoModeService : AccessibilityService() {
     private fun wanted(t: AutoTarget) = if (t == AutoTarget.DS5) PadMode.DS5 else PadMode.XINPUT
 
     /**
-     * Cambio pedido a mano desde ajustes rápidos. Desde Android va por USB; desde otro modo muestra el
-     * aviso pequeño de Vista + Menú (reemplaza la guía que hubiera) y cierra el panel para que se vea.
+     * Cambio pedido a mano (ajustes rápidos o panel de juego). Desde Android va por USB; desde otro modo
+     * muestra el aviso pequeño de Vista + Menú (reemplaza la guía que hubiera) y cierra el panel de
+     * notificaciones para que se vea.
      */
-    private fun manualSwitch(to: PadMode) {
+    internal fun manualSwitch(to: PadMode) {
         val mode = ModeSwitcher.detect() ?: return
         if (mode == to) return
         if (mode == PadMode.ANDROID) { switchTo(to); return }
@@ -370,13 +475,15 @@ class AutoModeService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
-    companion object { private const val TAG = "G9Auto" }
+    companion object { internal const val TAG = "G9Auto" }
 
     override fun onDestroy() {
         getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputListener)
+        getSharedPreferences("g9", Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
         runCatching { unregisterReceiver(screenReceiver) }
         main.removeCallbacksAndMessages(null)
         if (::guide.isInitialized) guide.hide()
+        if (::panel.isInitialized) panel.release()
         scope.cancel()
         super.onDestroy()
     }

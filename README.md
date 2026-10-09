@@ -58,7 +58,7 @@ It also does a few things the official app can't:
 
 ### About the accessibility service
 
-Automatic switching per game, the View + Menu guide and the quick settings tiles (from X-Input/DS5) use an accessibility service. It **only detects which app is on screen** (window changes) and sees the controller's buttons, to track View + Menu for the guide and, only if you choose to, block buttons while a notice is on screen. It doesn't read screen content, doesn't see what you type, and the app has no internet permission.
+Automatic switching per game, the View + Menu guide, the quick settings tiles (from X-Input/DS5) and the game panel (L3 + R3) use an accessibility service. It **only detects which app is on screen** (window changes) and sees the controller's buttons, to track View + Menu for the guide, to open and navigate the game panel and, only if you choose to, block buttons while a notice is on screen. From the game panel it can also take a screenshot and perform one gesture: the swipe that opens the tablet's Game Assistant (Lenovo ZUI) from its side tab. It doesn't read screen content, doesn't see what you type, and the app has no internet permission.
 
 If Android shows **"Restricted setting"** when turning it on: Settings → Apps → G9 Control → ⋮ (top right) → **Allow restricted settings**, then try again.
 

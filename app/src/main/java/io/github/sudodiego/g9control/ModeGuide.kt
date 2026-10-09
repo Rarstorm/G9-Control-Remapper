@@ -294,8 +294,8 @@ class ModeGuide(private val ctx: AccessibilityService) {
     }
 }
 
-/** Ciclo de vida mínimo para poder usar Compose en una ventana de servicio. */
-private class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {
+/** Ciclo de vida mínimo para poder usar Compose en una ventana de servicio (la guía y el panel de juego). */
+internal class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {
     private val registry = LifecycleRegistry(this)
     private val saved = SavedStateRegistryController.create(this)
     override val lifecycle: Lifecycle get() = registry

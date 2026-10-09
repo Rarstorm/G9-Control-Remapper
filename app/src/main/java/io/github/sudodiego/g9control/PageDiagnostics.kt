@@ -59,6 +59,7 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
             }
         },
         second = {
+            GamePanelSettings(s, a)
             NoticesPanel(s, a)
             if (s.devInfo.isNotEmpty()) Panel(tr("Control", "Controller")) {
                 // El identificador solo con las herramientas de desarrollo.
@@ -187,6 +188,53 @@ private fun NoticesPanel(s: AppState, a: MainActivity) {
             Text(tr("Animación", "Animation"), fontSize = 14.sp)
             ChoiceChips(NoticeAnim.entries.map { it to it.label }, anim) { anim = it; AutoRules.setNoticeAnim(a, it) }
             if (!on) Hint(tr("Para ver los avisos hay que activar el servicio de accesibilidad (en Juegos).", "To see the notices, turn on the accessibility service (in Games)."))
+        }
+    }
+}
+
+/**
+ * Panel de juego (L3 + R3) y lo que se ve de Game Assistant, el de la ROM de la tablet: si está en modo
+ * juego ahora (se actualiza solo) y un acceso a sus ajustes.
+ */
+@Composable
+private fun GamePanelSettings(s: AppState, a: MainActivity) {
+    var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
+    var shot by remember { mutableStateOf(AutoRules.touchpadShot(a)) }
+    val zui = remember { ZuiGame.installed(a) }
+    var bar by remember { mutableStateOf(ZuiGame.sideBar(a)) }
+    if (zui) DisposableEffect(Unit) {
+        val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { bar = it }
+        onDispose { ZuiGame.unobserve(a, o) }
+    }
+    CompositionLocalProvider(LocalEditable provides true) {
+        Panel(tr("Panel de juego", "Game panel"), tr("Menú flotante para usar desde cualquier juego sin soltar el control.", "Floating menu to use from any game without letting go of the controller.")) {
+            SwitchRow(
+                tr("L3 + R3", "L3 + R3"), on,
+                tr("Tocar: abre el panel. Mantener medio segundo: captura directa (en cualquier modo).",
+                    "Tap: opens the panel. Hold half a second: direct screenshot (in any mode).")
+            ) { on = it; AutoRules.setGamePanel(a, it) }
+            SwitchRow(
+                tr("M dos veces en DS5: captura", "M twice in DS5: screenshot"), shot,
+                tr("Captura solo el juego, sin el puntero que aparece. El toque ya no llega al juego como clic del touchpad: apágalo si un juego lo usa o si conectas un mouse.",
+                    "Captures only the game, without the pointer that appears. The tap no longer reaches the game as a touchpad click: turn it off if a game uses it or if you connect a mouse.")
+            ) { shot = it; AutoRules.setTouchpadShot(a, it) }
+            Hint(tr("Captura de pantalla, panel de Game Assistant (si está activo), cambiar el modo del control y abrir G9 Control. " +
+                "Se maneja con LB / RB, A y B; mientras está abierto, los botones no llegan al juego.",
+                "Screenshot, Game Assistant panel (when active), switch controller mode and open G9 Control. " +
+                    "Use LB / RB, A and B; while it's open, buttons don't reach the game."))
+            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (en Juegos).", "Needs the accessibility service (in Games)."))
+            if (zui) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Game Assistant", Modifier.weight(1f), fontSize = 14.sp)
+                    Text(
+                        if (bar != null) tr("En modo juego", "In game mode") else tr("Sin juego activo", "No game active"),
+                        fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
+                    Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
+                }
+            }
         }
     }
 }
