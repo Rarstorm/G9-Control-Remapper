@@ -1,0 +1,17 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+.claude/
+respaldos/
+app/build/
+keystore.properties
+*.jks
+*.keystore
+
+# Archivos personales o de terceros (se quedan en la carpeta, no van al repositorio)
+*.jpg
+Manual_Legion_G9_LGC900.md
+CLAUDE.md

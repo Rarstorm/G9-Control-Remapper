@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo cambios de ventana (qué app está al frente); no lee el contenido de la pantalla.
+     Filtra teclas para seguir y retener Vista/Menú con la guía de modo y, si se elige, bloquear los
+     botones del control mientras hay un aviso en pantalla. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:canRequestFilterKeyEvents="true"
+    android:accessibilityFlags="flagRequestFilterKeyEvents"
+    android:description="@string/auto_service_description"
+    android:notificationTimeout="0" />

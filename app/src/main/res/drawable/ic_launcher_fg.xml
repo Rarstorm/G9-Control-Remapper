@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícono: "G9" en blanco, como el distintivo del menú lateral. Zona segura: 66 dp al centro. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="6.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M52.5,45 A12.5,12.5 0 1,0 54,60.5 L54,55 L46.5,55"/>
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="6.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M75,49 A6.5,6.5 0 1,0 62,49 A6.5,6.5 0 1,0 75,49 M75,49 L75,57.5 Q75,66.5 66,66.5"/>
+</vector>

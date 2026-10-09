@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- G9 en modo Android (VID 0x3537, PID 0x1134). En X-Input/DS5 el VID cambia, así que no aplica. -->
+<resources>
+    <usb-device vendor-id="13623" product-id="4404" />
+</resources>

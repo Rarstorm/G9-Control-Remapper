@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">G9 Control</string>
+    <string name="auto_service_label">G9 Control: cambio automático</string>
+    <string name="auto_service_description">Cambia el G9 a X-Input o DS5 al abrir las apps que elijas en G9 Control. Solo detecta qué app está en pantalla; no lee su contenido.</string>
+</resources>

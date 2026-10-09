@@ -1,0 +1,219 @@
+package io.github.sudodiego.g9control
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@Composable
+fun HomePage(s: AppState, a: MainActivity) {
+    DrawingPane(
+        drawing = {
+            Panel {
+                ControllerPreview(s, Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Legion Gaming Controller G9", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            when {
+                                s.connected -> tr("Conectado por USB · modo Android", "Connected over USB · Android mode")
+                                s.padMode != null -> tr("Detectado en modo ${s.padMode!!.label}", "Detected in ${s.padMode!!.label} mode")
+                                else -> tr("No detectado", "Not detected")
+                            },
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // En X-Input/DS5 no se puede conectar: el aviso de arriba explica cómo volver a Android.
+                    if (!s.connected && (s.padMode == null || s.padMode == PadMode.ANDROID))
+                        Button(onClick = { a.readAll() }) { Text(tr("Conectar", "Connect")) }
+                }
+            }
+        },
+        side = { ServiceWarning(s, a); ModePanel(s, a); QuickProfiles(s, a); ShortcutsPanel() }
+    )
+}
+
+@Composable
+private fun ModePanel(s: AppState, a: MainActivity) = Panel(tr("Modo del control", "Controller mode")) {
+    val current = if (s.connected) PadMode.ANDROID else s.padMode
+    // Fuera de Android solo se cambia con Vista + Menú: tocar un modo hace que la franja de arriba guíe hasta él.
+    val guiding = current != null && current != PadMode.ANDROID
+    val target = if (s.modeTarget != current) s.modeTarget else PadMode.ANDROID
+    fun tap(m: PadMode): (() -> Unit)? = when {
+        m == current -> null
+        s.connected && !s.busy -> m.target?.let { t -> { a.switchMode(t) } }
+        guiding -> { { s.modeTarget = m } }
+        else -> null
+    }
+    fun desc(m: PadMode) = if (guiding && m == target) tr("Mantén Vista + Menú", "Hold View + Menu") else ""
+    // Mismo alto para los tres; el punto de color es el del indicador del control en ese modo (manual).
+    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        for ((m, led) in listOf(PadMode.ANDROID to Color(0xFF1E3A8A), PadMode.XINPUT to Color(0xFF22C55E), PadMode.DS5 to Color.White)) {
+            ModeTile(m.label, desc(m), led, current == m, Modifier.weight(1f).fillMaxHeight(), onClick = tap(m))
+        }
+    }
+}
+
+@Composable
+private fun ModeTile(
+    name: String, desc: String, led: Color, active: Boolean, modifier: Modifier, onClick: (() -> Unit)? = null
+) {
+    val c = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .background(if (active) c.primaryContainer else c.surfaceContainerHigh)
+            .border(1.5.dp, if (active) c.primary else Color.Transparent, MaterialTheme.shapes.medium)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(led).border(1.dp, c.outline, CircleShape))
+            Spacer(Modifier.width(6.dp))
+            Text(name, fontWeight = FontWeight.SemiBold, color = if (active) c.onPrimaryContainer else c.onSurface)
+        }
+        if (desc.isNotBlank()) Text(
+            desc, fontSize = 11.sp, lineHeight = 14.sp, textAlign = TextAlign.Center,
+            color = if (active) c.onPrimaryContainer else c.onSurfaceVariant
+        )
+    }
+}
+
+/** Perfiles a un toque: el que está en uso queda marcado. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickProfiles(s: AppState, a: MainActivity) {
+    if (s.profiles.isEmpty()) return
+    Panel(tr("Perfiles", "Profiles")) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            s.profiles.forEach { p ->
+                val active = s.configKnown && p.matches(s)
+                FilterChip(
+                    selected = active, onClick = { if (!active) a.applyProfile(p) }, enabled = s.connected && !s.busy,
+                    label = { Text(p.name) },
+                    leadingIcon = if (active) { { Icon(Icons.Outlined.Check, null, Modifier.size(16.dp)) } } else null
+                )
+            }
+        }
+    }
+}
+
+/** Hay reglas por app pero el servicio de accesibilidad está apagado (por ejemplo, tras reiniciar). */
+@Composable
+private fun ServiceWarning(s: AppState, a: MainActivity) {
+    if (s.autoServiceOn || !s.autoEnabled || s.autoRules.isEmpty()) return
+    val c = MaterialTheme.colorScheme
+    Surface(color = c.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.WarningAmber, null, tint = c.onErrorContainer)
+            Spacer(Modifier.width(12.dp))
+            Text(tr("El cambio automático por app está apagado.", "Automatic switching per app is off."), Modifier.weight(1f), color = c.onErrorContainer)
+            Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Activar", "Turn on")) }
+        }
+    }
+}
+
+@Composable
+fun ColorDot(l: Light) {
+    val off = l.effect == 255 || l.lum == 0
+    Box(
+        Modifier.size(16.dp).clip(CircleShape)
+            .then(
+                when {
+                    off -> Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                    l.effect == 4 -> Modifier.background(androidx.compose.ui.graphics.Brush.sweepGradient(RAINBOW))
+                    else -> Modifier.background(lightColor(l))
+                }
+            )
+            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+    )
+}
+
+/** Combinaciones que el control hace por sí mismo (según el manual del G9). */
+/** Combinación del control: botones (cada grupo separado por "+"), si hay que mantener, y qué hace. */
+private data class Combo(val keys: List<String>, val hold: String?, val what: String)
+
+private fun shortcuts() = listOf(
+    Combo(listOf(tr("Vista", "View"), tr("Menú", "Menu")), "2 s", tr("Cambiar de modo: Android → X-Input → DS5", "Switch mode: Android → X-Input → DS5")),
+    Combo(listOf(tr("Vista", "View"), tr("Menú", "Menu"), "Home"), null, tr("Calibrar sticks y gatillos (A para salir)", "Calibrate sticks and triggers (A to exit)")),
+    Combo(listOf("M", "L4/R4/L5/R5"), null, tr("Asignar un trasero desde el control", "Assign a back button from the controller")),
+    Combo(listOf("M", "LT/RT"), "2 s", tr("Gatillo rápido", "Hair trigger")),
+    Combo(listOf("M", "A"), "2 s", tr("Intercambiar A↔B y X↔Y", "Swap A↔B and X↔Y")),
+    Combo(listOf("M", tr("botón", "button")), null, tr("Turbo en ese botón (M + Home 2 s borra todos)", "Turbo on that button (M + Home 2 s clears all)")),
+    Combo(listOf("M", tr("Vista/Menú", "View/Menu")), null, tr("Bajar o subir la vibración", "Lower or raise vibration")),
+    Combo(listOf("M", tr("Stick izq.", "Left stick")), null, tr("Efecto, brillo y color de las tiras", "Light strip effect, brightness and color")),
+    Combo(listOf("M ×2"), null, tr("Captura de pantalla (en DS5, clic del touchpad)", "Screenshot (in DS5, touchpad click)")),
+    Combo(listOf("Home ×2"), null, tr("Ir a la pantalla de inicio", "Go to the home screen")),
+    Combo(listOf("Home", "↑/↓"), null, tr("Volumen (solo en Android)", "Volume (Android mode only)")),
+)
+
+/** Combinaciones que funcionan sin la app: botón "Ver" que abre una ventana con tarjetas. */
+@Composable
+private fun ShortcutsPanel() {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Panel(
+        tr("Combinaciones del control", "Controller shortcuts"), tr("Funcionan sin la app.", "They work without the app."),
+        trailing = { FilledTonalButton(onClick = { open = true }) { Text(tr("Ver", "View")) } }
+    ) {}
+    if (open) androidx.compose.ui.window.Dialog(
+        onDismissRequest = { open = false },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth(0.94f)) {
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Combinaciones del control", "Controller shortcuts"), Modifier.weight(1f), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { open = false }) { Text(tr("Cerrar", "Close")) }
+                }
+                shortcuts().chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        row.forEach { ComboCard(it, Modifier.weight(1f)) }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComboCard(c: Combo, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Surface(color = cs.surfaceContainerHigh, shape = MaterialTheme.shapes.large, modifier = modifier) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                c.keys.forEachIndexed { i, group ->
+                    if (i > 0) Text("  +  ", color = cs.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    // Varias opciones en un grupo ("LT/RT"): se dibujan juntas.
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        group.split("/").forEach { k -> PadBadge(k, round = k.length == 1) }
+                    }
+                }
+                c.hold?.let {
+                    Spacer(Modifier.width(10.dp))
+                    Text(tr("mantén $it", "hold $it"), fontSize = 12.sp, color = cs.primary, fontWeight = FontWeight.Medium)
+                }
+            }
+            Text(c.what, fontSize = 14.sp)
+        }
+    }
+}
