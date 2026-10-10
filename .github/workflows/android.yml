@@ -20,7 +20,8 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # v4: su default es 'platform-tools' (v3 pedía el paquete legacy 'tools', removido por Google -> sdkmanager fallaba).
+        uses: android-actions/setup-android@v4
 
       - name: Build release APK
         # Sin keystore.properties -> firma debug (instalable). Release igualmente con R8.
