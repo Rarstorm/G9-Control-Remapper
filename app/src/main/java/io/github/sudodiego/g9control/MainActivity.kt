@@ -272,20 +272,19 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_SELECT -> return true
             // L3/R3 no hacen nada en la app (Android por defecto los usa para ir a Inicio).
             KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR -> return true
-            // LT/RT no hacen nada en la app: se usan para probar gatillos y vibración.
-            KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2 -> return true
+            // LT/RT: cambiar entre las secciones Tablet y G9. En Vibración y Sticks no: ahí se usan para probar los
+            // gatillos.
+            KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2 -> {
+                if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0 && s.page != Page.VIBRATION && s.page != Page.STICKS)
+                    s.goTo(if (e.keyCode == KeyEvent.KEYCODE_BUTTON_L2) Section.TABLET else Section.G9)
+                return true
+            }
+            // LB/RB: las pestañas de la sección, de punta a punta (sin pasar a la otra).
             KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1 -> {
-                // Las pestañas de la sección; pasado el final (o antes del principio) sigue en la otra sección.
                 if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
                     val step = if (e.keyCode == KeyEvent.KEYCODE_BUTTON_R1) 1 else -1
                     val pages = s.section.pages
-                    val i = pages.indexOf(s.page) + step
-                    if (i in pages.indices) s.page = pages[i]
-                    else {
-                        val other = if (s.section == Section.TABLET) Section.G9 else Section.TABLET
-                        s.section = other
-                        s.page = if (step > 0) other.pages.first() else other.pages.last()
-                    }
+                    s.page = pages[(pages.indexOf(s.page) + step + pages.size) % pages.size]
                 }
                 return true
             }
