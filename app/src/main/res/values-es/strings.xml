@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">G9 Control</string>
     <string name="auto_service_label">G9 Control: cambio automático</string>
-    <string name="auto_service_description">Cambia el G9 a X-Input o DS5 al abrir las apps que elijas en G9 Control y abre el panel de juego con L3 + R3. Solo detecta qué app está en pantalla y ve los botones del control; no lee el contenido de la pantalla.</string>
+    <string name="auto_service_description">Cambia el G9 a X-Input o DS5 al abrir las apps que elijas en G9 Control y abre el panel de juego con L3 + R3. Ve qué app está en pantalla y los botones del control, y saca capturas del juego cuando se lo pides. El permiso de ver las ventanas es solo para saber cuál es la del juego y capturarla sola: no lee sus textos ni lo que escribes, y la app no se conecta a internet.</string>
 </resources>

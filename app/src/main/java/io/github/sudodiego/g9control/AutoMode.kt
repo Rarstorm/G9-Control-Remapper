@@ -170,8 +170,8 @@ object AutoRules {
 }
 
 /**
- * Servicio de accesibilidad: solo escucha qué app pasa a primer plano (no lee el contenido de la
- * pantalla). Según las reglas, cambia el G9 a X-Input y muestra una guía flotante para llegar a
+ * Servicio de accesibilidad: escucha qué app pasa a primer plano (de las ventanas solo usa su número, para la
+ * captura; no lee su contenido) y filtra teclas para el panel de juego y el botón Legion. Según las reglas, cambia el G9 a X-Input y muestra una guía flotante para llegar a
  * DS5 o volver a Android con Start + Select.
  */
 class AutoModeService : AccessibilityService() {

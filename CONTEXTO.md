@@ -167,7 +167,7 @@ Analizado con jadx el 9 oct 2026 (v2.3.0.4534, `/system/priv-app/ZuiGameHelper`)
   - El puntero que aparece con M dos veces en DS5 no se puede ocultar (Android lo dibuja antes de que llegue al servicio; no hay ajuste ni comando). Se oculta solo o al tocar la pantalla. Con la opción activa, el toque ya no llega al juego como clic (`touchpad_tap_to_click=1`).
 - **Pendientes (9 oct 2026):**
   1. M dos veces en Android sin la captura del sistema (ver arriba): pendiente.
-  2. README, configuración inicial y descripción del servicio: con `canRetrieveWindowContent` ya no es cierto que "no lee el contenido de la pantalla"; reescribir la promesa.
+  2. ~~README, configuración inicial y descripción del servicio~~ (hecho el 9 oct 2026): ahora dicen que el permiso de ver las ventanas es solo para saber cuál es la del juego y capturarla sola; no se leen textos ni lo que se escribe, y la app no tiene internet.
   3. Shizuku: en el panel de juego, "Game Assistant" que lo muestre (`appops … allow`), abra su panel para cambiar el modo de rendimiento y lo vuelva a ocultar al salir del juego. Sin Shizuku, mostrar los comandos adb.
   4. Opcional: "M dos veces en DS5: captura" por juego (para juegos que usen el clic del touchpad).
   5. En la tablet de pruebas Game Assistant quedó oculto con `appops set com.zui.game.service SYSTEM_ALERT_WINDOW ignore`.

@@ -58,13 +58,15 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                     Step(
                         3, s.autoServiceOn, tr("Cambio automático (opcional)", "Automatic switching (optional)"),
                         tr("Para que el control cambie solo a X-Input o DS5 al abrir un juego, para la guía de Vista + Menú y para " +
-                            "el panel de juego (L3 + R3), activa el servicio de accesibilidad de G9 Control. Solo detecta qué app " +
-                            "está en pantalla y ve los botones del control; desde el panel puede sacar capturas y abrir Game Assistant " +
-                            "con un deslizamiento. No lee el contenido de la pantalla, no ve lo que escribes y no se conecta a internet.",
+                            "el panel de juego (L3 + R3), activa el servicio de accesibilidad de G9 Control. Ve qué app está en " +
+                            "pantalla y los botones del control, y saca capturas del juego cuando se lo pides. Android avisará que " +
+                            "puede leer la pantalla: lo pide para saber cuál es la ventana del juego y capturarla sola; la app no " +
+                            "lee sus textos, no ve lo que escribes y no se conecta a internet.",
                             "To switch the controller to X-Input or DS5 automatically when you open a game, for the View + Menu " +
-                                "guide and for the game panel (L3 + R3), turn on G9 Control's accessibility service. It only detects which " +
-                                "app is on screen and sees the controller's buttons; from the panel it can take screenshots and open Game " +
-                                "Assistant with a swipe. It doesn't read screen content, doesn't see what you type and doesn't connect to the internet.")
+                                "guide and for the game panel (L3 + R3), turn on G9 Control's accessibility service. It sees which app is " +
+                                "on screen and the controller's buttons, and takes game screenshots when you ask. Android will warn that " +
+                                "it can read the screen: it needs that to know which window is the game and capture only that; the app " +
+                                "doesn't read its text, doesn't see what you type and doesn't connect to the internet.")
                     ) {
                         if (!s.autoServiceOn) OutlinedButton(onClick = { AutoRules.openServiceSettings(a) }) {
                             Text(tr("Abrir accesibilidad", "Open accessibility"))

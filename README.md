@@ -33,6 +33,8 @@ It also does a few things the official app can't:
 | **Paddles** | Assign L4, R4, L5, R5 to any button (including Home and stick directions) or to a macro. |
 | **Profiles** | Save, apply and back up complete configurations. |
 | **Games** | Choose which mode each app opens in; the controller switches when you open it. |
+| **Game panel** | L3 + R3 in any game: game-only screenshot (no pointer or overlays) with a thumbnail notice, Game Assistant and mode switching. |
+| **Legion button** | Tap: Back. Hold: quick settings. |
 | **Quick settings** | Android, X-Input and DS5 tiles. |
 | **Languages** | English and Spanish. |
 
@@ -58,7 +60,14 @@ It also does a few things the official app can't:
 
 ### About the accessibility service
 
-Automatic switching per game, the View + Menu guide, the quick settings tiles (from X-Input/DS5) and the game panel (L3 + R3) use an accessibility service. It **only detects which app is on screen** (window changes) and sees the controller's buttons, to track View + Menu for the guide, to open and navigate the game panel and, only if you choose to, block buttons while a notice is on screen. From the game panel it can also take a screenshot and perform one gesture: the swipe that opens the tablet's Game Assistant (Lenovo ZUI) from its side tab. It doesn't read screen content, doesn't see what you type, and the app has no internet permission.
+Automatic switching per game, the View + Menu guide, the quick settings tiles (from X-Input/DS5), the game panel (L3 + R3) and the Legion button use an accessibility service. This is what it does with it:
+
+- **Sees which app is on screen** (window changes), to switch mode per game.
+- **Sees the controller's buttons**, to track View + Menu for the guide, to run the game panel and the Legion button and, only if you choose to, block buttons while a notice is on screen.
+- **Takes screenshots when you ask** (from the panel, by holding L3 + R3 or with M twice in DS5): only of the game window, saved on the tablet (Pictures/Screenshots).
+- **Performs one gesture:** the swipe that opens the tablet's Game Assistant (Lenovo ZUI) from its side tab.
+
+To capture only the game window, Android requires the permission to view window content: without it, Android won't say which window is the game. That's why Android warns that the app can read the screen when you turn it on. G9 Control uses that permission only for the list of windows (which one is the game): it doesn't read their text or buttons and doesn't see what you type. The app has no internet permission, so nothing leaves the tablet.
 
 If Android shows **"Restricted setting"** when turning it on: Settings → Apps → G9 Control → ⋮ (top right) → **Allow restricted settings**, then try again.
 

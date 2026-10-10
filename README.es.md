@@ -33,6 +33,8 @@ Además hace cosas que la oficial no puede:
 | **Traseros** | L4, R4, L5 y R5 copian cualquier botón (incluidos Home y las direcciones de los sticks) o una macro. |
 | **Perfiles** | Guardar, aplicar y respaldar configuraciones completas. |
 | **Juegos** | Eliges en qué modo se abre cada app; el control cambia al abrirla. |
+| **Panel de juego** | L3 + R3 en cualquier juego: captura solo del juego (sin el puntero ni superposiciones) con un aviso con miniatura, Game Assistant y cambio de modo. |
+| **Botón Legion** | Tocar: Atrás. Mantener: ajustes rápidos. |
 | **Ajustes rápidos** | Íconos Android, X-Input y DS5. |
 | **Idiomas** | Español e inglés. |
 
@@ -53,7 +55,14 @@ Además hace cosas que la oficial no puede:
 
 ### Sobre el servicio de accesibilidad
 
-El cambio automático por juego, la guía de Vista + Menú, los íconos de ajustes rápidos (desde X-Input/DS5) y el panel de juego (L3 + R3) usan un servicio de accesibilidad. **Solo detecta qué app está en pantalla** (cambios de ventana) y ve los botones del control, para seguir Vista + Menú en la guía, abrir y manejar el panel de juego y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla. Desde el panel de juego también puede sacar una captura de pantalla y hacer un solo gesto: el deslizamiento que abre el Game Assistant de la tablet (Lenovo ZUI) desde su pestaña lateral. No lee el contenido de la pantalla, no ve lo que escribes y la app no tiene permiso de internet.
+El cambio automático por juego, la guía de Vista + Menú, los íconos de ajustes rápidos (desde X-Input/DS5), el panel de juego (L3 + R3) y el botón Legion usan un servicio de accesibilidad. Esto es lo que hace con él:
+
+- **Ve qué app está en pantalla** (cambios de ventana), para cambiar el modo según el juego.
+- **Ve los botones del control**, para seguir Vista + Menú en la guía, manejar el panel de juego y el botón Legion y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla.
+- **Saca capturas cuando se lo pides** (desde el panel, con L3 + R3 mantenidos o con M dos veces en DS5): solo de la ventana del juego, guardadas en la tablet (Imágenes/Screenshots).
+- **Hace un solo gesto:** el deslizamiento que abre el Game Assistant de la tablet (Lenovo ZUI) desde su pestaña lateral.
+
+Para capturar solo la ventana del juego, Android exige el permiso de ver el contenido de las ventanas: sin él no dice cuál es la ventana del juego. Por eso, al activarlo, Android avisa que la app puede leer la pantalla. G9 Control usa ese permiso solo para la lista de ventanas (cuál es la del juego): no lee sus textos ni sus botones y no ve lo que escribes. La app no tiene permiso de internet, así que nada sale de la tablet.
 
 Si Android muestra **«Ajuste restringido»** al activarlo: Ajustes → Apps → G9 Control → ⋮ (arriba a la derecha) → **Permitir ajustes restringidos**, y vuelve a intentarlo.
 
