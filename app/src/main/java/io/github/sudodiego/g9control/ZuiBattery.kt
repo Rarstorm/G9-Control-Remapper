@@ -40,6 +40,9 @@ object ZuiBattery {
     @Volatile var byAuto = false
         private set
 
+    /** Volver al automático desde el panel: lo que esté ahora pasa a ser suyo (lo apaga si ya no corresponde). */
+    fun returnToAuto() { manualOverride = false; byAuto = bypassNow == true }
+
     suspend fun setBypass(on: Boolean, manual: Boolean = true): Boolean {
         val ok = Shell.run(if (on) Shell.BYPASS_ON else Shell.BYPASS_OFF)?.let { parse(it) } == true
         if (ok) { bypassNow = on; byAuto = on && !manual; if (manual) manualOverride = true }

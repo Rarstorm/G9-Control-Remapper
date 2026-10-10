@@ -341,6 +341,16 @@ class AutoModeService : AccessibilityService() {
         scope.launch { if (!ZuiBattery.setBypass(want, manual = false) && want) smartOn = false }
     }
 
+    /** El bypass vuelve al automático (desde el panel): decide ya con lo que hay ahora. */
+    fun bypassToAuto() {
+        ZuiBattery.returnToAuto()
+        smartOn = ZuiBattery.bypassNow == true
+        evaluateBypass()
+    }
+
+    /** Hay algo automático para el bypass: el bypass automático o el límite de carga propio. */
+    fun bypassHasAuto() = AutoRules.smartBypass(this) || ZuiBattery.ownLimit(this) != null
+
     // También la frecuencia de los juegos: ZUI tarda en decir que es un juego.
     private val bypassCheck = Runnable { evaluateBypass(); if (RefreshRate.forGames(this) != null) RefreshRate.applyFor(this, lastPackage) }
 

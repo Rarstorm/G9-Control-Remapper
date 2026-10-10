@@ -500,20 +500,31 @@ class GamePanel(private val svc: AutoModeService) {
         if (!ready && ZuiBattery.plugged(svc))
             add(PanelItem("Bypass", Icons.Outlined.Power, sub = needs, enabled = false, run = ::fixShizuku))
         if (ready && (bypassOn || ZuiBattery.plugged(svc)))
+        {
+            // Con algo automático (bypass automático o límite de carga) son tres estados: Automático → Encendido →
+            // Apagado → Automático. Así lo manual siempre puede volver a lo de siempre. Sin nada automático, encendido o apagado.
+            val hasAuto = svc.bypassHasAuto()
+            val isAuto = hasAuto && !ZuiBattery.manualOverride
             add(PanelItem("Bypass", Icons.Outlined.Power, active = bypassOn, sub = when {
-                // Quién lo encendió: el automático (o el límite de carga) o el usuario.
-                bypassOn && ZuiBattery.byAuto -> tr("Automático", "Automatic")
-                bypassOn -> tr("Manual", "Manual")
+                isAuto -> if (bypassOn) tr("Automático · activo", "Automatic · on") else tr("Automático", "Automatic")
+                bypassOn -> tr("Encendido", "On")
                 else -> tr("Apagado", "Off")
             }) {
                 hide()
-                val want = !bypassOn
+                if (!isAuto && !bypassOn && hasAuto) {
+                    svc.bypassToAuto()
+                    toast(tr("Bypass automático: se activa cuando corresponde.", "Automatic bypass: turns on when it should."))
+                    return@PanelItem
+                }
+                // Desde el automático, el primer toque siempre lo enciende (aunque ya lo estuviera: pasa a ser tuyo).
+                val want = if (isAuto) true else !bypassOn
                 scope.launch {
                     if (!ZuiBattery.setBypass(want)) toast(tr("No se pudo cambiar el bypass.", "Couldn't change bypass."))
-                    else toast(if (want) tr("Bypass activado: el cargador alimenta la tablet y la batería no carga.", "Bypass on: the charger powers the tablet and the battery doesn't charge.")
-                        else tr("Bypass desactivado: la batería vuelve a cargar.", "Bypass off: the battery charges again."))
+                    else toast(if (want) tr("Bypass encendido: el cargador alimenta la tablet y la batería no carga.", "Bypass on: the charger powers the tablet and the battery doesn't charge.")
+                        else tr("Bypass apagado: la batería vuelve a cargar.", "Bypass off: the battery charges again."))
                 }
             })
+        }
         // Monitor de rendimiento sobre el juego (FPS con Shizuku; lo demás siempre).
         val hud = AutoRules.perfHud(svc)
         add(PanelItem(tr("Monitor", "Monitor"), Icons.Outlined.QueryStats, active = hud,
