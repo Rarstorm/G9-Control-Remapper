@@ -386,8 +386,11 @@ class GamePanel(private val svc: AutoModeService) {
         main.postDelayed(action, 300)
     }
 
-    /** Captura limpia desde fuera del panel (M dos veces en DS5). */
+    /** Captura limpia desde fuera del panel (M dos veces en DS5, Legion + RB). */
     fun capture() = screenshot()
+
+    /** Aviso corto desde el servicio (el mismo de las acciones del panel). */
+    fun message(text: String) = toast(text)
 
     /** Guarda las capturas fuera del hilo principal: codificar un PNG de 2560 × 1600 tarda unos cientos de ms. */
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()

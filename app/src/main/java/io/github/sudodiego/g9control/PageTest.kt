@@ -82,8 +82,8 @@ private fun LegionPanel(s: AppState, a: MainActivity) {
     var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
         Panel {
-            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: panel de juego. Con RB: captura; con LB: Inicio. Transmitiendo desde el PC (Artemis, Moonlight…) es el botón guía.",
-                    "Tap: Back. Hold: game panel. With RB: screenshot; with LB: Home. While streaming from a PC (Artemis, Moonlight…) it's the guide button.")) {
+            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: panel de juego. Con RB: captura (mantener RB: ráfaga). Con LB: mantener Atrás (salir del juego en Dolphin; con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) es el botón guía. Mantenerlo 5 s apaga el G9.",
+                    "Tap: Back. Hold: game panel. With RB: screenshot (hold RB: burst). With LB: hold Back (quits the game in Dolphin; with Shizuku). While streaming from a PC (Artemis, Moonlight…) it's the guide button. Holding it 5 s turns the G9 off.")) {
                 legion = it; AutoRules.setLegionKeys(a, it)
             }
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))

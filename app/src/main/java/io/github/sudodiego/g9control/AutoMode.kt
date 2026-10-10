@@ -529,7 +529,8 @@ class AutoModeService : AccessibilityService() {
             if (ruleApp != null) {
                 ruleApp = null
                 val mode = ModeSwitcher.detect()
-                if (AutoRules.remindReturn(this) && mode != null && mode != PadMode.ANDROID) {
+                // Solo si el G9 se usó en esa app (si se jugó con otro control, no tiene sentido).
+                if (AutoRules.remindReturn(this) && mode != null && mode != PadMode.ANDROID && lastG9Key >= ruleSince) {
                     returnPending = true
                     // Solo el aviso pequeño de arriba: recuerda volver sin tapar la pantalla.
                     guide.show(PadMode.ANDROID, mini = true)
@@ -541,7 +542,9 @@ class AutoModeService : AccessibilityService() {
             return
         }
         ruleApp = pkg
+        ruleSince = android.os.SystemClock.uptimeMillis()
         returnPending = false
+        if (otherPadInUse) { Log.d(TAG, "regla $target: se está usando otro control, el G9 no se toca"); return }
         applyRule(target, retry = true)
     }
 
@@ -560,6 +563,14 @@ class AutoModeService : AccessibilityService() {
         }
     }
 
+    /** Última vez que se apretó un botón del G9 / de otro control (uptime en ms; 0 = nunca). */
+    private var lastG9Key = 0L
+    private var lastOtherPad = 0L
+    /** Cuándo se abrió la app con regla actual. */
+    private var ruleSince = 0L
+    /** Lo último que se usó fue otro control: el G9 no se toca (ni cambio, ni guía, ni aviso de volver). */
+    private val otherPadInUse get() = lastOtherPad > lastG9Key
+
     /** Start/Select que se retuvieron mientras estaba la guía; su "soltar" también se retiene. */
     private val held = mutableSetOf<Int>()
 
@@ -572,6 +583,11 @@ class AutoModeService : AccessibilityService() {
      */
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val k = event.keyCode
+        // Qué control se usó por última vez: con otro control (8BitDo, por ejemplo) el G9 se queda como está.
+        if (event.action == KeyEvent.ACTION_DOWN && KeyEvent.isGamepadButton(k)) {
+            val now = android.os.SystemClock.uptimeMillis()
+            if (event.device?.name?.contains("G9", true) == true) lastG9Key = now else lastOtherPad = now
+        }
         if (event.action == KeyEvent.ACTION_UP && delivered.remove(k)) {
             handleKey(event)   // para que el resto (L3 + R3, la guía) se entere de que se soltó
             return false
@@ -680,35 +696,76 @@ class AutoModeService : AccessibilityService() {
      */
     /** RB o LB apretados junto con Legion: no llegan a la app (ni al bajar ni al soltar). */
     private val chordSwallow = mutableSetOf<Int>()
+    /**
+     * Ya hubo una combinación con este Legion: mientras siga apretado, RB y LB son combinaciones (no llegan al juego).
+     * El firmware del G9 avisa que Legion se soltó en cuanto se aprieta otro botón (aunque siga apretado) y, al
+     * soltarlo de verdad, manda un toque corto de Legion (bajar y subir en ~70 ms), que no es Atrás. No hace falta
+     * mantener Legion (5 s apaga el control): la sesión sigue 2 s después de la última combinación, y en ese rato
+     * RB o LB solos también lo son (varias capturas seguidas).
+     */
+    private var legionChording = false
+    private val chordExpire = Runnable { legionChording = false }
 
     /**
-     * Legion + RB = captura (como Steam + R1 en el Steam Deck) y Legion + LB = Inicio. Con Legion apretado y antes
-     * de que se abra el panel; así Legion no hace Atrás al soltarlo.
+     * Legion + RB = captura (como Steam + R1 en el Steam Deck); mantener RB 1 s sigue sacando (ráfaga, una por
+     * segundo, lo que deja Android) hasta soltarlo, aunque ya se haya soltado Legion (mantenerlo 5 s apaga el G9).
+     * Legion + LB = Atrás mantenido (salir del juego en Dolphin; necesita Shizuku). Con Legion apretado y antes de
+     * que se abra el panel; así Legion no hace Atrás al soltarlo.
      */
     private fun legionChord(e: KeyEvent): Boolean {
         val k = e.keyCode
         if (k != KeyEvent.KEYCODE_BUTTON_R1 && k != KeyEvent.KEYCODE_BUTTON_L1) return false
-        if (e.action == KeyEvent.ACTION_UP) return chordSwallow.remove(k)
+        if (e.action == KeyEvent.ACTION_UP) {
+            if (k == KeyEvent.KEYCODE_BUTTON_R1) main.removeCallbacks(burst)
+            return chordSwallow.remove(k)
+        }
         if (e.repeatCount > 0) return k in chordSwallow
-        if (!legionOwned || !legionPending) return false
+        if (!legionChording && !(legionOwned && legionPending)) return false
         legionPending = false
+        legionChording = true
         main.removeCallbacks(legionHold)
+        main.removeCallbacks(chordExpire)
+        main.postDelayed(chordExpire, 2000)
         chordSwallow += k
-        if (k == KeyEvent.KEYCODE_BUTTON_R1) { Log.d(TAG, "Legion + RB: captura"); panel.capture() }
-        else { Log.d(TAG, "Legion + LB: inicio"); performGlobalAction(GLOBAL_ACTION_HOME) }
+        if (k == KeyEvent.KEYCODE_BUTTON_R1) {
+            Log.d(TAG, "Legion + RB: captura")
+            panel.capture()
+            main.removeCallbacks(burst)
+            main.postDelayed(burst, 1000)
+        } else {
+            Log.d(TAG, "Legion + LB: Atrás mantenido")
+            scope.launch {
+                if (Shell.run(Shell.BACK_LONG) == null) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)
+                    panel.message(tr("Mantener Atrás necesita Shizuku: se hizo un Atrás normal.", "Holding Back needs Shizuku: did a normal Back."))
+                }
+            }
+        }
         return true
+    }
+
+    /** Ráfaga: RB sigue apretado (desde la combinación con Legion). */
+    private val burst: Runnable = object : Runnable {
+        override fun run() {
+            if (KeyEvent.KEYCODE_BUTTON_R1 !in chordSwallow) return
+            panel.capture()
+            main.postDelayed(this, 1100)
+        }
     }
 
     private fun legionKey(e: KeyEvent): Boolean {
         if (e.keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (e.repeatCount > 0) return legionOwned
+                if (e.repeatCount > 0) return legionOwned || legionChording
+                // El toque final del firmware al soltar Legion después de una combinación: no es Atrás.
+                if (legionChording) return true
                 legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput && !streaming
                 if (legionOwned) { legionPending = true; main.postDelayed(legionHold, 500) }
                 return legionOwned
             }
             KeyEvent.ACTION_UP -> {
+                if (legionChording) { legionOwned = false; return true }
                 if (!legionOwned) return false
                 legionOwned = false
                 if (legionPending) { legionPending = false; main.removeCallbacks(legionHold); performGlobalAction(GLOBAL_ACTION_BACK) }

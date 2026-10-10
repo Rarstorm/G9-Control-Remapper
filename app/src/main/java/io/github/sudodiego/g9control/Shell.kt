@@ -42,6 +42,9 @@ object Shell {
     // Límite de carga de ZUI ("Maximum charge limit"): 89 = getStopChargingStatus, 48 = getMaxBatteryChargingLevel.
     const val LIMIT_GET = "service call zuibattery 89"
     const val LIMIT_LEVEL = "service call zuibattery 48"
+    // Atrás mantenido (Dolphin sale del juego así; un Atrás normal abre su menú). Un servicio de accesibilidad solo
+    // puede tocar Atrás, no mantenerlo.
+    const val BACK_LONG = "input keyevent --longpress 4"
     // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel, o apagar
     // solo la luz (brillo -1, como Extinguish; vuelve sola cuando Android cambia el brillo).
     fun screenPower(on: Boolean) = screenCmd("power ${if (on) 2 else 0}")
@@ -51,7 +54,7 @@ object Shell {
     private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL) || WM_SIZE.matches(cmd) ||
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG) || WM_SIZE.matches(cmd) ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
