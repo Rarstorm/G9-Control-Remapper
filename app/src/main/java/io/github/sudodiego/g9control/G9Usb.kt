@@ -26,7 +26,8 @@ object G9Usb {
     const val ACTION_PERMISSION = "io.github.sudodiego.g9control.USB_PERMISSION"
     private const val TIMEOUT_MS = 300
 
-    private var connection: UsbDeviceConnection? = null
+    /** Volátil: [isOpen] la lee sin el candado (lo llama el hilo principal). */
+    @Volatile private var connection: UsbDeviceConnection? = null
     private var iface: UsbInterface? = null
     private var epIn: UsbEndpoint? = null
     private var epOut: UsbEndpoint? = null
@@ -120,7 +121,10 @@ object G9Usb {
         }
     }
 
-    @Synchronized
+    /**
+     * Sin el candado: la pantalla lo pregunta seguido desde el hilo principal, y con el candado esperaba a que
+     * terminaran escrituras largas (macro + traseros, una tras otra): la app se trababa (ANR, 10 oct 2026).
+     */
     fun isOpen(): Boolean = connection != null
 
     @Synchronized

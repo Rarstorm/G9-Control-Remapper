@@ -162,6 +162,9 @@ object AutoRules {
     /** Monitor de rendimiento sobre el juego (se enciende desde el panel) y su posición. */
     fun perfHud(ctx: Context) = sp(ctx).getBoolean("perf_hud", false)
     fun setPerfHud(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("perf_hud", v).apply()
+    /** Barra completa (dos líneas: además watts, tiempo restante, Hz y calor de la tablet) o compacta. */
+    fun perfFull(ctx: Context) = sp(ctx).getBoolean("perf_full", true)
+    fun setPerfFull(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("perf_full", v).apply()
     fun perfPos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("perf_pos", null)!!) }
         .getOrDefault(NoticePos.TOP_START)
     fun setPerfPos(ctx: Context, v: NoticePos) = sp(ctx).edit().putString("perf_pos", v.name).apply()

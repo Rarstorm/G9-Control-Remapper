@@ -143,6 +143,8 @@ private class PanelUi {
     var charging by mutableStateOf(false)
     var bypass by mutableStateOf(false)
     var status by mutableStateOf("")
+    /** Modo del G9 ahora (Android, X-Input, DS5), como recordatorio; null si no está conectado. */
+    var mode by mutableStateOf<String?>(null)
     /** En un submenú (rendimiento): encabezado sin batería ni hora, y B vuelve. */
     var sub by mutableStateOf(false)
 }
@@ -214,6 +216,7 @@ class GamePanel(private val svc: AutoModeService) {
     private fun header() {
         ui.sub = false
         ui.title = appLabel(svc.foregroundApp)
+        ui.mode = ModeSwitcher.detect()?.label
         val i = svc.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         ui.battery = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: -1
         // Cargando: rayo en la batería. Bypass: un enchufe al lado y la batería en celeste (no carga, pero está enchufada).
@@ -954,7 +957,18 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
         Column(Modifier.padding(horizontal = CARD_PAD, vertical = 20.dp).width(width)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(ui.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    modifier = Modifier.weight(1f))
+                    modifier = Modifier.weight(1f, fill = false))
+                // Modo del control, pequeño, como recordatorio.
+                if (!ui.sub) ui.mode?.let { m ->
+                    Spacer(Modifier.width(10.dp))
+                    Row(Modifier.clip(RoundedCornerShape(10.dp)).background(TILE).padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.SportsEsports, null, Modifier.size(14.dp), tint = PANEL_MUTED)
+                        Spacer(Modifier.width(5.dp))
+                        Text(m, color = PANEL_MUTED, fontSize = 12.sp)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 // En un submenú solo el título: lo demás ya se vio en el panel.
                 if (!ui.sub) {
                     if (ui.bypass) { Icon(Icons.Outlined.Power, "Bypass", Modifier.size(18.dp), tint = TILE_ON); Spacer(Modifier.width(4.dp)) }

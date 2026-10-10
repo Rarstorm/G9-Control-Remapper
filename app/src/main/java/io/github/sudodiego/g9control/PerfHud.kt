@@ -106,6 +106,8 @@ class PerfHud(private val svc: AutoModeService) {
             val group = when {
                 type.startsWith("cpu-") || type.startsWith("cpuss-") -> "cpu"
                 type.startsWith("gpuss-") -> "gpu"
+                // La de la carcasa (la que se siente en la mano; la usa la ROM para su control de temperatura).
+                type == "user_temp" || type == "skin-msm-therm" -> "skin"
                 else -> return@mapNotNull null
             }
             group to File(z, "temp")
@@ -127,15 +129,68 @@ class PerfHud(private val svc: AutoModeService) {
         val fps = fps()
 
         val sb = SpannableStringBuilder()
-        fun label(s: String) { val st = sb.length; sb.append(s); sb.setSpan(ForegroundColorSpan(ACCENT), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
-        fun sep() { val st = sb.length; sb.append("  │  "); sb.setSpan(ForegroundColorSpan(MUTED), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        fun colored(s: String, color: Int) { val st = sb.length; sb.append(s); sb.setSpan(ForegroundColorSpan(color), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        fun label(s: String) = colored(s, ACCENT)
+        fun sep() = colored("  │  ", MUTED)
+        /** Temperatura en color: blanca, amarilla desde [warm], roja desde [hot]. */
+        fun temp(t: Int?, warm: Int, hot: Int) { t?.let { colored("  $it°", if (it >= hot) HOT else if (it >= warm) WARM else WHITE) } }
         if (fps != null) { sb.append("$fps "); label("FPS"); sep() }
-        label("CPU "); sb.append(cpuGhz?.let { "%.1f GHz".format(it) } ?: "—"); maxTemp("cpu")?.let { sb.append("  $it°") }
+        label("CPU "); sb.append(cpuGhz?.let { "%.1f GHz".format(it) } ?: "—"); temp(maxTemp("cpu"), 75, 90)
         sep()
-        label("GPU "); sb.append(gpu?.let { "$it %" } ?: "—"); maxTemp("gpu")?.let { sb.append("  $it°") }
+        label("GPU "); sb.append(gpu?.let { "$it %" } ?: "—"); temp(maxTemp("gpu"), 70, 85)
         sep()
-        label("BAT "); sb.append(level?.let { "$it %" } ?: "—"); batTemp?.let { sb.append("  $it°") }
+        label("BAT "); sb.append(level?.let { "$it %" } ?: "—"); temp(batTemp, 40, 45)
+
+        // Completa: segunda línea con la energía, el tiempo, los Hz y el calor de la tablet.
+        if (AutoRules.perfFull(svc)) {
+            sb.append("\n")
+            val charging = bat?.getIntExtra(BatteryManager.EXTRA_STATUS, 0) == BatteryManager.BATTERY_STATUS_CHARGING
+            val watts = watts(bat)
+            if (watts != null) { sb.append(if (charging) "+" else ""); sb.append("%.1f ".format(watts)); label("W"); sep() }
+            remaining(bat, charging)?.let { sb.append(it); sep() }
+            hz()?.let { sb.append("$it "); label("Hz"); sep() }
+            label(tr("Tablet", "Tablet")); temp(maxTemp("skin"), 40, 45)
+            thermal()?.let { colored("  $it", HOT) }
+        }
         main.post { view?.text = sb }
+    }
+
+    private val bm = svc.getSystemService(BatteryManager::class.java)
+    /** Corriente suavizada (µA, positiva), para que los watts y el tiempo no salten de un segundo al otro. */
+    private var currentAvg = 0.0
+
+    /** Potencia de la batería en W: lo que sale (o entra, cargando). Null si Android no da la corriente. */
+    private fun watts(bat: Intent?): Double? {
+        val ua = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW).takeIf { it != Int.MIN_VALUE && it != 0 } ?: return null
+        val mv = bat?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0)?.takeIf { it > 0 } ?: return null
+        val a = kotlin.math.abs(ua.toDouble())
+        currentAvg = if (currentAvg == 0.0) a else currentAvg * 0.8 + a * 0.2
+        return currentAvg / 1e6 * mv / 1e3
+    }
+
+    /** Tiempo que queda de batería (o para cargarla), "~2 h 10 min". */
+    private fun remaining(bat: Intent?, charging: Boolean): String? {
+        val ms = if (charging) bm.computeChargeTimeRemaining().takeIf { it > 0 } ?: return null
+        else {
+            val uah = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER).takeIf { it > 0 } ?: return null
+            if (currentAvg < 50_000) return null   // casi sin consumo (enchufada en bypass): no tiene sentido
+            (uah / currentAvg * 3_600_000).toLong()
+        }
+        val min = ms / 60_000
+        return (if (charging) "⚡ " else "~") + if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
+    }
+
+    /** Hz de la pantalla ahora. */
+    private fun hz(): Int? = runCatching {
+        svc.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(android.view.Display.DEFAULT_DISPLAY).refreshRate
+    }.getOrNull()?.let { Math.round(it) }
+
+    /** Android ya está bajando el rendimiento por calor (o lo va a hacer): "Calor", "Mucho calor". */
+    private fun thermal(): String? = when (runCatching { svc.getSystemService(android.os.PowerManager::class.java).currentThermalStatus }.getOrDefault(0)) {
+        android.os.PowerManager.THERMAL_STATUS_MODERATE -> tr("Calor", "Hot")
+        android.os.PowerManager.THERMAL_STATUS_SEVERE, android.os.PowerManager.THERMAL_STATUS_CRITICAL,
+        android.os.PowerManager.THERMAL_STATUS_EMERGENCY, android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> tr("Mucho calor", "Very hot")
+        else -> null
     }
 
     // ——— FPS (con Shizuku) ———
@@ -195,5 +250,8 @@ class PerfHud(private val svc: AutoModeService) {
     private companion object {
         val ACCENT = 0xFF7DD8F5.toInt()
         val MUTED = 0xFF6B7480.toInt()
+        val WHITE = 0xFFFFFFFF.toInt()
+        val WARM = 0xFFFFC857.toInt()
+        val HOT = 0xFFFF6B6B.toInt()
     }
 }

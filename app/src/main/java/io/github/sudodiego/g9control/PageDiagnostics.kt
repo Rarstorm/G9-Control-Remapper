@@ -205,6 +205,7 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
     var perfHud by remember { mutableStateOf(AutoRules.perfHud(a)) }
     var perfPos by remember { mutableStateOf(AutoRules.perfPos(a)) }
+    var perfFull by remember { mutableStateOf(AutoRules.perfFull(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
         Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control. Se abre manteniendo el botón Legion (o con L3 + R3).",
             "A menu to use in any app without letting go of the controller. Hold the Legion button to open it (or L3 + R3).")) {
@@ -228,6 +229,10 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 tr("Barra con FPS, CPU, GPU y batería sobre el juego. Los FPS necesitan Shizuku.", "Bar with FPS, CPU, GPU and battery over the game. FPS needs Shizuku."),
                 null, side = { PosGrid(perfPos) { perfPos = it; AutoRules.setPerfPos(a, it) } }) {
                 SwitchRow(tr("Mostrar", "Show"), perfHud) { perfHud = it; AutoRules.setPerfHud(a, it) }
+                SwitchRow(tr("Más datos", "More data"), perfFull,
+                    tr("Segunda línea: watts, tiempo de batería, Hz y temperatura de la tablet.", "Second line: watts, battery time, Hz and tablet temperature.")) {
+                    perfFull = it; AutoRules.setPerfFull(a, it)
+                }
             }
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
         }
