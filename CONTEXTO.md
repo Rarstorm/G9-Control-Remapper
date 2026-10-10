@@ -14,6 +14,8 @@ Este archivo junta lo que se sabe del protocolo y del control, lo que se descart
 
 **Hz en juegos:** en dumpsys display solo hay votos de usuario (peak 120, min 30): ZUI no fuerza nada. SurfaceFlinger elige dentro de 30–120 según lo que dibuja el juego, y en Ahorro (CPU lenta) baja a 30. Con min = max queda fijo; "Frecuencia en juegos" (Tablet → Juego) lo hace para todos los juegos (por app manda la elección del panel).
 
+**Consumo 60 contra 120 Hz (medido 10 oct 2026):** Wind Waker en Dolphin (30 FPS), Equilibrado, brillo fijo, desenchufada; 2 rondas de 90 s por frecuencia, watts del monitor de rendimiento (log G9Power). 60 Hz: 5,22 y 5,24 W; 120 Hz: 5,51 y 5,50 W. Diferencia ≈ 0,27 W (~5 %). Es solo el costo de la pantalla: en un juego que dibuje a 120 FPS la diferencia sería mayor (también trabaja la GPU). Script: alterna con `settings put system peak/min_refresh_rate` por adb y promedia descartando 20 s tras cada cambio.
+
 ### Lo aprendido, en corto (10 oct 2026)
 
 | Qué | Cómo | Necesita |
