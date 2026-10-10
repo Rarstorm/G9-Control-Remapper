@@ -6,6 +6,8 @@ Este archivo junta lo que se sabe del protocolo y del control, lo que se descart
 
 **Estado (10 oct 2026):** la app pasó de configurar el G9 a ser una compañera para jugar en la Y700. Plan acordado: renombrarla **Puff** (nombre visible; el identificador `io.github.sudodiego.g9control` se mantiene por ahora y quizás cambie después) y separarla en **sección Tablet** (sirve sin el G9 y con cualquier control: SN30 Pro, GameSir X5 Lite, G8 Plus…) y **sección G9**. Orden: pulir y subir lo actual → reestructurar → Hz por juego desde la lista → estadísticas por sesión (batería, W, FPS, temperaturas por modo y Hz) → README nuevo.
 
+**Estructura (10 oct 2026, paso 2 hecho):** selector **Tablet | G9** arriba a la izquierda (`Section`, con un punto verde si el G9 está conectado). Tablet: Inicio (avisos, la tablet ahora, Rápido: bypass/monitor/16:9, controles conectados de cualquier marca, atajos), Batería (bypass, automático, límite + "Ahora": estado, temperatura, W, ciclos), Pantalla (16:9, volumen, monitor externo), Juego (panel de juego, capturas, monitor de rendimiento, Game Assistant), Ajustes. G9: Inicio (dibujo, modo, perfiles), Modos (por juego + avisos de cambio de modo), Luces, Sticks, Vibración, Botones, Traseros, Perfiles, Ajustes. Ajustes es la misma en las dos (Aplicación, Permisos, "Control G9": dibujo, abrir al conectar, datos del control, valores de fábrica). LB/RB recorren las pestañas de la sección y siguen en la otra al pasar del final. La app abre en Tablet; al abrirse por conectar el G9, en G9. La conexión del G9 (píldora) solo se ve en su sección. Falta: renombrar a Puff, Juegos por app en Tablet (Hz), estadísticas.
+
 ### Lo aprendido, en corto (10 oct 2026)
 
 | Qué | Cómo | Necesita |

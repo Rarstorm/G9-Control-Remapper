@@ -17,30 +17,82 @@ import kotlinx.coroutines.launch
  * Página "Tablet": lo que es de la tablet y no del control. A la izquierda la batería (bypass manual y automático) y
  * la pantalla y los botones; a la derecha Game Assistant (rendimiento, ocultarlo, Shizuku).
  */
+/** Batería: bypass, automático y límite de carga; a la derecha cómo está ahora. */
 @Composable
-fun TabletPage(s: AppState, a: MainActivity) {
+fun BatteryPage(s: AppState, a: MainActivity) {
     TwoPane(
         first = {
             BatteryPanel(s, a)
-            ScreenButtonsPanel(s, a)
+            ShizukuHint()
         },
-        second = {
-            GameAssistantSettings(s, a)
-            MonitorPanel(s, a)
-            // Sin Shizuku lo que lo necesita se ve atenuado; su estado y cómo iniciarlo están en Ajustes → Permisos.
-            if (Shell.state != Shell.State.READY) Hint(tr("El bypass, ocultar Game Assistant y apagar la tablet con el monitor necesitan Shizuku (Ajustes → Permisos).",
-                "Bypass, hiding Game Assistant and turning the tablet off with a monitor need Shizuku (Settings → Permissions)."))
-        }
+        second = { BatteryNowPanel(a) }
     )
+}
+
+/** Pantalla: 16:9, volumen invertido y el monitor externo. */
+@Composable
+fun ScreenPage(s: AppState, a: MainActivity) {
+    TwoPane(
+        first = { ScreenButtonsPanel(s, a) },
+        second = { MonitorPanel(s, a); ShizukuHint() }
+    )
+}
+
+/** Sin Shizuku lo que lo necesita se ve atenuado; su estado y cómo iniciarlo están en Ajustes → Permisos. */
+@Composable
+private fun ShizukuHint() {
+    if (Shell.state != Shell.State.READY) Hint(tr("Lo atenuado necesita Shizuku (Ajustes → Permisos).", "What's dimmed needs Shizuku (Settings → Permissions)."))
+}
+
+/**
+ * La batería ahora: nivel, estado, temperatura, potencia y tiempo, y ciclos. Se actualiza cada pocos segundos (sin
+ * permisos: `BatteryManager`).
+ */
+@Composable
+fun BatteryNowPanel(a: MainActivity) {
+    var now by remember { mutableStateOf(batteryNow(a)) }
+    var watts by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) {
+        val bm = a.getSystemService(BatteryManager::class.java)
+        while (true) {
+            now = batteryNow(a)
+            val i = a.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val ua = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+            val mv = i?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+            watts = if (ua != Int.MIN_VALUE && ua != 0 && mv > 0) kotlin.math.abs(ua.toDouble()) / 1e6 * mv / 1e3 else null
+            delay(3000)
+        }
+    }
+    val b = now ?: return
+    Panel(tr("Ahora", "Now")) {
+        Text("${b.level} %", fontSize = 40.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        val state = when {
+            b.plugged && !b.charging -> if (ZuiBattery.bypassNow == true && Shell.state == Shell.State.READY) "Bypass" else tr("Enchufada, sin cargar", "Plugged in, not charging")
+            b.charging -> tr("Cargando", "Charging")
+            else -> tr("Con batería", "On battery")
+        }
+        InfoRow(tr("Estado", "State"), state)
+        InfoRow(tr("Temperatura", "Temperature"), "%.1f °C".format(b.tempC))
+        if (!(b.plugged && !b.charging)) watts?.let { InfoRow(if (b.charging) tr("Entra", "Charging at") else tr("Consumo", "Draw"), "%.1f W".format(it)) }
+        if (b.cycles >= 0) InfoRow(tr("Ciclos de carga", "Charge cycles"), "${b.cycles}")
+    }
+}
+
+@Composable
+private fun InfoRow(k: String, v: String) {
+    Row(Modifier.fillMaxWidth()) {
+        Text(k, Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(v, fontSize = 14.sp)
+    }
 }
 
 /** Ajuste de Game Assistant: 1 = apaga el brillo automático en los juegos (y lo devuelve al salir). */
 private const val GA_NO_AUTO_BRIGHTNESS = "key_game_assistant_disable_auto_brightness"
 
 /** Estado de la batería ahora (de ACTION_BATTERY_CHANGED, sin permisos). */
-private data class BatteryNow(val level: Int, val tempC: Float, val plugged: Boolean, val charging: Boolean, val cycles: Int)
+data class BatteryNow(val level: Int, val tempC: Float, val plugged: Boolean, val charging: Boolean, val cycles: Int)
 
-private fun batteryNow(a: MainActivity): BatteryNow? {
+fun batteryNow(a: MainActivity): BatteryNow? {
     val i = a.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
     val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
     val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, 0)
@@ -135,7 +187,6 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
             OutlinedButton(onClick = { runCatching { a.startActivity(Intent(Intent.ACTION_POWER_USAGE_SUMMARY)) } }) {
                 Text(tr("Optimización de carga (Ajustes)", "Charge optimization (Settings)"))
             }
-            now?.cycles?.takeIf { it >= 0 }?.let { Text(tr("Ciclos de carga: $it", "Charge cycles: $it"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -235,7 +286,7 @@ private fun ScreenButtonsPanel(s: AppState, a: MainActivity) {
  * momento para cambiar el rendimiento); sin Shizuku se puede a mano en Ajustes. Solo si la tablet lo tiene.
  */
 @Composable
-private fun GameAssistantSettings(s: AppState, a: MainActivity) {
+fun GameAssistantSettings(s: AppState, a: MainActivity) {
     val zui = remember { ZuiGame.installed(a) }
     if (!zui) return
     var game by remember { mutableStateOf(ZuiGame.inGame(a)) }

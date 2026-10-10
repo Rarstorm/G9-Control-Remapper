@@ -83,16 +83,21 @@ private data class NavItem(val page: Page, val es: String, val en: String, val i
 }
 
 private val NAV = listOf(
+    // Tablet: sirve sin el G9 y con cualquier control.
+    NavItem(Page.TABLET_HOME, "Inicio", "Home", Icons.Outlined.Home, Icons.Filled.Home),
+    NavItem(Page.BATTERY, "Batería", "Battery", Icons.Outlined.BatteryChargingFull, Icons.Filled.BatteryChargingFull),
+    NavItem(Page.SCREEN, "Pantalla", "Screen", Icons.Outlined.Monitor, Icons.Filled.Monitor),
+    NavItem(Page.GAMEPANEL, "Juego", "In game", Icons.Outlined.SportsEsports, Icons.Filled.SportsEsports),
+    // G9.
     NavItem(Page.HOME, "Inicio", "Home", Icons.Outlined.Home, Icons.Filled.Home),
+    NavItem(Page.AUTO, "Modos", "Modes", Icons.Outlined.Apps, Icons.Filled.Apps),
     NavItem(Page.LIGHTS, "Luces", "Lights", Icons.Outlined.Lightbulb, Icons.Filled.Lightbulb),
-    NavItem(Page.STICKS, "Sticks", "Sticks", Icons.Outlined.SportsEsports, Icons.Filled.SportsEsports),
+    NavItem(Page.STICKS, "Sticks", "Sticks", Icons.Outlined.Gamepad, Icons.Filled.Gamepad),
     NavItem(Page.VIBRATION, "Vibración", "Vibration", Icons.Outlined.Vibration, Icons.Filled.Vibration),
-    NavItem(Page.TEST, "Controles", "Buttons", Icons.Outlined.Gamepad, Icons.Filled.Gamepad),
+    NavItem(Page.TEST, "Botones", "Buttons", Icons.Outlined.RadioButtonChecked, Icons.Filled.RadioButtonChecked),
     NavItem(Page.BACK, "Traseros", "Paddles", Icons.Outlined.FlipToBack, Icons.Filled.FlipToBack),
     NavItem(Page.PROFILES, "Perfiles", "Profiles", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
-    NavItem(Page.AUTO, "Juegos", "Games", Icons.Outlined.Apps, Icons.Filled.Apps),
-    // Lo que es de la tablet y no del control (en la barra va después de un divisor).
-    NavItem(Page.TABLET, "Tablet", "Tablet", Icons.Outlined.TabletAndroid, Icons.Filled.TabletAndroid),
+    // Las dos.
     NavItem(Page.DIAGNOSTICS, "Ajustes", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
@@ -135,6 +140,8 @@ private fun TabBar(s: AppState, a: MainActivity) {
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            SectionSwitch(s)
+            Spacer(Modifier.width(14.dp))
             PadBadge("LB")
             // Si las pestañas no caben, la elegida se desplaza a la vista.
             val tabScroll = rememberScrollState()
@@ -153,9 +160,9 @@ private fun TabBar(s: AppState, a: MainActivity) {
                     .onFocusChanged { tabFocused = it.hasFocus },
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                NAV.forEach { item ->
-                    // Divisor entre lo del control y lo de la tablet.
-                    if (item.page == Page.TABLET)
+                NAV.filter { it.page in s.section.pages }.forEach { item ->
+                    // Ajustes (común a las dos secciones) después de un divisor.
+                    if (item.page == Page.DIAGNOSTICS)
                         VerticalDivider(Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp).height(24.dp), color = c.outlineVariant)
                     val sel = s.page == item.page
                     // El foco del control se marca con un contorno, no con relleno: con relleno parecía otra pestaña
@@ -188,9 +195,40 @@ private fun TabBar(s: AppState, a: MainActivity) {
                 }
             }
             PadBadge("RB")
-            Spacer(Modifier.width(12.dp))
-            // Tocar el estado de conexión vuelve a leer el control (en vez de un botón aparte).
-            ConnectionPill(s) { if (!s.busy) a.readAll() }
+            // Conexión del G9: solo en su sección (tocarla vuelve a leer el control).
+            if (s.section == Section.G9) {
+                Spacer(Modifier.width(12.dp))
+                ConnectionPill(s) { if (!s.busy) a.readAll() }
+            }
+        }
+    }
+}
+
+/**
+ * Las dos partes de la app: Tablet (para cualquiera, con cualquier control) y G9. Con el control se pasa de una a
+ * otra siguiendo con LB/RB más allá de la última pestaña.
+ */
+@Composable
+private fun SectionSwitch(s: AppState) {
+    val c = MaterialTheme.colorScheme
+    Row(Modifier.clip(CircleShape).background(c.surfaceContainerHighest).padding(3.dp)) {
+        listOf(Section.TABLET to Pair(tr("Tablet", "Tablet"), Icons.Outlined.TabletAndroid),
+            Section.G9 to Pair("G9", Icons.Outlined.SportsEsports)).forEach { (sec, info) ->
+            val sel = s.section == sec
+            Row(
+                Modifier.clip(CircleShape).background(if (sel) c.primary else Color.Transparent)
+                    .clickable { s.goTo(sec) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(info.second, null, Modifier.size(18.dp), tint = if (sel) c.onPrimary else c.onSurfaceVariant)
+                Spacer(Modifier.width(6.dp))
+                Text(info.first, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) c.onPrimary else c.onSurfaceVariant)
+                // El G9 conectado: un punto verde (aunque se esté en la sección Tablet).
+                if (sec == Section.G9 && s.padMode != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF34C759)))
+                }
+            }
         }
     }
 }
@@ -307,7 +345,10 @@ private fun PageHost(s: AppState, a: MainActivity, modifier: Modifier) {
                         Page.AUTO -> AutoPage(s, a)
                         Page.TEST -> ControlsPage(s, a)
                         Page.BACK -> BackPage(s, a)
-                        Page.TABLET -> TabletPage(s, a)
+                        Page.TABLET_HOME -> TabletHomePage(s, a)
+                        Page.BATTERY -> BatteryPage(s, a)
+                        Page.SCREEN -> ScreenPage(s, a)
+                        Page.GAMEPANEL -> GamePanelPage(s, a)
                         Page.DIAGNOSTICS -> DiagnosticsPage(s, a)
                     }
                 }

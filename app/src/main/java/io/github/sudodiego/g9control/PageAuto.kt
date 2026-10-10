@@ -56,6 +56,8 @@ private object AppCache { @Volatile var apps: List<AppEntry>? = null }
 fun AutoPage(s: AppState, a: MainActivity) {
     if (!s.autoServiceOn) Panel { ServiceSetup(a) }
     AppPicker(s, a)
+    // Cómo avisa al abrir y salir de un juego (antes en Ajustes).
+    NoticesPanel(s, a)
 }
 
 /** Sin el servicio de accesibilidad el cambio por juego no funciona. Los pasos completos están en Ajustes → Permisos. */

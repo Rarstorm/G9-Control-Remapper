@@ -275,10 +275,17 @@ class MainActivity : ComponentActivity() {
             // LT/RT no hacen nada en la app: se usan para probar gatillos y vibración.
             KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2 -> return true
             KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1 -> {
+                // Las pestañas de la sección; pasado el final (o antes del principio) sigue en la otra sección.
                 if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
-                    val pages = Page.entries
                     val step = if (e.keyCode == KeyEvent.KEYCODE_BUTTON_R1) 1 else -1
-                    s.page = pages[(pages.indexOf(s.page) + step + pages.size) % pages.size]
+                    val pages = s.section.pages
+                    val i = pages.indexOf(s.page) + step
+                    if (i in pages.indices) s.page = pages[i]
+                    else {
+                        val other = if (s.section == Section.TABLET) Section.G9 else Section.TABLET
+                        s.section = other
+                        s.page = if (step > 0) other.pages.first() else other.pages.last()
+                    }
                 }
                 return true
             }
@@ -310,6 +317,8 @@ class MainActivity : ComponentActivity() {
      */
     private fun handleIntent(i: Intent?) {
         if (i == null) return
+        // Abierta al conectar el G9: directo a su sección.
+        if (i.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) state.goTo(Section.G9)
         // Solo en compilaciones de depuración: enviar bytes al control desde el PC con
         // adb shell am start -n io.github.sudodiego.g9control/.MainActivity --es g9hex "08 02 05 00"
         val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -878,15 +887,35 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Orden del menú y de LB/RB. TEST = "Botones"; DIAGNOSTICS = "Ajustes". */
-enum class Page { HOME, LIGHTS, STICKS, VIBRATION, TEST, BACK, PROFILES, AUTO, TABLET, DIAGNOSTICS }
+/**
+ * Páginas. HOME…PROFILES y AUTO son del G9 (HOME = su inicio, AUTO = modo por juego, TEST = "Botones"); TABLET_HOME,
+ * BATTERY, SCREEN y GAMEPANEL son de la tablet (sirven sin el G9); DIAGNOSTICS = "Ajustes", en las dos secciones.
+ */
+enum class Page { HOME, LIGHTS, STICKS, VIBRATION, TEST, BACK, PROFILES, AUTO, TABLET_HOME, BATTERY, SCREEN, GAMEPANEL, DIAGNOSTICS }
+
+/**
+ * Las dos partes de la app: la tablet (para cualquiera con la Y700 y cualquier control) y el G9. Cada una con sus
+ * pestañas, en el orden del menú y de LB/RB; Ajustes está en las dos.
+ */
+enum class Section(val pages: List<Page>) {
+    TABLET(listOf(Page.TABLET_HOME, Page.BATTERY, Page.SCREEN, Page.GAMEPANEL, Page.DIAGNOSTICS)),
+    G9(listOf(Page.HOME, Page.AUTO, Page.LIGHTS, Page.STICKS, Page.VIBRATION, Page.TEST, Page.BACK, Page.PROFILES, Page.DIAGNOSTICS)),
+}
 
 enum class LightTarget { BOTH, LEFT, RIGHT, HOME }
 
 data class Drift(val left: Boolean, val measuring: Boolean, val progress: Float = 0f, val maxPct: Int = 0, val suggest: Int = 0)
 
 class AppState {
-    var page by mutableStateOf(Page.HOME)
+    var section by mutableStateOf(Section.TABLET)
+    var page by mutableStateOf(Page.TABLET_HOME)
+
+    /** Cambia de sección, a su primera pestaña (o a Ajustes, si se estaba ahí). */
+    fun goTo(sec: Section) {
+        if (sec == section) return
+        section = sec
+        if (page !in sec.pages) page = sec.pages.first()
+    }
     /** Línea de estado de la barra inferior. Asignarla la marca como normal; [fail] la marca como problema. */
     var status: String
         get() = statusText

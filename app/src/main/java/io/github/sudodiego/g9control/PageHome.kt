@@ -49,7 +49,7 @@ fun HomePage(s: AppState, a: MainActivity) {
                 }
             }
         },
-        side = { ServiceWarning(s, a); ShizukuWarning(a); ModePanel(s, a); QuickProfiles(s, a); ShortcutsPanel() }
+        side = { ServiceWarning(s, a); ModePanel(s, a); QuickProfiles(s, a); ShortcutsPanel() }
     )
 }
 
@@ -124,7 +124,7 @@ private fun QuickProfiles(s: AppState, a: MainActivity) {
  * volumen invertido): por ejemplo, tras reiniciar o actualizar. El aviso dice lo que deja de funcionar.
  */
 @Composable
-private fun ServiceWarning(s: AppState, a: MainActivity) {
+fun ServiceWarning(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.warnService(a)) }
     val used = (s.autoEnabled && s.autoRules.isNotEmpty()) || AutoRules.gamePanel(a) || AutoRules.legionKeys(a) || AutoRules.swapVolume(a) ||
         AutoRules.smartBypass(a) || Monitor.all169(a) || Monitor.screen(a) != Monitor.Screen.NORMAL
@@ -142,7 +142,7 @@ private fun ServiceWarning(s: AppState, a: MainActivity) {
  * cada reinicio de la tablet: Shizuku hay que iniciarlo a mano.
  */
 @Composable
-private fun ShizukuWarning(a: MainActivity) {
+fun ShizukuWarning(a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.warnShizuku(a)) }
     LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
     val st = Shell.state

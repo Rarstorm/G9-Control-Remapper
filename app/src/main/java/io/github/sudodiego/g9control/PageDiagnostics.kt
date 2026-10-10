@@ -31,22 +31,11 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
             Panel(tr("Aplicación", "App")) {
                 Text(tr("Idioma", "Language"), fontSize = 14.sp)
                 ChoiceChips(AppLang.entries.map { it to it.label }, Lang.choice) { Lang.set(a, it) }
-                Text(tr("Estilo del dibujo", "Drawing style"), fontSize = 14.sp)
-                ChoiceChips(ControllerSkin.entries.map { it to it.label }, SkinState.skin) {
-                    SkinState.skin = it; Prefs.setSkin(a, it)
-                }
                 Text(tr("Tema", "Theme"), fontSize = 14.sp)
                 ChoiceChips(AppTheme.entries.map { it to it.label }, ThemeState.theme) {
                     ThemeState.theme = it; Prefs.setTheme(a, it)
                 }
-                Text(tr("Dibujo del control", "Controller drawing"), fontSize = 14.sp)
-                ChoiceChips(listOf(false to tr("A la izquierda", "On the left"), true to tr("Al centro", "Centered")), s.centered) {
-                    s.centered = it; Prefs.setCentered(a, it)
-                }
                 OutlinedButton(onClick = { s.showSetup = true }) { Text(tr("Ver la configuración inicial", "Show quick setup")) }
-                SwitchRow(tr("Abrir la app al conectar el control", "Open the app when the controller is connected"), s.openOnConnect) {
-                    s.openOnConnect = it; Prefs.setOpenOnConnect(a, it)
-                }
                 val version = runCatching { a.packageManager.getPackageInfo(a.packageName, 0).versionName }.getOrNull() ?: "?"
                 Row(
                     Modifier.fillMaxWidth().clickable {
@@ -58,22 +47,33 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     Text(version, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            // Izquierda: la app, sus permisos y el control; derecha: lo que se usa dentro de los juegos.
+            // Izquierda: la app y sus permisos; derecha: lo del G9 y las herramientas de desarrollo.
             PermissionsPanel(s, a)
-            if (s.devInfo.isNotEmpty()) Panel(tr("Control", "Controller")) {
-                // El identificador solo con las herramientas de desarrollo.
-                s.devInfo.filter { dev || it.first !in setOf("Identificador", "Identifier") }.forEach { (k, v) ->
-                    Row {
-                        Text(k, Modifier.width(140.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(v, fontSize = 14.sp)
+        },
+        second = {
+            CompositionLocalProvider(LocalEditable provides true) {
+                Panel(tr("Control G9", "G9 controller")) {
+                    Text(tr("Estilo del dibujo", "Drawing style"), fontSize = 14.sp)
+                    ChoiceChips(ControllerSkin.entries.map { it to it.label }, SkinState.skin) {
+                        SkinState.skin = it; Prefs.setSkin(a, it)
+                    }
+                    Text(tr("Dibujo del control", "Controller drawing"), fontSize = 14.sp)
+                    ChoiceChips(listOf(false to tr("A la izquierda", "On the left"), true to tr("Al centro", "Centered")), s.centered) {
+                        s.centered = it; Prefs.setCentered(a, it)
+                    }
+                    SwitchRow(tr("Abrir la app al conectar el G9", "Open the app when the G9 is connected"), s.openOnConnect) {
+                        s.openOnConnect = it; Prefs.setOpenOnConnect(a, it)
+                    }
+                    // El identificador solo con las herramientas de desarrollo.
+                    s.devInfo.filter { dev || it.first !in setOf("Identificador", "Identifier") }.forEach { (k, v) ->
+                        Row {
+                            Text(k, Modifier.width(140.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(v, fontSize = 14.sp)
+                        }
                     }
                 }
             }
             ResetPanel(s, a)
-        },
-        second = {
-            GamePanelSettings(s, a)
-            NoticesPanel(s, a)
             if (dev) {
                 Panel(tr("Detalles técnicos", "Technical details"), trailing = {
                     TextButton(onClick = { dev = false; taps = 0; Prefs.setDevTools(a, false) }) { Text(tr("Ocultar", "Hide")) }
@@ -155,8 +155,20 @@ private fun ConsolePanel(s: AppState, a: MainActivity) {
  * Cómo se ven los avisos de cambio de modo, ordenados por cuándo aparecen: al abrir un juego, al
  * salir de él y cuando la app cambia el modo sola. Cada uno con su bloqueo en una sola elección.
  */
+/**
+ * "Juego": lo que se usa dentro de los juegos, con cualquier control: el panel de juego, las capturas, el monitor de
+ * rendimiento y Game Assistant.
+ */
 @Composable
-private fun NoticesPanel(s: AppState, a: MainActivity) {
+fun GamePanelPage(s: AppState, a: MainActivity) {
+    TwoPane(
+        first = { GamePanelSettings(s, a) },
+        second = { GameAssistantSettings(s, a) }
+    )
+}
+
+@Composable
+fun NoticesPanel(s: AppState, a: MainActivity) {
     var small by remember { mutableStateOf(AutoRules.guideSmall(a)) }
     var big by remember { mutableStateOf(lockOf(AutoRules.guideBlock(a), AutoRules.blockSticks(a))) }
     var mini by remember { mutableStateOf(lockOf(AutoRules.miniBlock(a), AutoRules.miniBlockSticks(a))) }

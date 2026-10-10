@@ -97,16 +97,16 @@ import java.util.Date
 import java.util.Locale
 
 /** Dónde va un ítem del panel: las barras arriba, después el juego y abajo Android. */
-private enum class Section { SLIDER, GAME, SYSTEM }
+private enum class PanelRow { SLIDER, GAME, SYSTEM }
 
 /**
  * Una acción del panel de juego, como un mosaico de los ajustes rápidos: [sub] es su estado o un detalle y
- * [active] lo pinta como encendido. Las barras ([Section.SLIDER], brillo y volumen) tienen [level] (0..1): A entra
+ * [active] lo pinta como encendido. Las barras ([PanelRow.SLIDER], brillo y volumen) tienen [level] (0..1): A entra
  * a ajustarlas (← → llaman a [adjust] con −1 o +1, Y llama a [alt], A o B salen), y con el dedo [set] fija el nivel;
  * [hint] dice qué hace cada botón mientras se ajusta.
  */
 private class PanelItem(
-    val label: String, val icon: ImageVector, val section: Section = Section.GAME,
+    val label: String, val icon: ImageVector, val section: PanelRow = PanelRow.GAME,
     val sub: String? = null, val active: Boolean = false,
     /** Atenuado: no funciona ahora (falta Shizuku); elegirlo lleva a arreglarlo. */
     val enabled: Boolean = true,
@@ -128,9 +128,9 @@ private fun panelRows(items: List<PanelItem>): List<List<Int>> {
         return list.chunked((list.size + rows - 1) / rows)
     }
     return buildList {
-        by[Section.SLIDER]?.let { add(it) }
-        by[Section.GAME]?.let { addAll(even(it)) }
-        by[Section.SYSTEM]?.let { addAll(even(it)) }
+        by[PanelRow.SLIDER]?.let { add(it) }
+        by[PanelRow.GAME]?.let { addAll(even(it)) }
+        by[PanelRow.SYSTEM]?.let { addAll(even(it)) }
     }
 }
 
@@ -176,7 +176,7 @@ class GamePanel(private val svc: AutoModeService) {
         ui.editing = false
         ui.items = items()
         // Empieza en el primer mosaico (Captura), no en las barras.
-        ui.sel = ui.items.indexOfFirst { it.section != Section.SLIDER }.coerceAtLeast(0)
+        ui.sel = ui.items.indexOfFirst { it.section != PanelRow.SLIDER }.coerceAtLeast(0)
         header()
         if (view == null) create()
         svc.setPanelSticks(true)
@@ -243,7 +243,7 @@ class GamePanel(private val svc: AutoModeService) {
         inPerfMenu = false
         ui.items = items()
         ui.sel = ui.items.indexOfFirst { it.icon == subFrom }.takeIf { it >= 0 }
-            ?: ui.items.indexOfFirst { it.section != Section.SLIDER }.coerceAtLeast(0)
+            ?: ui.items.indexOfFirst { it.section != PanelRow.SLIDER }.coerceAtLeast(0)
         header()
         poke()
     }
@@ -444,11 +444,11 @@ class GamePanel(private val svc: AutoModeService) {
             val auto = SystemLevels.autoBrightness(svc)
             val b = SystemLevels.brightness(svc)
             add(PanelItem(
-                tr("Brillo", "Brightness"), Icons.Outlined.BrightnessMedium, Section.SLIDER, sub = if (auto) tr("Auto · $b %", "Auto · $b %") else "$b %",
+                tr("Brillo", "Brightness"), Icons.Outlined.BrightnessMedium, PanelRow.SLIDER, sub = if (auto) tr("Auto · $b %", "Auto · $b %") else "$b %",
                 adjust = { SystemLevels.stepBrightness(svc, it) }, level = b / 100f, set = { SystemLevels.setBrightness(svc, it) },
                 hint = tr("← → ajustar · A o B listo", "← → adjust · A or B done")
             ))
-            add(PanelItem(tr("Brillo automático", "Auto brightness"), Icons.Outlined.BrightnessAuto, Section.SLIDER, active = auto) {
+            add(PanelItem(tr("Brillo automático", "Auto brightness"), Icons.Outlined.BrightnessAuto, PanelRow.SLIDER, active = auto) {
                 SystemLevels.setAutoBrightness(svc, !auto)
                 // En un juego: también lo que hace Game Assistant al entrar a los juegos (apagarlo o no), y se avisa.
                 if (ZuiGame.inGame(svc) && SystemLevels.setAutoInGames(svc, !auto).isSuccess)
@@ -459,11 +459,11 @@ class GamePanel(private val svc: AutoModeService) {
         }
         val vol = SystemLevels.volume(svc)
         add(PanelItem(
-            tr("Volumen", "Volume"), Icons.AutoMirrored.Outlined.VolumeUp, Section.SLIDER, sub = if (vol == 0) tr("Silencio", "Muted") else "$vol %",
+            tr("Volumen", "Volume"), Icons.AutoMirrored.Outlined.VolumeUp, PanelRow.SLIDER, sub = if (vol == 0) tr("Silencio", "Muted") else "$vol %",
             adjust = { SystemLevels.stepVolume(svc, it) }, level = vol / 100f, set = { SystemLevels.setVolume(svc, it) },
             hint = tr("← → ajustar · A o B listo", "← → adjust · A or B done")
         ))
-        add(PanelItem(tr("Silenciar", "Mute"), Icons.AutoMirrored.Outlined.VolumeOff, Section.SLIDER, active = vol == 0) {
+        add(PanelItem(tr("Silenciar", "Mute"), Icons.AutoMirrored.Outlined.VolumeOff, PanelRow.SLIDER, active = vol == 0) {
             SystemLevels.toggleMute(svc); refresh()
         })
         // Sin Shizuku lo que lo necesita sale atenuado, y elegirlo lleva a Shizuku.
@@ -540,19 +540,19 @@ class GamePanel(private val svc: AutoModeService) {
             })
         }
         // Abajo, Android: para no tener que tocar la pantalla (con la tablet en un dock, por ejemplo).
-        add(PanelItem(tr("Atrás", "Back"), Icons.AutoMirrored.Outlined.ArrowBack, Section.SYSTEM, sub = tr("Largo: Legion + LB", "Long: Legion + LB")) {
+        add(PanelItem(tr("Atrás", "Back"), Icons.AutoMirrored.Outlined.ArrowBack, PanelRow.SYSTEM, sub = tr("Largo: Legion + LB", "Long: Legion + LB")) {
             afterHide { svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
         })
-        add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, Section.SYSTEM, sub = "Android") { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })
-        add(PanelItem(tr("Recientes", "Recents"), Icons.Outlined.Layers, Section.SYSTEM, sub = tr("Apps abiertas", "Open apps")) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) })
-        add(PanelItem(tr("Ajustes rápidos", "Quick settings"), Icons.Outlined.ToggleOn, Section.SYSTEM, sub = "Android") {
+        add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, PanelRow.SYSTEM, sub = "Android") { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })
+        add(PanelItem(tr("Recientes", "Recents"), Icons.Outlined.Layers, PanelRow.SYSTEM, sub = tr("Apps abiertas", "Open apps")) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) })
+        add(PanelItem(tr("Ajustes rápidos", "Quick settings"), Icons.Outlined.ToggleOn, PanelRow.SYSTEM, sub = "Android") {
             hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
         })
         val mode = ModeSwitcher.detect()
         if (mode != null) PadMode.entries.filter { it != mode }.forEach { m ->
-            add(PanelItem(m.label, Icons.Outlined.SportsEsports, Section.SYSTEM, sub = tr("Modo del control", "Controller mode")) { hide(); svc.manualSwitch(m) })
+            add(PanelItem(m.label, Icons.Outlined.SportsEsports, PanelRow.SYSTEM, sub = tr("Modo del control", "Controller mode")) { hide(); svc.manualSwitch(m) })
         }
-        add(PanelItem("G9 Control", Icons.Outlined.OpenInNew, Section.SYSTEM, sub = tr("Abrir la app", "Open the app")) {
+        add(PanelItem("G9 Control", Icons.Outlined.OpenInNew, PanelRow.SYSTEM, sub = tr("Abrir la app", "Open the app")) {
             hide()
             svc.startActivity(Intent(svc, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         })
@@ -1026,7 +1026,7 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
                     row.forEach { i ->
                         val item = ui.items[i]
                         when {
-                            section != Section.SLIDER -> PanelTile(item, i == ui.sel, Modifier.weight(1f)) { onPick(i) }
+                            section != PanelRow.SLIDER -> PanelTile(item, i == ui.sel, Modifier.weight(1f)) { onPick(i) }
                             item.level != null -> PanelSlider(item, i == ui.sel, ui.editing && i == ui.sel, Modifier.weight(1f)) { onSet(i, it) }
                             else -> PanelToggle(item, i == ui.sel) { onPick(i) }
                         }
