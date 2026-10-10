@@ -545,6 +545,9 @@ class AutoModeService : AccessibilityService() {
         main.postDelayed(bypassCheck, 3000)
         Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
         if (!AutoRules.enabled(this)) return
+        // Shizuku (para iniciarlo desde el panel): ir y volver no es salir del juego; el aviso de volver a Android
+        // queda para cuando se vaya de verdad a otra app.
+        if (pkg == Shell.PACKAGE) return
 
         val target = AutoRules.rules(this)[pkg]
         if (target == null) {

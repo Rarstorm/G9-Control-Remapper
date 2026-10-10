@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TabletAndroid
@@ -185,6 +184,7 @@ class GamePanel(private val svc: AutoModeService) {
                 val sel = ui.sel
                 ui.items = items()
                 ui.sel = sel.coerceAtMost(ui.items.size - 1)
+                header()
             }
         }
         // Lo que ya se sabe (Game Assistant visible, modo de rendimiento) se usa al instante; en segundo plano se
@@ -217,7 +217,8 @@ class GamePanel(private val svc: AutoModeService) {
         val i = svc.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         ui.battery = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: -1
         // Cargando: rayo en la batería. Bypass: un enchufe al lado y la batería en celeste (no carga, pero está enchufada).
-        ui.bypass = ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc)
+        // Sin Shizuku no se puede leer: lo último que se supo puede ser viejo (se detuvo Shizuku, lo apagó otro).
+        ui.bypass = Shell.state == Shell.State.READY && ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc)
         ui.charging = !ui.bypass && i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, 0) == android.os.BatteryManager.BATTERY_STATUS_CHARGING
         val time = android.text.format.DateFormat.getTimeFormat(svc).format(Date())
         ui.status = listOfNotNull(ui.battery.takeIf { it >= 0 }?.let { "$it %" }, time).joinToString(" · ")
@@ -416,8 +417,10 @@ class GamePanel(private val svc: AutoModeService) {
             ))
             add(PanelItem(tr("Brillo automático", "Auto brightness"), Icons.Outlined.BrightnessAuto, Section.SLIDER, active = auto) {
                 SystemLevels.setAutoBrightness(svc, !auto)
-                // En un juego: también lo que hace Game Assistant al entrar a los juegos (apagarlo o no).
-                if (ZuiGame.inGame(svc)) SystemLevels.setAutoInGames(svc, !auto)
+                // En un juego: también lo que hace Game Assistant al entrar a los juegos (apagarlo o no), y se avisa.
+                if (ZuiGame.inGame(svc) && SystemLevels.setAutoInGames(svc, !auto).isSuccess)
+                    toast(if (!auto) tr("Brillo automático: también en los juegos", "Auto brightness: also in games")
+                        else tr("Game Assistant lo apagará en los juegos", "Game Assistant will turn it off in games"))
                 refresh()
             })
         }
@@ -430,13 +433,9 @@ class GamePanel(private val svc: AutoModeService) {
         add(PanelItem(tr("Silenciar", "Mute"), Icons.AutoMirrored.Outlined.VolumeOff, Section.SLIDER, active = vol == 0) {
             SystemLevels.toggleMute(svc); refresh()
         })
-        // Sin Shizuku: un mosaico para iniciarlo, si hay algo que lo necesita (en un juego, enchufada o elegido).
+        // Sin Shizuku lo que lo necesita sale atenuado, y elegirlo lleva a Shizuku.
         val ready = Shell.state == Shell.State.READY
         val needs = tr("Necesita Shizuku", "Needs Shizuku")
-        if (!ready && Shell.launchIntent(svc) != null && (ZuiGame.inGame(svc) || ZuiBattery.plugged(svc) || Shell.wanted(svc)))
-            add(PanelItem("Shizuku", Icons.Outlined.PlayArrow,
-                sub = if (Shell.state == Shell.State.NO_PERMISSION) tr("Dar permiso", "Grant permission") else tr("Iniciar", "Start"),
-                run = ::fixShizuku))
         // El juego. La captura toma solo la ventana del juego: no hace falta esperar a que el panel desaparezca.
         add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: Legion + RB", "Also: Legion + RB")) { hide(); screenshot() })
         if (ZuiGame.inGame(svc)) {
