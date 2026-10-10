@@ -265,7 +265,7 @@ class GamePanel(private val svc: AutoModeService) {
             else PanelItem(tr("Sistema", "System"), Icons.Outlined.Restore, sub = "${RefreshRate.systemPeak(svc)} Hz", active = chosen == null) { pickHz(null) }
         ui.items = listOf(first) +
             RefreshRate.supported(svc).map { hz ->
-                PanelItem("$hz Hz", Icons.Outlined.DisplaySettings, sub = if (hz == chosen) tr("Este juego", "This game") else null, active = hz == chosen) { pickHz(hz) }
+                PanelItem("$hz Hz", Icons.Outlined.DisplaySettings, sub = if (hz == chosen) tr("Esta app", "This app") else null, active = hz == chosen) { pickHz(hz) }
             }
         ui.sel = ui.items.indexOfFirst { it.active }.coerceAtLeast(0)
         poke()
@@ -525,7 +525,7 @@ class GamePanel(private val svc: AutoModeService) {
         val hzChosen = RefreshRate.forApp(svc, svc.foregroundApp)
         if (RefreshRate.canWrite())
             add(PanelItem(tr("Frecuencia", "Refresh rate"), Icons.Outlined.DisplaySettings, active = hzChosen != null,
-                sub = (hzNow?.let { "$it Hz" } ?: "—") + if (hzChosen != null) tr(" · este juego", " · this game") else "") { showHzMenu() })
+                sub = (hzNow?.let { "$it Hz" } ?: "—") + if (hzChosen != null) tr(" · esta app", " · this app") else "") { showHzMenu() })
         else add(PanelItem(tr("Frecuencia", "Refresh rate"), Icons.Outlined.DisplaySettings, sub = needs, enabled = false, run = ::fixShizuku))
         if (Aspect.available(svc)) {
             val wide = Aspect.is169(svc)
