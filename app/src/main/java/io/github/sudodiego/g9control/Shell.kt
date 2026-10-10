@@ -45,6 +45,11 @@ object Shell {
     // Atrás mantenido (Dolphin sale del juego así; un Atrás normal abre su menú). Un servicio de accesibilidad solo
     // puede tocar Atrás, no mantenerlo.
     const val BACK_LONG = "input keyevent --longpress 4"
+    // FPS del juego para el monitor de rendimiento: las capas de SurfaceFlinger y los tiempos de los últimos 127
+    // cuadros de una (el contador global, `service call SurfaceFlinger 1013`, no se le permite al shell).
+    const val SF_LIST = "dumpsys SurfaceFlinger --list"
+    fun sfLatency(layer: String) = "dumpsys SurfaceFlinger --latency $layer"
+    private val SF_LATENCY = Regex("dumpsys SurfaceFlinger --latency \\S+")
     // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel, o apagar
     // solo la luz (brillo -1, como Extinguish; vuelve sola cuando Android cambia el brillo).
     fun screenPower(on: Boolean) = screenCmd("power ${if (on) 2 else 0}")
@@ -54,7 +59,7 @@ object Shell {
     private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG) || WM_SIZE.matches(cmd) ||
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */

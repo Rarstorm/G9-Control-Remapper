@@ -477,6 +477,12 @@ class GamePanel(private val svc: AutoModeService) {
                         else tr("Bypass desactivado: la batería vuelve a cargar.", "Bypass off: the battery charges again."))
                 }
             })
+        // Monitor de rendimiento sobre el juego (FPS con Shizuku; lo demás siempre).
+        val hud = AutoRules.perfHud(svc)
+        add(PanelItem(tr("Monitor", "Monitor"), Icons.Outlined.Speed, active = hud,
+            sub = if (hud) tr("FPS, CPU, GPU", "FPS, CPU, GPU") else tr("Apagado", "Off")) {
+            AutoRules.setPerfHud(svc, !hud); refresh()
+        })
         if (Aspect.available(svc)) {
             val wide = Aspect.is169(svc)
             add(PanelItem(tr("Pantalla 16:9", "16:9 screen"), Icons.Outlined.AspectRatio,

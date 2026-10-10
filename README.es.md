@@ -35,6 +35,7 @@ Además hace cosas que la oficial no puede:
 | **Juegos** | Eliges en qué modo se abre cada app; el control cambia al abrirla. |
 | **Panel de juego** | Manteniendo el botón Legion (o con L3 + R3), en cualquier app: un panel como los ajustes rápidos de Android, con barras de brillo y volumen, captura, Game Assistant, rendimiento, bypass, pantalla 16:9, Atrás, Inicio, Recientes, ajustes rápidos y modo del control. Se maneja con el stick, la cruceta, LB/RB o el dedo, sin quitarle el foco al juego. |
 | **Capturas** | Solo del juego (sin el puntero ni superposiciones), con un aviso con miniatura y sonido como en la Switch. Legion + RB; mantener RB saca una ráfaga. |
+| **Monitor de rendimiento** | Barra sobre el juego con FPS, CPU (frecuencia y temperatura), GPU (uso y temperatura) y batería; se enciende desde el panel. Los FPS necesitan Shizuku. |
 | **Rendimiento** | Ahorro, Equilibrado o Bestia (los de Game Assistant) desde el control, sin tocar la pantalla. Necesita Shizuku. |
 | **Bypass charging** | Jugando enchufada, el cargador alimenta la tablet y la batería no carga ni se calienta. Manual (también desde el panel) o automático, con la batería y la temperatura mínimas que elijas. Necesita Shizuku. |
 | **Límite de carga** | Enchufada, al llegar al nivel que elijas (70 a 90 %) se activa el bypass: la batería deja de cargar. El de ZUI corta siempre en 80 %. Necesita Shizuku. |

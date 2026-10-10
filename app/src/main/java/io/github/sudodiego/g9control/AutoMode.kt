@@ -159,6 +159,12 @@ object AutoRules {
     fun shotPos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("shot_pos", null)!!) }
         .getOrDefault(NoticePos.TOP_START)
     fun setShotPos(ctx: Context, v: NoticePos) = sp(ctx).edit().putString("shot_pos", v.name).apply()
+    /** Monitor de rendimiento sobre el juego (se enciende desde el panel) y su posición. */
+    fun perfHud(ctx: Context) = sp(ctx).getBoolean("perf_hud", false)
+    fun setPerfHud(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("perf_hud", v).apply()
+    fun perfPos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("perf_pos", null)!!) }
+        .getOrDefault(NoticePos.TOP_START)
+    fun setPerfPos(ctx: Context, v: NoticePos) = sp(ctx).edit().putString("perf_pos", v.name).apply()
     fun shotSound(ctx: Context) = runCatching { ShotSound.valueOf(sp(ctx).getString("shot_sound", null)!!) }
         .getOrDefault(ShotSound.JINGLE)
     fun setShotSound(ctx: Context, v: ShotSound) = sp(ctx).edit().putString("shot_sound", v.name).apply()
@@ -238,6 +244,7 @@ class AutoModeService : AccessibilityService() {
     private var ruleApp: String? = null
     private lateinit var guide: ModeGuide
     private lateinit var panel: GamePanel
+    private lateinit var perfHud: PerfHud
     /** Se salió de una app con regla y el control aún no vuelve a Android. */
     private var returnPending = false
     /** G9 Control está al frente: tiene su propia franja de modo, así que la guía se quita. */
@@ -490,6 +497,7 @@ class AutoModeService : AccessibilityService() {
         Lang.load(this)
         guide = ModeGuide(this)
         panel = GamePanel(this)
+        perfHud = PerfHud(this).also { it.update() }
         Shell.init(this)
         ZuiGame.initPerf(this)
         updateTouchpad()
@@ -813,6 +821,7 @@ class AutoModeService : AccessibilityService() {
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
         if (key == "charge_limit") evaluateBypass()
+        if ((key == "perf_hud" || key == "perf_pos") && ::perfHud.isInitialized) perfHud.update()
         if (key == "monitor_screen") Monitor.woken = false   // la opción recién elegida se ve al tiro
         if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
             main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)
@@ -980,6 +989,7 @@ class AutoModeService : AccessibilityService() {
         if (panelOff) Thread { kotlinx.coroutines.runBlocking { Shell.run(Shell.screenPower(true)) } }.start()
         if (::guide.isInitialized) guide.hide()
         if (::panel.isInitialized) panel.release()
+        if (::perfHud.isInitialized) perfHud.release()
         scope.cancel()
         super.onDestroy()
     }
