@@ -200,6 +200,10 @@ private fun NoticesPanel(s: AppState, a: MainActivity) {
 private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
     var shot by remember { mutableStateOf(AutoRules.touchpadShot(a)) }
+    var shotPos by remember { mutableStateOf(AutoRules.shotPos(a)) }
+    var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
+    var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
+    var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
     val zui = remember { ZuiGame.installed(a) }
     var bar by remember { mutableStateOf(ZuiGame.sideBar(a)) }
     if (zui) DisposableEffect(Unit) {
@@ -218,6 +222,19 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 tr("Captura solo el juego, sin el puntero que aparece. El toque ya no llega al juego como clic del touchpad: apágalo si un juego lo usa o si conectas un mouse.",
                     "Captures only the game, without the pointer that appears. The tap no longer reaches the game as a touchpad click: turn it off if a game uses it or if you connect a mouse.")
             ) { shot = it; AutoRules.setTouchpadShot(a, it) }
+            SwitchRow(
+                tr("Botón Legion", "Legion button"), legion,
+                tr("Tocar: Atrás. Mantener medio segundo: ajustes rápidos. En cualquier modo y app, menos dentro de G9 Control.",
+                    "Tap: Back. Hold half a second: quick settings. In any mode and app, except inside G9 Control.")
+            ) { legion = it; AutoRules.setLegionKeys(a, it) }
+            NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura de la captura que entra desde el borde.", "Thumbnail of the screenshot that slides in from the edge."),
+                if (s.autoServiceOn) { { AutoRules.preview(a, "shot") } } else null,
+                side = { PosGrid(shotPos) { shotPos = it; AutoRules.setShotPos(a, it) } }) {
+                Text(tr("Sonido", "Sound"), fontSize = 14.sp)
+                ChoiceChips(ShotSound.entries.map { it to it.label }, shotSound) { shotSound = it; AutoRules.setShotSound(a, it) }
+                Text(tr("Animación", "Animation"), fontSize = 14.sp)
+                ChoiceChips(NoticeAnim.entries.map { it to it.label }, shotAnim) { shotAnim = it; AutoRules.setShotAnim(a, it) }
+            }
             Hint(tr("Captura de pantalla, panel de Game Assistant (si está activo), cambiar el modo del control y abrir G9 Control. " +
                 "Se maneja con LB / RB, A y B; mientras está abierto, los botones no llegan al juego.",
                 "Screenshot, Game Assistant panel (when active), switch controller mode and open G9 Control. " +

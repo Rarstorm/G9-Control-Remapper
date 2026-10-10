@@ -100,7 +100,14 @@ class GamePanel(private val svc: AutoModeService) {
     fun release() {
         hide()
         flash.hide()
+        sounds.release()
         io.shutdown()
+    }
+
+    /** Ejemplo del aviso de captura (desde Ajustes), con una miniatura de muestra y el sonido elegido. */
+    fun previewShot() {
+        flash.show(flash.sample())
+        sounds.play(AutoRules.shotSound(svc))
     }
 
     /**
@@ -161,6 +168,7 @@ class GamePanel(private val svc: AutoModeService) {
     /** Guarda las capturas fuera del hilo principal: codificar un PNG de 2560 × 1600 tarda unos cientos de ms. */
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val flash = ShotFlash(svc)
+    private val sounds = ShotSounds()
 
     /**
      * Captura solo la ventana del juego (Android 14+): sin el puntero del mouse ni superposiciones (Game
@@ -173,10 +181,18 @@ class GamePanel(private val svc: AutoModeService) {
             Log.d(AutoModeService.TAG, "captura de la ventana $id (del evento: ${svc.appWindowId})")
             svc.takeScreenshotOfWindow(id, io, object : AccessibilityService.TakeScreenshotCallback {
                 override fun onSuccess(r: AccessibilityService.ScreenshotResult) {
-                    // El aviso apenas llega la imagen; guardarla (PNG) sigue en segundo plano.
-                    main.post { flash.show() }
-                    val saved = runCatching { saveScreenshot(r) }
-                    r.hardwareBuffer.close()
+                    val saved = runCatching {
+                        val bmp = try {
+                            val hw = Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace) ?: error("sin imagen")
+                            hw.copy(Bitmap.Config.ARGB_8888, false).also { hw.recycle() } ?: error("sin copia")
+                        } finally {
+                            r.hardwareBuffer.close()
+                        }
+                        // El aviso (con su miniatura) apenas hay imagen; guardar el PNG sigue en segundo plano.
+                        val thumb = flash.thumbnail(bmp)
+                        main.post { flash.show(thumb); sounds.play(AutoRules.shotSound(svc)) }
+                        try { saveScreenshot(bmp) } finally { bmp.recycle() }
+                    }
                     saved.onFailure {
                         Log.w(AutoModeService.TAG, "no se guardó la captura", it)
                         main.post { flash.hide(); toast(tr("No se pudo guardar la captura.", "Couldn't save the screenshot.")) }
@@ -206,11 +222,7 @@ class GamePanel(private val svc: AutoModeService) {
     }
 
     /** Guarda la captura en Pictures/Screenshots, junto a las del sistema. */
-    @androidx.annotation.RequiresApi(34)
-    private fun saveScreenshot(r: AccessibilityService.ScreenshotResult) {
-        val hw = Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace) ?: error("sin imagen")
-        val bmp = hw.copy(Bitmap.Config.ARGB_8888, false)
-        hw.recycle()
+    private fun saveScreenshot(bmp: Bitmap) {
         val name = "Screenshot_" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".png"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
@@ -226,8 +238,6 @@ class GamePanel(private val svc: AutoModeService) {
         } catch (e: Exception) {
             cr.delete(uri, null, null)
             throw e
-        } finally {
-            bmp.recycle()
         }
     }
 
@@ -307,44 +317,206 @@ private fun PanelCard(ui: PanelUi, onPick: (Int) -> Unit) {
 }
 
 /**
- * Aviso de captura: una etiqueta pequeña «✓ Captura» abajo a la derecha durante 1 s. No recibe toques ni
- * foco y no sale en la captura (que toma solo la ventana del juego). Con una View simple: es liviano.
+ * Aviso de captura, como el de la Switch: una tarjeta con la miniatura y «Captura guardada» que entra desde
+ * el borde (por defecto arriba a la izquierda; se elige en Ajustes), se queda 2 s y vuelve a salir. No recibe
+ * toques ni foco y no sale en la captura (que toma solo la ventana del juego). Con Views simples: es liviano.
  */
 private class ShotFlash(private val svc: AccessibilityService) {
     private val wm = svc.getSystemService(WindowManager::class.java)
     private val main = Handler(Looper.getMainLooper())
-    private var label: android.widget.TextView? = null
-    private val remove = Runnable { hide() }
+    private val dp = svc.resources.displayMetrics.density
+    private var frame: android.widget.FrameLayout? = null
+    private val slideOut = Runnable { leave() }
 
-    fun show() {
+    /** Miniatura de la captura (56 dp de alto). Se puede llamar desde cualquier hilo. */
+    fun thumbnail(bmp: Bitmap): Bitmap {
+        val h = (56 * dp).toInt()
+        return Bitmap.createScaledBitmap(bmp, (bmp.width * h / bmp.height).coerceAtLeast(1), h, true)
+    }
+
+    fun show(thumb: Bitmap) {
         hide()
-        val dp = svc.resources.displayMetrics.density
-        val v = android.widget.TextView(svc).apply {
-            text = tr("✓ Captura", "✓ Screenshot")
-            setTextColor(android.graphics.Color.WHITE)
-            textSize = 13f
-            setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xCC14171D.toInt()); cornerRadius = 12 * dp
+        val px = { v: Int -> (v * dp).toInt() }
+        val image = android.widget.ImageView(svc).apply {
+            setImageBitmap(thumb)
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: android.view.View, o: android.graphics.Outline) =
+                    o.setRoundRect(0, 0, v.width, v.height, 8 * dp)
             }
+            clipToOutline = true
         }
+        val text = android.widget.TextView(svc).apply {
+            text = tr("Captura guardada", "Screenshot saved")
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 15f
+            setPadding(px(14), 0, px(6), 0)
+        }
+        val card = android.widget.LinearLayout(svc).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(px(8), px(8), px(16), px(8))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xEE14171D.toInt()); cornerRadius = 16 * dp
+            }
+            addView(image, android.widget.LinearLayout.LayoutParams(thumb.width, thumb.height))
+            addView(text)
+            visibility = android.view.View.INVISIBLE
+        }
+        // La ventana toca el borde de la pantalla (el margen va adentro): la tarjeta entra desde ese borde y lo
+        // que queda fuera se recorta. En una esquina o a un lado entra de costado; arriba o abajo al centro, en
+        // vertical; en el centro aparece sin moverse.
+        val pos = AutoRules.shotPos(svc)
+        val f = android.widget.FrameLayout(svc).apply { setPadding(px(16), px(16), px(16), px(16)); addView(card) }
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
-            x = (20 * dp).toInt(); y = (20 * dp).toInt()
+            gravity = when (pos.h) { -1 -> Gravity.START; 1 -> Gravity.END; else -> Gravity.CENTER_HORIZONTAL } or
+                when (pos.v) { -1 -> Gravity.TOP; 1 -> Gravity.BOTTOM; else -> Gravity.CENTER_VERTICAL }
         }
-        if (runCatching { wm.addView(v, lp) }.isFailure) return
-        label = v
-        main.postDelayed(remove, 1000)
+        if (runCatching { wm.addView(f, lp) }.isFailure) return
+        frame = f
+        shown = Shown(pos, AutoRules.shotAnim(svc))
+        // Al primer dibujo (ya medida) se pone en su estado oculto y entra.
+        card.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                card.viewTreeObserver.removeOnPreDrawListener(this)
+                val out = outState(card, f)
+                card.visibility = android.view.View.VISIBLE
+                if (out != null) {
+                    card.translationX = out.x; card.translationY = out.y
+                    card.alpha = out.alpha; card.scaleX = out.scale; card.scaleY = out.scale
+                    card.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(220)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                }
+                return true
+            }
+        })
+        main.postDelayed(slideOut, 2200)
+    }
+
+    /** Posición y animación con que se mostró (se leen al mostrar: si cambian en Ajustes, sale igual que entró). */
+    private class Shown(val pos: NoticePos, val anim: NoticeAnim)
+    private var shown: Shown? = null
+
+    /** Estado de la tarjeta antes de entrar y al salir. */
+    private class Out(val x: Float = 0f, val y: Float = 0f, val alpha: Float = 1f, val scale: Float = 1f)
+
+    /** Miniatura de muestra para la vista previa: un degradado del tamaño de una captura. */
+    fun sample(): Bitmap {
+        val h = (56 * dp).toInt()
+        val w = h * 16 / 10
+        return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also {
+            android.graphics.Canvas(it).drawPaint(android.graphics.Paint().apply {
+                shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
+                    0xFF1F242C.toInt(), 0xFF3DD6FF.toInt(), android.graphics.Shader.TileMode.CLAMP)
+            })
+        }
+    }
+
+    /**
+     * Deslizar: fuera del borde más cercano (en el centro, sin borde, aparece como Suave). Suave: transparente
+     * y un poco más chica, en su lugar. Sin animación: null (aparece y desaparece de golpe).
+     */
+    private fun outState(card: android.view.View, f: android.view.View): Out? {
+        val s = shown ?: return null
+        val soft = Out(alpha = 0f, scale = 0.92f)
+        return when (s.anim) {
+            NoticeAnim.NONE -> null
+            NoticeAnim.SMOOTH -> soft
+            NoticeAnim.SLIDE -> when {
+                s.pos.h == -1 -> Out(x = -(card.width + f.paddingLeft).toFloat())
+                s.pos.h == 1 -> Out(x = (card.width + f.paddingRight).toFloat())
+                s.pos.v == -1 -> Out(y = -(card.height + f.paddingTop).toFloat())
+                s.pos.v == 1 -> Out(y = (card.height + f.paddingBottom).toFloat())
+                else -> soft
+            }
+        }
+    }
+
+    private fun leave() {
+        val f = frame ?: return
+        val card = f.getChildAt(0)
+        val out = outState(card, f) ?: return hide()
+        card.animate().translationX(out.x).translationY(out.y).alpha(out.alpha).scaleX(out.scale).scaleY(out.scale)
+            .setDuration(180).setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction { if (frame === f) hide() }.start()
     }
 
     fun hide() {
-        main.removeCallbacks(remove)
-        label?.let { runCatching { wm.removeView(it) } }
-        label = null
+        main.removeCallbacks(slideOut)
+        frame?.let { it.getChildAt(0).animate().cancel(); runCatching { wm.removeView(it) } }
+        frame = null
+        shown = null
     }
+}
+
+/**
+ * Sonido de la captura, generado al vuelo (sin archivos de audio): un obturador (dos chasquidos) o un jingle
+ * corto de dos notas. Los dos van por el volumen multimedia, el mismo del juego (el obturador del sistema,
+ * `MediaActionSound`, usa el volumen del sistema y en esta tablet no se oye).
+ */
+private class ShotSounds {
+    private val tracks = mutableMapOf<ShotSound, android.media.AudioTrack>()
+
+    fun play(s: ShotSound) {
+        if (s == ShotSound.NONE) return
+        runCatching {
+            tracks.getOrPut(s) { track(if (s == ShotSound.SHUTTER) shutter() else jingle()) }.run {
+                stop(); reloadStaticData(); play()
+            }
+        }.onFailure { Log.w(AutoModeService.TAG, "no se pudo reproducir el sonido de captura", it) }
+    }
+
+    fun release() {
+        tracks.values.forEach { it.release() }
+        tracks.clear()
+    }
+
+    /** Do6 y Sol6 que se solapan apenas, cada uno con un ataque corto y una caída suave. */
+    private fun jingle() = pcm(0.36) { t ->
+        tone(t, 1046.5, 0.0, 0.045) + tone(t, 1568.0, 0.075, 0.09)
+    }
+
+    /** Dos chasquidos (cortina que abre y cierra): ruido suavizado con un golpe grave, el segundo más suave. */
+    private fun shutter(): DoubleArray {
+        val rnd = java.util.Random(9)
+        var low = 0.0
+        return pcm(0.14) { t ->
+            low += 0.35 * (rnd.nextDouble() * 2 - 1 - low)
+            fun click(start: Double, gain: Double, decay: Double): Double {
+                val u = t - start
+                return if (u < 0) 0.0 else gain * Math.exp(-u / decay) * (low * 1.6 + 0.5 * Math.sin(2 * Math.PI * 190 * u))
+            }
+            click(0.0, 0.9, 0.008) + click(0.065, 0.6, 0.014)
+        }
+    }
+
+    private fun tone(t: Double, freq: Double, start: Double, decay: Double): Double {
+        val u = t - start
+        if (u < 0) return 0.0
+        val w = 2 * Math.PI * freq * u
+        return minOf(1.0, u / 0.005) * Math.exp(-u / decay) * 0.3 * (Math.sin(w) + 0.25 * Math.sin(2 * w))
+    }
+
+    private fun pcm(seconds: Double, f: (Double) -> Double) = DoubleArray((RATE * seconds).toInt()) { f(it.toDouble() / RATE) }
+
+    private fun track(samples: DoubleArray): android.media.AudioTrack {
+        val pcm = ShortArray(samples.size) { (samples[it].coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort() }
+        return android.media.AudioTrack.Builder()
+            .setAudioAttributes(android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_GAME)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            .setAudioFormat(android.media.AudioFormat.Builder()
+                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(RATE).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+            .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+            .setBufferSizeInBytes(pcm.size * 2)
+            .build()
+            .also { it.write(pcm, 0, pcm.size) }
+    }
+
+    private companion object { const val RATE = 44100 }
 }

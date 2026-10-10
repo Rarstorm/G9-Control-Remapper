@@ -49,6 +49,11 @@ enum class NoticePos(val h: Int, val v: Int) {
 
 }
 
+/** Sonido al sacar una captura. */
+enum class ShotSound { NONE, SHUTTER, JINGLE;
+    val label get() = when (this) { NONE -> tr("Sin sonido", "None"); SHUTTER -> tr("Obturador", "Shutter"); JINGLE -> tr("Jingle", "Jingle") }
+}
+
 /** Cómo entran y salen los avisos. */
 enum class NoticeAnim { SMOOTH, SLIDE, NONE;
     val label get() = when (this) { SMOOTH -> tr("Suave", "Smooth"); SLIDE -> tr("Deslizar", "Slide"); NONE -> tr("Sin animación", "None") }
@@ -98,6 +103,21 @@ object AutoRules {
     /** En DS5, M dos veces (llega como un toque del touchpad) saca la captura limpia del panel de juego. */
     fun touchpadShot(ctx: Context) = sp(ctx).getBoolean("touchpad_shot", true)
     fun setTouchpadShot(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("touchpad_shot", v).apply()
+
+    /** Botón Legion (Home del control): tocar = Atrás, mantener = ajustes rápidos. */
+    fun legionKeys(ctx: Context) = sp(ctx).getBoolean("legion_keys", true)
+    fun setLegionKeys(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("legion_keys", v).apply()
+
+    /** Aviso de captura: dónde sale (por defecto arriba a la izquierda, como en la Switch) y con qué sonido. */
+    fun shotPos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("shot_pos", null)!!) }
+        .getOrDefault(NoticePos.TOP_START)
+    fun setShotPos(ctx: Context, v: NoticePos) = sp(ctx).edit().putString("shot_pos", v.name).apply()
+    fun shotSound(ctx: Context) = runCatching { ShotSound.valueOf(sp(ctx).getString("shot_sound", null)!!) }
+        .getOrDefault(ShotSound.JINGLE)
+    fun setShotSound(ctx: Context, v: ShotSound) = sp(ctx).edit().putString("shot_sound", v.name).apply()
+    fun shotAnim(ctx: Context) = runCatching { NoticeAnim.valueOf(sp(ctx).getString("shot_anim", null)!!) }
+        .getOrDefault(NoticeAnim.SLIDE)
+    fun setShotAnim(ctx: Context, v: NoticeAnim) = sp(ctx).edit().putString("shot_anim", v.name).apply()
 
     fun noticePos(ctx: Context) = runCatching { NoticePos.valueOf(sp(ctx).getString("notice_pos", null)!!) }
         .getOrDefault(NoticePos.TOP_END)
@@ -180,7 +200,10 @@ class AutoModeService : AccessibilityService() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_SCREEN_OFF -> { main.removeCallbacks(waitUnlock); guide.suspendForLock() }
-                AutoRules.ACTION_PREVIEW -> guide.preview(i.getStringExtra("kind") ?: "banner")
+                AutoRules.ACTION_PREVIEW -> when (val kind = i.getStringExtra("kind") ?: "banner") {
+                    "shot" -> panel.previewShot()
+                    else -> guide.preview(kind)
+                }
                 AutoRules.ACTION_SWITCH -> i.getStringExtra("target")
                     ?.let { runCatching { PadMode.valueOf(it) }.getOrNull() }?.let(::manualSwitch)
                 // En esta tablet USER_PRESENT no siempre llega: al encender la pantalla se espera el desbloqueo.
@@ -321,6 +344,7 @@ class AutoModeService : AccessibilityService() {
         }
         if (panelChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
+        if (legionKey(event)) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -335,6 +359,40 @@ class AutoModeService : AccessibilityService() {
             KeyEvent.ACTION_UP -> held.remove(k) || guide.isRetaining
             else -> false
         }
+    }
+
+    /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
+    private var legionOwned = false
+    /** Botón Legion apretado y todavía sin decidir si es toque (Atrás) o mantener (ajustes rápidos). */
+    private var legionPending = false
+    private val legionHold = Runnable {
+        if (!legionPending) return@Runnable
+        legionPending = false
+        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+    }
+
+    /**
+     * Botón Legion (Home del control, llega como BUTTON_MODE en los tres modos): tocar = Atrás, mantener 0,5 s
+     * = ajustes rápidos. Dentro de G9 Control llega normal (lo usa la prueba de botones). Llega con algo de
+     * retraso: el firmware espera por si es un doble toque o Home + cruceta. Devuelve si el evento es nuestro.
+     */
+    private fun legionKey(e: KeyEvent): Boolean {
+        if (e.keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false
+        when (e.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (e.repeatCount > 0) return legionOwned
+                legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput
+                if (legionOwned) { legionPending = true; main.postDelayed(legionHold, 500) }
+                return legionOwned
+            }
+            KeyEvent.ACTION_UP -> {
+                if (!legionOwned) return false
+                legionOwned = false
+                if (legionPending) { legionPending = false; main.removeCallbacks(legionHold); performGlobalAction(GLOBAL_ACTION_BACK) }
+                return true
+            }
+        }
+        return legionOwned
     }
 
     private var lastTouchpad = 0L
