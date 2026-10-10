@@ -62,6 +62,7 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
     var temp by remember { mutableIntStateOf(AutoRules.smartBypassTemp(a)) }
     var games by remember { mutableStateOf(AutoRules.smartBypassGames(a)) }
     var limit by remember { mutableStateOf<Int?>(null) }
+    var own by remember { mutableIntStateOf(ZuiBattery.ownLimit(a) ?: 0) }
     val ready = Shell.state == Shell.State.READY
     // Se refresca cada pocos segundos mientras la página está abierta.
     LaunchedEffect(ready) {
@@ -90,17 +91,18 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
         }) {
             // Sin Shizuku todo el bypass se ve atenuado (no haría nada); la tarjeta Shizuku dice qué falta.
             CompositionLocalProvider(LocalEditable provides ready) {
-                // Nivel del límite de carga de ZUI (solo si está activado allá; ZUI trae 80 %).
+                // Límite propio: al llegar, bypass (la batería deja de cargar). El de ZUI corta siempre en 80 %.
                 Text(tr("Límite de carga", "Charge limit"), fontSize = 14.sp)
-                val lim = limit
-                if (ready && lim == null) Hint(tr("El límite de carga de ZUI está apagado. Actívalo en Optimización de carga para elegir el nivel.",
-                    "ZUI's charge limit is off. Turn it on in Charge optimization to choose the level."))
-                else ChoiceChips(ZuiBattery.LIMITS.map { it to (if (it == 80) tr("80 % (ZUI)", "80 % (ZUI)") else "$it %") }, lim ?: 80) { lv ->
-                    if (ready) scope.launch {
-                        ZuiBattery.setWantedLimit(a, lv)
-                        if (ZuiBattery.setChargeLimit(lv)) limit = lv
-                    }
+                ChoiceChips(listOf(0 to tr("Apagado", "Off")) + ZuiBattery.LIMITS.map { it to "$it %" }, own) { lv ->
+                    own = lv; ZuiBattery.setOwnLimit(a, lv.takeIf { it > 0 })
                 }
+                Text(
+                    if (own == 0) tr("El de ZUI (Optimización de carga) corta siempre en 80 %.", "ZUI's (Charge optimization) always stops at 80 %.")
+                    else tr("Al llegar a $own % enchufada se activa el bypass: la batería deja de cargar.", "At $own % while plugged in, bypass turns on: the battery stops charging."),
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (own > 80 && limit != null) Hint(tr("El límite de ZUI está activado y corta en $limit %: apágalo para llegar a $own %.",
+                    "ZUI's limit is on and stops at $limit %: turn it off to reach $own %."))
                 SwitchRow(
                     tr("Bypass", "Bypass"), bypass == true,
                     tr("El cargador alimenta la tablet; la batería no carga. Se apaga al desconectar.", "The charger powers the tablet; the battery doesn't charge. Off when unplugged.")

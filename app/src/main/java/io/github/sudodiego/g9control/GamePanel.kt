@@ -3,7 +3,10 @@ package io.github.sudodiego.g9control
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.provider.Settings
 import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -25,7 +28,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.AspectRatio
+import androidx.compose.material.icons.outlined.BrightnessAuto
+import androidx.compose.material.icons.outlined.BrightnessMedium
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TabletAndroid
 import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.Bolt
@@ -73,8 +83,14 @@ import kotlin.coroutines.resume
 import java.util.Date
 import java.util.Locale
 
-/** Una acción del panel de juego. */
-private class PanelItem(val label: String, val icon: ImageVector, val run: () -> Unit)
+/**
+ * Una acción del panel de juego. [system]: va en la fila de abajo (Android: inicio, brillo, volumen…). [adjust]:
+ * se ajusta con X (−1) e Y (+1) mientras está elegida, y [hint] dice qué hace cada botón.
+ */
+private class PanelItem(
+    val label: String, val icon: ImageVector, val system: Boolean = false,
+    val adjust: ((Int) -> Unit)? = null, val hint: String? = null, val run: () -> Unit
+)
 
 /** Estado que dibuja el panel. */
 private class PanelUi {
@@ -178,9 +194,21 @@ class GamePanel(private val svc: AutoModeService) {
             KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_DOWN -> move(1)
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER ->
                 if (e.repeatCount == 0) ui.items.getOrNull(ui.sel)?.run?.invoke()
-            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> if (e.repeatCount == 0) hide()
+            // Brillo y volumen: X baja, Y sube (mantener repite).
+            KeyEvent.KEYCODE_BUTTON_X -> ui.items.getOrNull(ui.sel)?.adjust?.let { it(-1); refresh() }
+            KeyEvent.KEYCODE_BUTTON_Y -> ui.items.getOrNull(ui.sel)?.adjust?.let { it(1); refresh() }
+            // B o tocar el botón Legion lo cierran (mantenerlo es lo que lo abre).
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_MODE -> if (e.repeatCount == 0) hide()
         }
         return true
+    }
+
+    /** Vuelve a armar los ítems (cambió un valor: brillo, volumen) sin mover la selección. */
+    private fun refresh() {
+        if (!isOpen || inPerfMenu) return
+        val sel = ui.sel
+        ui.items = items()
+        ui.sel = sel.coerceAtMost(ui.items.size - 1)
     }
 
     private fun move(d: Int) {
@@ -235,11 +263,33 @@ class GamePanel(private val svc: AutoModeService) {
             add(PanelItem(if (svc.tabletDark) tr("Encender la tablet", "Turn tablet on") else tr("Oscurecer la tablet", "Darken tablet"), Icons.Outlined.TabletAndroid) {
                 hide(); svc.toggleTabletScreen()
             })
+        // Fila de abajo: Android, para no tener que tocar la pantalla (con la tablet en un dock, por ejemplo).
+        add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, system = true) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })
+        add(PanelItem(tr("Recientes", "Recents"), Icons.Outlined.Layers, system = true) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) })
+        add(PanelItem(tr("Ajustes rápidos", "Quick settings"), Icons.Outlined.ToggleOn, system = true) {
+            hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
+        })
+        if (SystemLevels.canBrightness(svc)) {
+            val auto = SystemLevels.autoBrightness(svc)
+            add(PanelItem(
+                if (auto) tr("Brillo auto", "Auto brightness") else tr("Brillo ${SystemLevels.brightness(svc)} %", "Brightness ${SystemLevels.brightness(svc)} %"),
+                if (auto) Icons.Outlined.BrightnessAuto else Icons.Outlined.BrightnessMedium, system = true,
+                adjust = { SystemLevels.stepBrightness(svc, it) },
+                hint = tr("X − · Y + · A automático", "X − · Y + · A auto")
+            ) { SystemLevels.setAutoBrightness(svc, !auto); refresh() })
+        }
+        val vol = SystemLevels.volume(svc)
+        add(PanelItem(
+            if (vol == 0) tr("Silencio", "Muted") else tr("Volumen $vol %", "Volume $vol %"),
+            if (vol == 0) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp, system = true,
+            adjust = { SystemLevels.stepVolume(svc, it) },
+            hint = tr("X − · Y + · A silenciar", "X − · Y + · A mute")
+        ) { SystemLevels.toggleMute(svc); refresh() })
         val mode = ModeSwitcher.detect()
         if (mode != null) PadMode.entries.filter { it != mode }.forEach { m ->
-            add(PanelItem(m.label, Icons.Outlined.SportsEsports) { hide(); svc.manualSwitch(m) })
+            add(PanelItem(m.label, Icons.Outlined.SportsEsports, system = true) { hide(); svc.manualSwitch(m) })
         }
-        add(PanelItem("G9 Control", Icons.Outlined.OpenInNew) {
+        add(PanelItem("G9 Control", Icons.Outlined.OpenInNew, system = true) {
             hide()
             svc.startActivity(Intent(svc, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         })
@@ -611,27 +661,87 @@ private val PANEL_MUTED = Color(0xFF8D97A5)
 private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) -> Unit) {
     Surface(color = PANEL_BG, shape = RoundedCornerShape(24.dp), modifier = modifier) {
         Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ui.items.forEachIndexed { i, item ->
-                    val on = i == ui.sel
-                    Surface(
-                        color = TILE, shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(2.dp, if (on) PANEL_ACCENT else Color.Transparent),
-                        modifier = Modifier.size(width = 112.dp, height = 96.dp).clip(RoundedCornerShape(16.dp)).clickable { onPick(i) }
-                    ) {
-                        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(item.icon, null, Modifier.size(30.dp), tint = if (on) PANEL_ACCENT else Color.White)
-                            Spacer(Modifier.height(8.dp))
-                            Text(item.label, color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2,
-                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-                        }
-                    }
+            // Dos filas: el juego arriba y Android abajo. La selección recorre las dos en orden (LB/RB).
+            val rows = ui.items.withIndex().partition { !it.value.system }.toList().filter { it.isNotEmpty() }
+            rows.forEachIndexed { r, row ->
+                if (r > 0) Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { (i, item) -> PanelTile(item, i == ui.sel) { onPick(i) } }
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Text(tr("LB / RB mover · A elegir · B cerrar", "LB / RB move · A select · B close"), color = PANEL_MUTED, fontSize = 12.sp)
+            Text(
+                ui.items.getOrNull(ui.sel)?.hint?.let { "$it · B " + tr("cerrar", "close") }
+                    ?: tr("LB / RB mover · A elegir · B cerrar", "LB / RB move · A select · B close"),
+                color = PANEL_MUTED, fontSize = 12.sp
+            )
         }
     }
+}
+
+@Composable
+private fun PanelTile(item: PanelItem, on: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = TILE, shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(2.dp, if (on) PANEL_ACCENT else Color.Transparent),
+        modifier = Modifier.size(width = 112.dp, height = 96.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
+    ) {
+        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(item.icon, null, Modifier.size(30.dp), tint = if (on) PANEL_ACCENT else Color.White)
+            Spacer(Modifier.height(8.dp))
+            Text(item.label, color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2,
+                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+        }
+    }
+}
+
+/**
+ * Brillo y volumen desde el panel de juego. El brillo se escribe en los ajustes del sistema: sirve el permiso de
+ * pantalla de adb (WRITE_SECURE_SETTINGS) o "Modificar ajustes del sistema". Los pasos del brillo no son lineales
+ * (el ojo nota mucho más los cambios abajo): 11 niveles, de 0 a 100 %.
+ */
+private object SystemLevels {
+    private val LEVELS = intArrayOf(2, 5, 10, 18, 29, 44, 64, 90, 125, 180, 255)
+
+    fun canBrightness(ctx: Context) = Aspect.canWrite(ctx) || Settings.System.canWrite(ctx)
+
+    fun autoBrightness(ctx: Context) = runCatching {
+        Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+    }.getOrDefault(false)
+
+    fun setAutoBrightness(ctx: Context, on: Boolean) = runCatching {
+        Settings.System.putInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE,
+            if (on) Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+    }
+
+    /** Nivel más cercano al brillo actual (0..10). */
+    private fun level(ctx: Context): Int {
+        val v = runCatching { Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS) }.getOrDefault(128)
+        return LEVELS.indices.minBy { kotlin.math.abs(LEVELS[it] - v) }
+    }
+
+    fun brightness(ctx: Context) = level(ctx) * 10
+
+    /** Un paso más o menos; deja el brillo en manual (si no, el automático lo cambia enseguida). */
+    fun stepBrightness(ctx: Context, dir: Int) = runCatching {
+        setAutoBrightness(ctx, false)
+        Settings.System.putInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, LEVELS[(level(ctx) + dir).coerceIn(0, 10)])
+    }
+
+    private fun audio(ctx: Context) = ctx.getSystemService(AudioManager::class.java)
+
+    /** Volumen de la música y los juegos, en %. */
+    fun volume(ctx: Context): Int {
+        val a = audio(ctx)
+        if (a.isStreamMute(AudioManager.STREAM_MUSIC)) return 0
+        return a.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / a.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    }
+
+    fun stepVolume(ctx: Context, dir: Int) =
+        audio(ctx).adjustStreamVolume(AudioManager.STREAM_MUSIC, if (dir > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER, 0)
+
+    fun toggleMute(ctx: Context) =
+        audio(ctx).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, 0)
 }
 
 /**

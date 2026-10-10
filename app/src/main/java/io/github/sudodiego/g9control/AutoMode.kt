@@ -138,8 +138,18 @@ object AutoRules {
     fun swapVolume(ctx: Context) = sp(ctx).getBoolean("swap_volume", false)
     fun setSwapVolume(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("swap_volume", v).apply()
 
-    /** Botón Legion (Home del control): tocar = Atrás, mantener = ajustes rápidos. */
+    /** Botón Legion (Home del control): tocar = Atrás, mantener = panel de juego. */
     fun legionKeys(ctx: Context) = sp(ctx).getBoolean("legion_keys", true)
+
+    /**
+     * Apps de streaming de PC o consola: ahí el botón Legion pasa normal (es el botón guía del PC: modo Xbox, Game
+     * Bar). Si la app toma el control por USB (Artemis en X-Input), Android ni lo ve y da igual.
+     */
+    val STREAMING = setOf(
+        "com.limelight", "com.limelight.noir", "com.limelight.unofficial",   // Moonlight, Artemis
+        "com.valvesoftware.steamlink", "com.microsoft.xboxone.smartglass", "com.gamepass",
+        "com.metallic.chiaki", "com.playstation.remoteplay", "tv.parsec.client", "com.nvidia.geforcenow",
+    )
     fun setLegionKeys(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("legion_keys", v).apply()
 
     /** Aviso de captura: dónde sale (por defecto arriba a la izquierda, como en la Switch) y con qué sonido. */
@@ -247,7 +257,6 @@ class AutoModeService : AccessibilityService() {
                     scope.launch { if (ZuiBattery.readBypass() == true) ZuiBattery.setBypass(false, manual = false) }
                 }
                 Intent.ACTION_BATTERY_CHANGED -> { lastBattery = i; evaluateBypass() }
-                Intent.ACTION_POWER_CONNECTED -> { limitChecked = false; applyChargeLimit() }
                 AutoRules.ACTION_PREVIEW -> when (val kind = i.getStringExtra("kind") ?: "banner") {
                     "shot" -> panel.previewShot()
                     else -> guide.preview(kind)
@@ -277,14 +286,15 @@ class AutoModeService : AccessibilityService() {
     private var smartOn = false
 
     /**
-     * Bypass automático: enchufada, con batería ≥ mínimo y temperatura ≥ mínimo (y en un juego, si se eligió). Una vez
-     * activo se mantiene hasta que la batería baje 2 % o la temperatura 1 °C del mínimo (si no, parpadearía). Si el
-     * usuario lo cambió a mano, no lo toca hasta desconectar o cambiar de app.
+     * Bypass automático, por dos razones (basta una): el automático (enchufada, con batería ≥ mínimo y temperatura ≥
+     * mínimo, y en un juego si se eligió) o el límite de carga propio (enchufada y con la batería en el límite). Una
+     * vez activo se mantiene hasta que la batería baje 2 % (3 % el límite) o la temperatura 1 °C (si no, parpadearía).
+     * Si el usuario lo cambió a mano, no lo toca hasta desconectar o cambiar de app.
      */
     private fun evaluateBypass() {
         val i = lastBattery ?: return
-        applyChargeLimit()
-        if (!AutoRules.smartBypass(this)) {
+        val limit = ZuiBattery.ownLimit(this)
+        if (!AutoRules.smartBypass(this) && limit == null) {
             if (smartOn) { smartOn = false; scope.launch { ZuiBattery.setBypass(false, manual = false) } }
             return
         }
@@ -300,31 +310,16 @@ class AutoModeService : AccessibilityService() {
         val minLevel = AutoRules.smartBypassLevel(this)
         val minTemp = AutoRules.smartBypassTemp(this)
         val margin = if (smartOn) 2 else 0
-        val want = plugged && game && level >= minLevel - margin && (minTemp == 0 || temp >= minTemp - margin / 2f)
+        val smartWant = AutoRules.smartBypass(this) && game && level >= minLevel - margin && (minTemp == 0 || temp >= minTemp - margin / 2f)
+        val limitWant = limit != null && level >= limit - (if (smartOn) 3 else 0)
+        val want = plugged && (smartWant || limitWant)
         if (want == smartOn) return
-        Log.d(TAG, "bypass automático: ${if (want) "activar" else "desactivar"} (batería $level %, $temp °C, juego $game)")
+        Log.d(TAG, "bypass automático: ${if (want) "activar" else "desactivar"} (batería $level %, $temp °C, juego $game, límite $limit)")
         smartOn = want
         scope.launch { if (!ZuiBattery.setBypass(want, manual = false) && want) smartOn = false }
     }
 
     private val bypassCheck = Runnable { evaluateBypass() }
-
-    /** El límite de carga ya se revisó (se vuelve a revisar al conectar el cargador o al cambiar la opción). */
-    private var limitChecked = false
-
-    /**
-     * Límite de carga elegido en G9 Control: ZUI no lo guarda al reiniciar (ni tras su calibración), así que se vuelve
-     * a poner una vez cuando Shizuku está listo (con el primer aviso de la batería) y al conectar el cargador.
-     */
-    private fun applyChargeLimit() {
-        if (limitChecked || Shell.state != Shell.State.READY) return
-        val want = ZuiBattery.wantedLimit(this) ?: return
-        limitChecked = true
-        scope.launch {
-            val now = ZuiBattery.readChargeLimit() ?: return@launch   // límite de ZUI apagado: nada que ajustar
-            if (now != want) ZuiBattery.setChargeLimit(want)
-        }
-    }
 
     /**
      * Monitor externo: en modo espejo, si para ese monitor (o para todos) se eligió 16:9, se pone solo; al
@@ -481,7 +476,6 @@ class AutoModeService : AccessibilityService() {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
-            addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AutoRules.ACTION_PREVIEW)
             addAction(AutoRules.ACTION_SWITCH)
@@ -658,25 +652,26 @@ class AutoModeService : AccessibilityService() {
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
     private var legionOwned = false
-    /** Botón Legion apretado y todavía sin decidir si es toque (Atrás) o mantener (ajustes rápidos). */
+    /** Botón Legion apretado y todavía sin decidir si es toque (Atrás) o mantener (panel de juego). */
     private var legionPending = false
     private val legionHold = Runnable {
         if (!legionPending) return@Runnable
         legionPending = false
-        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+        panel.show()
     }
 
     /**
      * Botón Legion (Home del control, llega como BUTTON_MODE en los tres modos): tocar = Atrás, mantener 0,5 s
-     * = ajustes rápidos. Dentro de G9 Control llega normal (lo usa la prueba de botones). Llega con algo de
-     * retraso: el firmware espera por si es un doble toque o Home + cruceta. Devuelve si el evento es nuestro.
+     * = panel de juego. Dentro de G9 Control llega normal (lo usa la prueba de botones), y en las apps de streaming
+     * también ([AutoRules.STREAMING]: ahí es el botón guía del PC o la consola). Llega con algo de retraso: el
+     * firmware espera por si es un doble toque o Home + cruceta. Devuelve si el evento es nuestro.
      */
     private fun legionKey(e: KeyEvent): Boolean {
         if (e.keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (e.repeatCount > 0) return legionOwned
-                legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput
+                legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput && lastPackage !in AutoRules.STREAMING
                 if (legionOwned) { legionPending = true; main.postDelayed(legionHold, 500) }
                 return legionOwned
             }
@@ -696,7 +691,7 @@ class AutoModeService : AccessibilityService() {
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
-        if (key == "charge_limit") { limitChecked = false; applyChargeLimit() }
+        if (key == "charge_limit") evaluateBypass()
         if (key == "monitor_screen") Monitor.woken = false   // la opción recién elegida se ve al tiro
         if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
             main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)

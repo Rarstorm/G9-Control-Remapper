@@ -204,7 +204,8 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
-        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier juego sin soltar el control.", "A menu to use in any game without letting go of the controller.")) {
+        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control. Se abre manteniendo el botón Legion (o con L3 + R3).",
+            "A menu to use in any app without letting go of the controller. Hold the Legion button to open it (or L3 + R3).")) {
             SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Tocar: abre el panel. Mantener: captura directa.", "Tap: opens the panel. Hold: direct screenshot.")) {
                 on = it; AutoRules.setGamePanel(a, it)
             }
