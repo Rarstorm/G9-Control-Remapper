@@ -4,7 +4,21 @@ App Android propia (Kotlin + Jetpack Compose, paquete `io.github.sudodiego.g9con
 
 Este archivo junta lo que se sabe del protocolo y del control, lo que se descartó y cómo está hecha la app. Está ordenado por tema; el historial detallado está en git (antes del 9 oct 2026 era un registro por versiones).
 
-**Estado (9 oct 2026):** todo lo planeado está hecho y probado. No hay pendientes del control.
+**Estado (10 oct 2026):** la app pasó de configurar el G9 a ser una compañera para jugar en la Y700. Plan acordado: renombrarla **Puff** (nombre visible; el identificador `io.github.sudodiego.g9control` se mantiene por ahora y quizás cambie después) y separarla en **sección Tablet** (sirve sin el G9 y con cualquier control: SN30 Pro, GameSir X5 Lite, G8 Plus…) y **sección G9**. Orden: pulir y subir lo actual → reestructurar → Hz por juego desde la lista → estadísticas por sesión (batería, W, FPS, temperaturas por modo y Hz) → README nuevo.
+
+### Lo aprendido, en corto (10 oct 2026)
+
+| Qué | Cómo | Necesita |
+|---|---|---|
+| Saber qué app está al frente, capturar solo la ventana del juego, gestos sobre Game Assistant, botones del control (no sticks), toques del touchpad en DS5 | Servicio de accesibilidad | Servicio activo |
+| Sticks y cruceta en el panel | `motionEventSources = SOURCE_JOYSTICK` solo con el panel abierto | Servicio, Android 14+ |
+| Uso de GPU, frecuencias de CPU, 86 zonas térmicas, RAM | sysfs (`gpubusy`, `scaling_cur_freq`, `thermal_zone*`): SELinux de las apps los deja leer, al shell no | Nada |
+| Watts, tiempo de batería | `BatteryManager` (corriente, voltaje, carga) | Nada |
+| Brillo, 16:9 (`wm size`), brillo automático en juegos | `Settings.System`/`Global` públicos, `IWindowManager` | Permiso de pantalla (WRITE_SECURE_SETTINGS por adb) |
+| Bypass, límite de carga de ZUI (leer), rendimiento, ocultar Game Assistant, Hz (`peak/min_refresh_rate`, privados), FPS de otra app (SurfaceFlinger), apagar el panel (`SurfaceControl`), mantener Atrás, touchpad crudo (`getevent`) | Shell vía Shizuku | Shizuku |
+| **No se puede:** cambiar el nivel del límite de ZUI (corta en 80), FPS sin Shizuku (`measured_fps` bloqueado), frecuencia de GPU, inyectar teclas o retener y reenviar un botón (por eso el primer stick de L3 + R3 llega al juego), ver botones si una app toma el control por USB (Artemis en X-Input con OK), ver clics del touchpad cuando una app captura el puntero (salvo `getevent` con Shizuku) | — | — |
+
+Modos de rendimiento (medido en RetroArch): ninguno cambia el techo de la CPU (`scaling_max_freq` igual en los tres); Ahorro la mantiene baja (núcleo grande en 672 MHz), Bestia arriba (3,3 GHz), Equilibrado en medio. La GPU no se puede ver. Falta medir batería, temperatura y FPS por sesión.
 
 ---
 

@@ -101,6 +101,7 @@ class PerfHud(private val svc: AutoModeService) {
 
     private val cpus = (0..15).map { File("/sys/devices/system/cpu/cpu$it/cpufreq/scaling_cur_freq") }.filter { it.exists() }
     private val gpuBusy = File("/sys/class/kgsl/kgsl-3d0/gpubusy")
+    private var lastGpu: Int? = null
     /** Zonas térmicas por grupo (se buscan una vez): núcleos de CPU y GPU. */
     private val zones: Map<String, List<File>> by lazy {
         val all = File("/sys/class/thermal").listFiles()?.filter { it.name.startsWith("thermal_zone") }.orEmpty()
@@ -120,9 +121,11 @@ class PerfHud(private val svc: AutoModeService) {
 
     private fun sample() {
         val cpuGhz = cpus.mapNotNull { readLong(it) }.maxOrNull()?.let { it / 1_000_000.0 }
+        // "ocupado total" desde la lectura anterior: si el contador se acaba de reiniciar (total 0) no hay dato nuevo y
+        // se mantiene el último (antes salía un 0 % falso).
         val gpu = runCatching {
             val (busy, total) = gpuBusy.readText().trim().split(Regex("\\s+")).map { it.toLong() }
-            if (total > 0) (busy * 100 / total).toInt() else 0
+            if (total > 0) (busy * 100 / total).toInt().coerceIn(0, 100).also { lastGpu = it } else lastGpu
         }.getOrNull()
         val bat = svc.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = bat?.let { it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) }
