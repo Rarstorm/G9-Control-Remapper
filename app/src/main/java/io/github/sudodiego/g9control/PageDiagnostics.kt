@@ -211,8 +211,6 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
             SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Tocar: abre el panel. Mantener: captura directa.", "Tap: opens the panel. Hold: direct screenshot.")) {
                 on = it; AutoRules.setGamePanel(a, it)
             }
-            Hint(tr("Los dos botones de volumen de la tablet a la vez también sacan una captura (mantenerlos abre el panel). Sirve cuando el control no llega a Android, como en Artemis tomando el control.",
-                "Both tablet volume buttons together also take a screenshot (holding them opens the panel). Useful when the controller doesn't reach Android, like Artemis taking it over."))
             SwitchRow(
                 tr("M dos veces en DS5: captura", "M twice in DS5: screenshot"), shot,
                 tr("Solo el juego, sin el puntero. Apágalo si un juego usa el clic del touchpad.", "Only the game, without the pointer. Turn it off if a game uses the touchpad click.")
