@@ -34,7 +34,7 @@ Además hace cosas que la oficial no puede:
 | **Perfiles** | Guardar, aplicar y respaldar configuraciones completas. |
 | **Juegos** | Eliges en qué modo se abre cada app; el control cambia al abrirla. |
 | **Panel de juego** | Manteniendo el botón Legion (o con L3 + R3), en cualquier app: un panel como los ajustes rápidos de Android, con barras de brillo y volumen, captura, Game Assistant, rendimiento, bypass, pantalla 16:9, Atrás, Inicio, Recientes, ajustes rápidos y modo del control. Se maneja con el stick, la cruceta, LB/RB o el dedo, sin quitarle el foco al juego. |
-| **Capturas** | Solo del juego (sin el puntero ni superposiciones), con un aviso con miniatura y sonido como en la Switch. Legion + RB; mantener RB saca una ráfaga. |
+| **Capturas** | Solo del juego (sin el puntero ni superposiciones), con un aviso con miniatura y sonido como en la Switch. Legion + RB (mantener RB saca una ráfaga), o los dos botones de volumen de la tablet a la vez (sirve también en Artemis con el control tomado por USB). |
 | **Monitor de rendimiento** | Barra sobre el juego con FPS, CPU (frecuencia y temperatura), GPU (uso y temperatura) y batería; se enciende desde el panel. Los FPS necesitan Shizuku. |
 | **Rendimiento** | Ahorro, Equilibrado o Bestia (los de Game Assistant) desde el control, sin tocar la pantalla. Necesita Shizuku. |
 | **Bypass charging** | Jugando enchufada, el cargador alimenta la tablet y la batería no carga ni se calienta. Manual (también desde el panel) o automático, con la batería y la temperatura mínimas que elijas. Necesita Shizuku. |
@@ -94,7 +94,7 @@ Ajustes → Permisos muestra el estado de todo esto y cómo activarlo, e Inicio 
 - En modo Android, M dos veces saca la captura del sistema (Android la procesa antes que cualquier app). Para una captura limpia, Legion + RB.
 - Android deja a la app sacar una captura por segundo como mucho: las ráfagas van a ese ritmo.
 - Mantener el botón Legion 5 segundos apaga el G9 (es del firmware).
-- Transmitiendo desde el PC, el botón Legion va al PC: Legion + RB no captura ahí.
+- Transmitiendo desde el PC, el botón Legion va al PC: Legion + RB no captura ahí. Usa los dos botones de volumen de la tablet a la vez.
 - Algunas apps abiertas se cierran al cambiar entre 16:9 y 16:10 (por ejemplo Dolphin): conviene cambiarlo antes de abrirlas.
 - Con un monitor, si la pantalla de la tablet queda apagada sin querer (por ejemplo, si G9 Control se cerró a la fuerza), **apretar dos veces el botón de encendido** siempre la vuelve a encender. Desconectar el monitor también sirve. Con el monitor conectado al USB-C el G9 no responde: usa otro control (por Bluetooth, por ejemplo).
 

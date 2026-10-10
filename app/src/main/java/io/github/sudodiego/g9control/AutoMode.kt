@@ -536,9 +536,11 @@ class AutoModeService : AccessibilityService() {
         // Transmitiendo desde el PC: el botón Legion es el guía de allá. En Moonlight/Artemis solo en su pantalla de
         // transmisión (las clases de diálogos o vistas sueltas no cuentan: solo las de la propia app).
         val cls = event.className?.toString().orEmpty()
+        val wasStreaming = streaming
         if (pkg !in AutoRules.STREAMING) streaming = false
         else if (!pkg.startsWith("com.limelight")) streaming = true
         else if (cls.startsWith("com.limelight.")) streaming = cls == AutoRules.STREAM_ACTIVITY
+        if (streaming != wasStreaming) Log.d(TAG, "transmitiendo: $streaming ($pkg, $cls)")
         if (pkg == lastPackage) return
         appInFront = false
         val wasHidden = hiddenForApp
@@ -620,7 +622,9 @@ class AutoModeService : AccessibilityService() {
         // Qué control se usó por última vez: con otro control (8BitDo, por ejemplo) el G9 se queda como está.
         if (event.action == KeyEvent.ACTION_DOWN && KeyEvent.isGamepadButton(k)) {
             val now = android.os.SystemClock.uptimeMillis()
-            if (event.device?.name?.contains("G9", true) == true) lastG9Key = now else lastOtherPad = now
+            // En X-Input el G9 se llama "Microsoft X-Box 360 pad" (el nombre del driver de Xbox por USB).
+            val name = event.device?.name.orEmpty()
+            if (name.contains("G9", true) || name.contains("x-box 360", true)) lastG9Key = now else lastOtherPad = now
         }
         if (event.action == KeyEvent.ACTION_UP && delivered.remove(k)) {
             handleKey(event)   // para que el resto (L3 + R3, la guía) se entere de que se soltó
@@ -644,6 +648,7 @@ class AutoModeService : AccessibilityService() {
                 main.post { l(copy) }
             }
         }
+        if (volumeChord(event)) return true
         if (volumeSwap(event)) return true
         // Imagen congelada (cambiando el rendimiento): moverse sin ver a dónde, no. Los sticks los toma su ventana.
         if (panel.busy && (KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -666,6 +671,54 @@ class AutoModeService : AccessibilityService() {
             KeyEvent.ACTION_UP -> held.remove(k) || guide.isRetaining
             else -> false
         }
+    }
+
+    /** Botones de volumen físicos de la tablet apretados ahora. */
+    private val volHeld = mutableSetOf<Int>()
+    /** Los dos a la vez: sus soltar no llegan a nadie; [volChordPanel] si se mantuvieron (abrió el panel). */
+    private var volChord = false
+    private var volChordPanel = false
+    private val volChordHold = Runnable { if (volChord && volHeld.size == 2) { volChordPanel = true; panel.show() } }
+
+    /**
+     * Los dos botones de volumen de la tablet a la vez = captura; mantenidos ~0,7 s = panel de juego. Sirve cuando
+     * el control no llega a Android (Artemis tomándolo por USB). El paso de volumen que alcanzó a dar el primero se
+     * deshace. Solo los botones físicos de la tablet.
+     */
+    private fun volumeChord(e: KeyEvent): Boolean {
+        val k = e.keyCode
+        if (k != KeyEvent.KEYCODE_VOLUME_UP && k != KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        val dev = e.device ?: return false
+        if (dev.isExternal || dev.isVirtual) return false
+        when (e.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (e.repeatCount > 0) return volChord
+                volHeld += k
+                if (volHeld.size == 2 && !volChord) {
+                    volChord = true
+                    volChordPanel = false
+                    main.removeCallbacks(volRepeat)
+                    // El primero ya movió el volumen (al revés si está invertido): se deshace ese paso.
+                    val first = volHeld.first { it != k }
+                    val raised = (first == KeyEvent.KEYCODE_VOLUME_UP) != AutoRules.swapVolume(this)
+                    adjustVolume(if (raised) AudioManager.ADJUST_LOWER else AudioManager.ADJUST_RAISE)
+                    main.postDelayed(volChordHold, 700)
+                    return true
+                }
+                return volChord
+            }
+            KeyEvent.ACTION_UP -> {
+                volHeld -= k
+                if (!volChord) return false
+                if (volHeld.isEmpty()) {
+                    volChord = false
+                    main.removeCallbacks(volChordHold)
+                    if (!volChordPanel) { Log.d(TAG, "volumen + volumen: captura"); panel.capture() }
+                }
+                return true
+            }
+        }
+        return false
     }
 
     /**
