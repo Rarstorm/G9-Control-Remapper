@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -288,6 +290,14 @@ private fun ScreenButtonsPanel(s: AppState, a: MainActivity) {
  * momento para cambiar el rendimiento); sin Shizuku se puede a mano en Ajustes. Solo si la tablet lo tiene.
  */
 @Composable
+private fun ModeRow(name: String, desc: String) {
+    Row {
+        Text(name, Modifier.width(110.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 fun GameAssistantSettings(s: AppState, a: MainActivity) {
     val zui = remember { ZuiGame.installed(a) }
     if (!zui) return
@@ -333,6 +343,12 @@ fun GameAssistantSettings(s: AppState, a: MainActivity) {
                 }
             }
             if (!canWrite) Hint(tr("Necesita el permiso de pantalla (Ajustes → Permisos).", "Needs the screen permission (Settings → Permissions)."))
+            // Medido en RetroArch: ninguno cambia el techo de la CPU; cambian cuánto la dejan subir.
+            Text(tr("Modos de rendimiento", "Performance modes"), fontSize = 14.sp)
+            ModeRow(tr("Ahorro", "Saver"), tr("La CPU se queda baja. Gasta menos; puede haber más lag y los juegos pesados bajan de FPS.",
+                "The CPU stays low. Uses less; may add lag and heavy games lose FPS."))
+            ModeRow(tr("Equilibrado", "Balanced"), tr("Sube solo cuando el juego lo pide.", "Ramps up only when the game asks."))
+            ModeRow(tr("Bestia", "Beast"), tr("La CPU siempre arriba. Menos tirones, más calor y batería.", "The CPU always high. Fewer stutters, more heat and battery."))
             OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
                 Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
             }

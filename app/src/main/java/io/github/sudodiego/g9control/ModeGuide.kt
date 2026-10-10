@@ -315,12 +315,12 @@ internal class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {
 // Dibujo de la guía
 // ---------------------------------------------------------------------------------------------
 
-private val CARD = Color(0xFF14171D)
+private val CARD = Color(0xFF111A2C)
 private val CARD_DONE = Color(0xFF145A35)
-private val ACCENT = Color(0xFF3DD6FF)
+private val ACCENT = Color(0xFF5CC8FF)
 private val OK = Color(0xFF3DDC84)
-private val MUTED = Color(0xFF8D97A5)
-private val LINE = Color(0xFF2C333D)
+private val MUTED = Color(0xFF9AA6BF)
+private val LINE = Color(0xFF2A3550)
 
 /** Estado que dibuja la guía. */
 private class GuideUi {
@@ -610,7 +610,7 @@ private fun ButtonsHint() {
 @Composable
 internal fun RoundKey(menu: Boolean, small: Boolean = false) {
     Box(
-        Modifier.size(if (small) 28.dp else 64.dp).clip(CircleShape).background(Color(0xFF101114))
+        Modifier.size(if (small) 28.dp else 64.dp).clip(CircleShape).background(Color(0xFF0B1120))
             .border(if (small) 1.dp else 2.dp, ACCENT, CircleShape),
         contentAlignment = Alignment.Center
     ) {
@@ -665,7 +665,7 @@ private fun Stepper(path: List<PadMode>, current: PadMode?, done: Boolean) {
                     contentAlignment = Alignment.Center
                 ) {
                     if (state == 2) Icon(Icons.Filled.Check, null, Modifier.size(24.dp), tint = Color.White)
-                    else Text("${i + 1}", color = if (state == 1) Color(0xFF00222D) else MUTED, fontWeight = FontWeight.Bold)
+                    else Text("${i + 1}", color = if (state == 1) Color(0xFF052238) else MUTED, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(

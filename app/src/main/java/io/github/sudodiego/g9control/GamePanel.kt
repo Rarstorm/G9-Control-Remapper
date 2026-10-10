@@ -905,7 +905,7 @@ class GamePanel(private val svc: AutoModeService) {
             setTextColor(android.graphics.Color.WHITE)
             textSize = 14f
             setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (10 * dp).toInt())
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xEE14171D.toInt()); cornerRadius = 16 * dp }
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xEE0E1424.toInt()); cornerRadius = 16 * dp }
         }
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -1238,7 +1238,7 @@ private class FreezeCover(private val svc: AccessibilityService) {
         // El ✓ ocupa el lugar de la ruedita al terminar: la tarjeta no cambia de tamaño.
         val ok = android.widget.TextView(svc).apply {
             text = "✓"
-            setTextColor(0xFF3DD6FF.toInt())
+            setTextColor(0xFF5CC8FF.toInt())
             textSize = 22f
             gravity = Gravity.CENTER
             visibility = android.view.View.INVISIBLE
@@ -1256,7 +1256,7 @@ private class FreezeCover(private val svc: AccessibilityService) {
         }
         val s = android.widget.TextView(svc).apply {
             text = tr("Un momento…", "One moment…")
-            setTextColor(0xFF8D97A5.toInt())
+            setTextColor(0xFF9AA6BF.toInt())
             textSize = 13f
         }
         val texts = android.widget.LinearLayout(svc).apply {
@@ -1269,7 +1269,7 @@ private class FreezeCover(private val svc: AccessibilityService) {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(px(18), px(14), px(22), px(14))
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xEE14171D.toInt()); cornerRadius = 16 * dp }
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xEE0E1424.toInt()); cornerRadius = 16 * dp }
             addView(icon, android.widget.LinearLayout.LayoutParams(px(28), px(28)))
             addView(texts)
             alpha = 0f
@@ -1381,7 +1381,7 @@ private class ShotFlash(private val svc: AccessibilityService) {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(px(8), px(8), px(16), px(8))
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xEE14171D.toInt()); cornerRadius = 16 * dp
+                setColor(0xEE0E1424.toInt()); cornerRadius = 16 * dp
             }
             addView(image, android.widget.LinearLayout.LayoutParams(thumb.width, thumb.height))
             addView(text)
@@ -1436,7 +1436,7 @@ private class ShotFlash(private val svc: AccessibilityService) {
         return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also {
             android.graphics.Canvas(it).drawPaint(android.graphics.Paint().apply {
                 shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
-                    0xFF1F242C.toInt(), 0xFF3DD6FF.toInt(), android.graphics.Shader.TileMode.CLAMP)
+                    0xFF1F2A42.toInt(), 0xFF5CC8FF.toInt(), android.graphics.Shader.TileMode.CLAMP)
             })
         }
     }

@@ -152,6 +152,11 @@ class PerfHud(private val svc: AutoModeService) {
         sb.setSpan(android.text.style.ImageSpan(icon, android.text.style.DynamicDrawableSpan.ALIGN_CENTER), st, st + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         sb.append(level?.let { "$it %" } ?: "—"); temp(batTemp, 40, 45)
 
+        // Para medir consumo (por ejemplo 60 contra 120 Hz) desde el PC: una línea por segundo en el registro.
+        val ua = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        val mv = bat?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        if (ua != Int.MIN_VALUE && mv > 0) Log.d("G9Power", "w=%.3f hz=%s plugged=%b".format(kotlin.math.abs(ua.toDouble()) / 1e6 * mv / 1e3, hz(), plugged))
+
         // Completa: segunda línea con la energía, el tiempo, los Hz y el calor de la tablet.
         if (AutoRules.perfFull(svc)) {
             sb.append("\n")

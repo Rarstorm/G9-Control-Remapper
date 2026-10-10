@@ -218,6 +218,9 @@ fun NoticesPanel(s: AppState, a: MainActivity) {
                 if (on) { { AutoRules.preview(a, "mini") } } else null,
                 side = { PosGrid(guidePos) { guidePos = it; AutoRules.setGuidePos(a, it) } }) {
                 LockChips(mini) { mini = it; AutoRules.setMiniBlock(a, it > 0); AutoRules.setMiniBlockSticks(a, it > 1) }
+                // Por qué: en X-Input y DS5 el G9 no tiene canal de configuración (solo vuelve con Vista + Menú).
+                Hint(tr("¿Por qué volver? Solo en Android la app puede cambiar el modo sola en el próximo juego y ajustar luces, sticks o traseros. Si no lo necesitas, puedes quedarte en DS5.",
+                    "Why go back? Only in Android can the app switch the mode by itself for the next game and adjust lights, sticks or back buttons. If you don't need that, you can stay in DS5."))
             }
             NoticeBox(tr("Al cambiar de modo", "When switching mode"), tr("Etiqueta con el modo nuevo cuando la app lo cambia. No bloquea nada.", "Label with the new mode when the app switches it. Doesn't block anything."),
                 if (on && label) { { AutoRules.preview(a, "banner") } } else null,
