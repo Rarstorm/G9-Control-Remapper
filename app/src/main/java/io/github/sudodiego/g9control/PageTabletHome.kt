@@ -123,10 +123,13 @@ private fun ControllersPanel(s: AppState) {
 @Composable
 private fun ShortcutsHelp() {
     Panel(tr("Atajos en los juegos", "In-game shortcuts")) {
-        HelpRow(tr("Panel de juego", "Game panel"), tr("G9: mantener Legion · Cualquier control: L3 + R3", "G9: hold Legion · Any controller: L3 + R3"))
-        HelpRow(tr("Captura", "Screenshot"), tr("G9: Legion + RB, o M dos veces en DS5 · Cualquier control: mantener L3 + R3",
-            "G9: Legion + RB, or M twice in DS5 · Any controller: hold L3 + R3"))
-        HelpRow(tr("Atrás", "Back"), tr("G9: tocar Legion (mantener Atrás: Legion + LB)", "G9: tap Legion (hold Back: Legion + LB)"))
+        // El botón guía es el del centro de cualquier control (Legion en el G9, Xbox, PS, Home).
+        HelpRow(tr("Panel de juego", "Game panel"), tr("Mantener el botón guía, o tocar L3 + R3", "Hold the guide button, or tap L3 + R3"))
+        HelpRow(tr("Captura", "Screenshot"), tr("Botón guía + RB, o mantener L3 + R3 · En el G9 en DS5, también M dos veces",
+            "Guide button + RB, or hold L3 + R3 · On the G9 in DS5, also M twice"))
+        HelpRow(tr("Atrás", "Back"), tr("Tocar el botón guía · Mantener Atrás: guía + LB", "Tap the guide button · Hold Back: guide + LB"))
+        Text(tr("Botón guía: el del centro del control (Legion en el G9, Xbox, PS u Home).", "Guide button: the one in the middle of the controller (Legion on the G9, Xbox, PS or Home)."),
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -76,16 +76,22 @@ fun ControlsPage(s: AppState, a: MainActivity) {
     DrawingPane(drawing = { TestPanel(s) }, side = right)
 }
 
-/** Botón Legion (Home del control) en Android: lo hace G9 Control, no el control, así que siempre se puede cambiar. */
+/**
+ * Lo propio del G9 en los juegos: M dos veces (su clic de touchpad en DS5) saca la captura, y el botón Legion (que es
+ * el botón guía: se configura en Tablet → Juego, junto con los demás controles).
+ */
 @Composable
 private fun LegionPanel(s: AppState, a: MainActivity) {
-    var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
+    var shot by remember { mutableStateOf(AutoRules.touchpadShot(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
         Panel {
-            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: panel de juego. Con RB: captura (mantener RB: ráfaga). Con LB: mantener Atrás (salir del juego en Dolphin; con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) es el botón guía. Mantenerlo 5 s apaga el G9.",
-                    "Tap: Back. Hold: game panel. With RB: screenshot (hold RB: burst). With LB: hold Back (quits the game in Dolphin; with Shizuku). While streaming from a PC (Artemis, Moonlight…) it's the guide button. Holding it 5 s turns the G9 off.")) {
-                legion = it; AutoRules.setLegionKeys(a, it)
-            }
+            SwitchRow(
+                tr("M dos veces en DS5: captura", "M twice in DS5: screenshot"), shot,
+                tr("Es el clic del touchpad del G9. Solo el juego, sin el puntero; también transmitiendo (con Shizuku). Apágalo si un juego usa el clic del touchpad.",
+                    "It's the G9's touchpad click. Only the game, without the pointer; also while streaming (with Shizuku). Turn it off if a game uses the touchpad click.")
+            ) { shot = it; AutoRules.setTouchpadShot(a, it) }
+            Hint(tr("El botón Legion es el botón guía: se configura en Tablet → Juego. Mantenerlo 5 s apaga el G9.",
+                "The Legion button is the guide button: set it up in Tablet → In game. Holding it 5 s turns the G9 off."))
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
         }
     }

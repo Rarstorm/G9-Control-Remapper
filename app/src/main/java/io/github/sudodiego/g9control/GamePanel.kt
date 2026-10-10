@@ -470,7 +470,7 @@ class GamePanel(private val svc: AutoModeService) {
         val ready = Shell.state == Shell.State.READY
         val needs = tr("Necesita Shizuku", "Needs Shizuku")
         // El juego. La captura toma solo la ventana del juego: no hace falta esperar a que el panel desaparezca.
-        add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: Legion + RB", "Also: Legion + RB")) { hide(); screenshot() })
+        add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: guía + RB", "Also: guide + RB")) { hide(); screenshot() })
         if (ZuiGame.inGame(svc)) {
             // Oculto: abrirlo. Visible: solo ocultarlo (abrirlo ya está a mano con su pestaña).
             val gaVisible = gaShownByUs || ZuiGame.hiddenNow == false
@@ -540,7 +540,7 @@ class GamePanel(private val svc: AutoModeService) {
             })
         }
         // Abajo, Android: para no tener que tocar la pantalla (con la tablet en un dock, por ejemplo).
-        add(PanelItem(tr("Atrás", "Back"), Icons.AutoMirrored.Outlined.ArrowBack, PanelRow.SYSTEM, sub = tr("Largo: Legion + LB", "Long: Legion + LB")) {
+        add(PanelItem(tr("Atrás", "Back"), Icons.AutoMirrored.Outlined.ArrowBack, PanelRow.SYSTEM, sub = tr("Largo: guía + LB", "Long: guide + LB")) {
             afterHide { svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
         })
         add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, PanelRow.SYSTEM, sub = "Android") { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })

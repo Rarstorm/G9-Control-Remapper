@@ -207,11 +207,14 @@ fun NoticesPanel(s: AppState, a: MainActivity) {
     }
 }
 
-/** Panel de juego (L3 + R3): qué lo abre, la captura de M dos veces en DS5 y cómo se ve el aviso de captura. */
+/**
+ * Panel de juego: el botón guía (cualquier control: Legion en el G9, Xbox, PS, Home…) y L3 + R3, cómo se ve el aviso
+ * de captura y el monitor de rendimiento. Sirve con cualquier control; lo propio del G9 (M dos veces) está en su sección.
+ */
 @Composable
 private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
-    var shot by remember { mutableStateOf(AutoRules.touchpadShot(a)) }
+    var guide by remember { mutableStateOf(AutoRules.legionKeys(a)) }
     var shotPos by remember { mutableStateOf(AutoRules.shotPos(a)) }
     var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
@@ -219,15 +222,16 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var perfPos by remember { mutableStateOf(AutoRules.perfPos(a)) }
     var perfFull by remember { mutableStateOf(AutoRules.perfFull(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
-        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control. Se abre manteniendo el botón Legion (o con L3 + R3).",
-            "A menu to use in any app without letting go of the controller. Hold the Legion button to open it (or L3 + R3).")) {
-            SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Tocar: abre el panel. Mantener: captura directa.", "Tap: opens the panel. Hold: direct screenshot.")) {
+        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control, con cualquier control.",
+            "A menu to use in any app without letting go of the controller, with any controller.")) {
+            SwitchRow(tr("Botón guía", "Guide button"), guide,
+                tr("El del centro del control (Legion en el G9, Xbox, PS u Home). Tocar: Atrás. Mantener: panel de juego. Con RB: captura (mantener RB: ráfaga). Con LB: mantener Atrás (con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) pasa al PC.",
+                    "The one in the middle of the controller (Legion on the G9, Xbox, PS or Home). Tap: Back. Hold: game panel. With RB: screenshot (hold RB: burst). With LB: hold Back (with Shizuku). While streaming from a PC (Artemis, Moonlight…) it goes to the PC.")) {
+                guide = it; AutoRules.setLegionKeys(a, it)
+            }
+            SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Para controles sin botón guía. Tocar: abre el panel. Mantener: captura.", "For controllers without a guide button. Tap: opens the panel. Hold: screenshot.")) {
                 on = it; AutoRules.setGamePanel(a, it)
             }
-            SwitchRow(
-                tr("M dos veces en DS5: captura", "M twice in DS5: screenshot"), shot,
-                tr("Solo el juego, sin el puntero. Apágalo si un juego usa el clic del touchpad.", "Only the game, without the pointer. Turn it off if a game uses the touchpad click.")
-            ) { shot = it; AutoRules.setTouchpadShot(a, it) }
             NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura que entra desde el borde.", "Thumbnail that slides in from the edge."),
                 if (s.autoServiceOn) { { AutoRules.preview(a, "shot") } } else null,
                 side = { PosGrid(shotPos) { shotPos = it; AutoRules.setShotPos(a, it) } }) {
@@ -262,8 +266,8 @@ private fun PermissionsPanel(s: AppState, a: MainActivity) {
     Panel(tr("Permisos", "Permissions")) {
         PermRow(
             tr("Servicio de accesibilidad", "Accessibility service"), s.autoServiceOn,
-            tr("Cambio automático por juego, panel de juego, capturas, botón Legion, volumen invertido, bypass automático y el monitor.",
-                "Automatic switching per game, game panel, screenshots, Legion button, swapped volume, automatic bypass and the monitor.")
+            tr("Cambio automático por juego, panel de juego, capturas, botón guía, volumen invertido, bypass automático y el monitor.",
+                "Automatic switching per game, game panel, screenshots, guide button, swapped volume, automatic bypass and the monitor.")
         ) {
             Hint(tr("Busca «G9 Control» en la lista y actívalo. Si sale «Ajuste restringido»: Ajustes → Apps → G9 Control → ⋮ → Permitir ajustes restringidos.",
                 "Find “G9 Control” in the list and turn it on. If “Restricted setting” appears: Settings → Apps → G9 Control → ⋮ → Allow restricted settings."))

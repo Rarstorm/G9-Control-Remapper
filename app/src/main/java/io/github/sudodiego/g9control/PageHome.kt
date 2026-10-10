@@ -130,8 +130,8 @@ fun ServiceWarning(s: AppState, a: MainActivity) {
         AutoRules.smartBypass(a) || Monitor.all169(a) || Monitor.screen(a) != Monitor.Screen.NORMAL
     if (!on || s.autoServiceOn || !used) return
     WarningStrip(
-        tr("El servicio de accesibilidad está apagado: el panel de juego, el cambio automático, el botón Legion y lo automático de la tablet no funcionan.",
-            "The accessibility service is off: the game panel, automatic switching, the Legion button and the tablet's automatic features don't work."),
+        tr("El servicio de accesibilidad está apagado: el panel de juego, el cambio automático, el botón guía y lo automático de la tablet no funcionan.",
+            "The accessibility service is off: the game panel, automatic switching, the guide button and the tablet's automatic features don't work."),
         tr("Activar", "Turn on"), { AutoRules.openServiceSettings(a) },
         onDismiss = { on = false; AutoRules.setWarnService(a, false) }
     )
