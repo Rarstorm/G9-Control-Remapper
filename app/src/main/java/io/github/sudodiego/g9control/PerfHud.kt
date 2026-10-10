@@ -49,6 +49,9 @@ class PerfHud(private val svc: AutoModeService) {
         val v = TextView(svc).apply {
             textSize = 13f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            // Las dos líneas centradas una sobre la otra (si no, la corta quedaba cargada a un lado).
+            gravity = Gravity.CENTER_HORIZONTAL
+            setLineSpacing(3 * dp, 1f)
             setTextColor(android.graphics.Color.WHITE)
             setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
             background = GradientDrawable().apply { setColor(0xB0101418.toInt()); cornerRadius = 12 * dp }

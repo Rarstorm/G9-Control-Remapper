@@ -41,6 +41,9 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.DisplaySettings
+import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TabletAndroid
@@ -235,14 +238,40 @@ class GamePanel(private val svc: AutoModeService) {
             ?: toast(tr("Shizuku no está instalado.", "Shizuku isn't installed."))
     }
 
-    /** Del submenú de rendimiento al panel, con Rendimiento elegido. */
+    /** Del submenú (rendimiento, frecuencia) al panel, con su mosaico elegido. */
     private fun backToMain() {
         inPerfMenu = false
         ui.items = items()
-        ui.sel = ui.items.indexOfFirst { it.icon == Icons.Outlined.Speed }.takeIf { it >= 0 }
+        ui.sel = ui.items.indexOfFirst { it.icon == subFrom }.takeIf { it >= 0 }
             ?: ui.items.indexOfFirst { it.section != Section.SLIDER }.coerceAtLeast(0)
         header()
         poke()
+    }
+
+    /** El mosaico desde el que se abrió el submenú (para volver a él). */
+    private var subFrom: ImageVector = Icons.Outlined.Speed
+
+    /** Submenú de frecuencia de la pantalla para la app al frente: la del sistema o una fija (se recuerda por app). */
+    private fun showHzMenu() {
+        inPerfMenu = true
+        subFrom = Icons.Outlined.DisplaySettings
+        val app = svc.foregroundApp
+        val chosen = RefreshRate.forApp(svc, app)
+        ui.sub = true
+        ui.title = tr("Frecuencia de la pantalla", "Screen refresh rate")
+        ui.items = listOf(PanelItem(tr("Sistema", "System"), Icons.Outlined.Restore, sub = "${RefreshRate.systemPeak(svc)} Hz", active = chosen == null) { pickHz(null) }) +
+            RefreshRate.supported(svc).map { hz ->
+                PanelItem("$hz Hz", Icons.Outlined.DisplaySettings, sub = if (hz == chosen) tr("Este juego", "This game") else null, active = hz == chosen) { pickHz(hz) }
+            }
+        ui.sel = ui.items.indexOfFirst { it.active }.coerceAtLeast(0)
+        poke()
+    }
+
+    private fun pickHz(hz: Int?) {
+        val app = svc.foregroundApp ?: return backToMain()
+        RefreshRate.setForApp(svc, app, hz)
+        RefreshRate.applyFor(svc, app)
+        backToMain()
     }
 
     /** El panel muestra el submenú de rendimiento (no se reemplaza por la lista principal al confirmar algo). */
@@ -482,10 +511,16 @@ class GamePanel(private val svc: AutoModeService) {
             })
         // Monitor de rendimiento sobre el juego (FPS con Shizuku; lo demás siempre).
         val hud = AutoRules.perfHud(svc)
-        add(PanelItem(tr("Monitor", "Monitor"), Icons.Outlined.Speed, active = hud,
+        add(PanelItem(tr("Monitor", "Monitor"), Icons.Outlined.QueryStats, active = hud,
             sub = if (hud) tr("FPS, CPU, GPU", "FPS, CPU, GPU") else tr("Apagado", "Off")) {
             AutoRules.setPerfHud(svc, !hud); refresh()
         })
+        // Frecuencia de la pantalla para esta app (se recuerda por juego).
+        val hzNow = RefreshRate.current(svc)
+        val hzChosen = RefreshRate.forApp(svc, svc.foregroundApp)
+        if (RefreshRate.canWrite(svc))
+            add(PanelItem(tr("Frecuencia", "Refresh rate"), Icons.Outlined.DisplaySettings, active = hzChosen != null,
+                sub = (hzNow?.let { "$it Hz" } ?: "—") + if (hzChosen != null) tr(" · este juego", " · this game") else "") { showHzMenu() })
         if (Aspect.available(svc)) {
             val wide = Aspect.is169(svc)
             add(PanelItem(tr("Pantalla 16:9", "16:9 screen"), Icons.Outlined.AspectRatio,
@@ -699,6 +734,7 @@ class GamePanel(private val svc: AutoModeService) {
      */
     private fun showPerfMenu() {
         inPerfMenu = true
+        subFrom = Icons.Outlined.Speed
         fun build(current: ZuiGame.PerfMode?) = ZuiGame.PerfMode.entries.map { m ->
             val icon = when (m) {
                 ZuiGame.PerfMode.SAVER -> Icons.Outlined.EnergySavingsLeaf
@@ -955,7 +991,7 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
     val width = TILE_W * COLUMNS + GAP * (COLUMNS - 1)
     Surface(color = PANEL_BG, shape = RoundedCornerShape(28.dp), modifier = modifier) {
         Column(Modifier.padding(horizontal = CARD_PAD, vertical = 20.dp).width(width)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(ui.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     modifier = Modifier.weight(1f, fill = false))
                 // Modo del control, pequeño, como recordatorio.

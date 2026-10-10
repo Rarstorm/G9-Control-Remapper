@@ -557,6 +557,8 @@ class AutoModeService : AccessibilityService() {
         main.removeCallbacks(bypassCheck)
         main.postDelayed(bypassCheck, 3000)
         Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
+        // Frecuencia de la pantalla elegida para esta app (o la de siempre).
+        RefreshRate.applyFor(this, pkg)
         if (!AutoRules.enabled(this)) return
         // Shizuku (para iniciarlo desde el panel): ir y volver no es salir del juego; el aviso de volver a Android
         // queda para cuando se vaya de verdad a otra app.
