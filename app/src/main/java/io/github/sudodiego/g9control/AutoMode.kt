@@ -289,6 +289,7 @@ class AutoModeService : AccessibilityService() {
     private var lastBattery: Intent? = null
     /** El bypass automático lo activó (solo apaga lo que él activó). */
     private var smartOn = false
+    private var lastBypassRead = 0L
 
     /**
      * Bypass automático, por dos razones (basta una): el automático (enchufada, con batería ≥ mínimo y temperatura ≥
@@ -304,9 +305,15 @@ class AutoModeService : AccessibilityService() {
             return
         }
         if (ZuiBattery.manualOverride || Shell.state != Shell.State.READY) return
-        // Lo encendió el automático pero alguien lo apagó (a mano, en otra app): ya no está encendido por él. Si no,
-        // creería que sigue activo y no lo volvería a encender.
+        // Lo encendió el automático pero alguien lo apagó (a mano, en otra app, ZUI o Game Assistant): ya no está
+        // encendido por él. Si no, creería que sigue activo y no lo volvería a encender. Cada minuto se lee el estado
+        // real (los avisos de la batería llegan seguido; leerlo es un comando de Shizuku).
         if (smartOn && ZuiBattery.bypassNow == false) smartOn = false
+        val now = android.os.SystemClock.uptimeMillis()
+        if (smartOn && now - lastBypassRead > 60_000) {
+            lastBypassRead = now
+            scope.launch { if (ZuiBattery.readBypass() == false) { Log.d(TAG, "bypass apagado desde fuera: se revisa"); evaluateBypass() } }
+        }
         val plugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
         val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 0) * 100 /
             i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
@@ -427,6 +434,21 @@ class AutoModeService : AccessibilityService() {
         override fun onChange(selfChange: Boolean) { main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 1500) }
     }
 
+    /**
+     * Al arrancar el servicio (al actualizar la app, por ejemplo) no llega ningún "cambio de app" hasta cambiar de
+     * verdad: la app al frente se lee de la lista de ventanas (para el panel, las capturas en un launcher, etc.).
+     */
+    private fun initForeground() {
+        if (lastPackage != null) return
+        val apps = runCatching { windows }.getOrDefault(emptyList()).filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        val w = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: return
+        val pkg = runCatching { w.root?.packageName?.toString() }.getOrNull() ?: return
+        if (isTransient(pkg)) return
+        lastPackage = pkg
+        appWindowId = w.id
+        Log.d(TAG, "app al frente al arrancar: $pkg")
+    }
+
     private var unlockTries = 0
     /** Revisa cada 300 ms (hasta 2 min) si ya se quitó la pantalla de bloqueo. */
     private val waitUnlock: Runnable = object : Runnable {
@@ -476,6 +498,7 @@ class AutoModeService : AccessibilityService() {
         getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(displayListener, main)
         contentResolver.registerContentObserver(Settings.System.getUriFor(Monitor.MODE_KEY), false, monitorModeObserver)
         main.postDelayed(monitorCheck, 2000)   // por si el monitor ya estaba conectado
+        main.postDelayed(::initForeground, 1000)
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)

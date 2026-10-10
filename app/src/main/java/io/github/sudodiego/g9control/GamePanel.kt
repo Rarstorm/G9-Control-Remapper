@@ -34,6 +34,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.AspectRatio
@@ -108,13 +109,20 @@ private class PanelItem(
 /** Columnas de mosaicos. */
 private const val COLUMNS = 4
 
-/** Las filas del panel (índices de [items]): las barras juntas y los mosaicos de cada sección de a [COLUMNS]. */
+/**
+ * Las filas del panel (índices de [items]): las barras juntas y los mosaicos de cada sección repartidos parejo, de a
+ * [COLUMNS] como mucho (6 quedan en 3 + 3, no en 4 + 2). Cada fila llena el ancho: sin huecos.
+ */
 private fun panelRows(items: List<PanelItem>): List<List<Int>> {
     val by = items.indices.groupBy { items[it].section }
+    fun even(list: List<Int>): List<List<Int>> {
+        val rows = (list.size + COLUMNS - 1) / COLUMNS
+        return list.chunked((list.size + rows - 1) / rows)
+    }
     return buildList {
         by[Section.SLIDER]?.let { add(it) }
-        by[Section.GAME]?.chunked(COLUMNS)?.let { addAll(it) }
-        by[Section.SYSTEM]?.chunked(COLUMNS)?.let { addAll(it) }
+        by[Section.GAME]?.let { addAll(even(it)) }
+        by[Section.SYSTEM]?.let { addAll(even(it)) }
     }
 }
 
@@ -124,9 +132,13 @@ private class PanelUi {
     var sel by mutableIntStateOf(0)
     /** Ajustando el ítem elegido (brillo, volumen). */
     var editing by mutableStateOf(false)
-    /** La app al frente y la batería y hora, para el encabezado. */
+    /** Encabezado: la app al frente (o el submenú), la batería (−1 = no mostrar) y el estado y la hora. */
     var title by mutableStateOf("")
+    var battery by mutableIntStateOf(-1)
+    var charging by mutableStateOf(false)
     var status by mutableStateOf("")
+    /** En un submenú (rendimiento): encabezado sin batería ni hora, y B vuelve. */
+    var sub by mutableStateOf(false)
 }
 
 /**
@@ -154,8 +166,7 @@ class GamePanel(private val svc: AutoModeService) {
         ui.items = items()
         // Empieza en el primer mosaico (Captura), no en las barras.
         ui.sel = ui.items.indexOfFirst { it.section != Section.SLIDER }.coerceAtLeast(0)
-        ui.title = appLabel(svc.foregroundApp)
-        ui.status = statusLine()
+        header()
         if (view == null) create()
         svc.setPanelSticks(true)
         poke()
@@ -192,17 +203,32 @@ class GamePanel(private val svc: AutoModeService) {
         runCatching { svc.packageManager.getApplicationLabel(svc.packageManager.getApplicationInfo(it, 0)).toString() }.getOrNull()
     } ?: "G9 Control"
 
-    /** Batería y hora: "80 % · Cargando · 10:42". */
-    private fun statusLine(): String {
+    /** Encabezado del panel: la app al frente, la batería (ícono con su nivel), "Bypass" o "Cargando" y la hora. */
+    private fun header() {
+        ui.sub = false
+        ui.title = appLabel(svc.foregroundApp)
         val i = svc.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) }
+        ui.battery = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: -1
+        val charging = i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, 0) == android.os.BatteryManager.BATTERY_STATUS_CHARGING
+        val bypass = ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc)
+        ui.charging = charging || bypass
         val state = when {
-            ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc) -> "Bypass"
-            i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, 0) == android.os.BatteryManager.BATTERY_STATUS_CHARGING -> tr("Cargando", "Charging")
+            bypass -> "Bypass"
+            charging -> tr("Cargando", "Charging")
             else -> null
         }
         val time = android.text.format.DateFormat.getTimeFormat(svc).format(Date())
-        return listOfNotNull(level?.takeIf { it >= 0 }?.let { "$it %" }, state, time).joinToString(" · ")
+        ui.status = listOfNotNull(ui.battery.takeIf { it >= 0 }?.let { "$it %" }, state, time).joinToString(" · ")
+    }
+
+    /** Del submenú de rendimiento al panel, con Rendimiento elegido. */
+    private fun backToMain() {
+        inPerfMenu = false
+        ui.items = items()
+        ui.sel = ui.items.indexOfFirst { it.icon == Icons.Outlined.Speed }.takeIf { it >= 0 }
+            ?: ui.items.indexOfFirst { it.section != Section.SLIDER }.coerceAtLeast(0)
+        header()
+        poke()
     }
 
     /** El panel muestra el submenú de rendimiento (no se reemplaza por la lista principal al confirmar algo). */
@@ -270,7 +296,9 @@ class GamePanel(private val svc: AutoModeService) {
                 if (item?.adjust != null) ui.editing = true else item?.run?.invoke()
             }
             // B o tocar el botón Legion lo cierran (mantenerlo es lo que lo abre).
-            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_MODE -> if (e.repeatCount == 0) hide()
+            // En un submenú B vuelve al panel.
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> if (e.repeatCount == 0) { if (inPerfMenu) backToMain() else hide() }
+            KeyEvent.KEYCODE_BUTTON_MODE -> if (e.repeatCount == 0) hide()
         }
         return true
     }
@@ -320,8 +348,8 @@ class GamePanel(private val svc: AutoModeService) {
     }
 
     /**
-     * Mover en la grilla, sin dar la vuelta. Entre la fila de barras (2 de ancho) y la de mosaicos (4) se mantiene
-     * el lado: la barra izquierda queda sobre las dos primeras columnas.
+     * Mover en la grilla, sin dar la vuelta. Entre filas de distinto largo se mantiene el lado (cada fila llena el
+     * ancho): de la barra de brillo se baja a los mosaicos de la izquierda.
      */
     private fun moveGrid(dx: Int, dy: Int) {
         val rows = panelRows(ui.items)
@@ -330,10 +358,9 @@ class GamePanel(private val svc: AutoModeService) {
         if (dy != 0) {
             val nr = (r + dy).coerceIn(0, rows.size - 1)
             if (nr == r) return
-            // Posición horizontal de 0 a 1 para pasar entre filas de distinto ancho.
-            val x = (c + 0.5f) / rows[r].size.coerceAtLeast(if (ui.items[rows[r][0]].section == Section.SLIDER) 1 else COLUMNS)
-            val n = if (ui.items[rows[nr][0]].section == Section.SLIDER) rows[nr].size else COLUMNS
-            ui.sel = rows[nr][(x * n).toInt().coerceIn(0, rows[nr].size - 1)]
+            // Posición horizontal de 0 a 1 para pasar entre filas de distinto largo.
+            val x = (c + 0.5f) / rows[r].size
+            ui.sel = rows[nr][(x * rows[nr].size).toInt().coerceIn(0, rows[nr].size - 1)]
         } else if (dx != 0) {
             ui.sel = rows[r][(c + dx).coerceIn(0, rows[r].size - 1)]
         }
@@ -368,32 +395,35 @@ class GamePanel(private val svc: AutoModeService) {
     /** Acciones según lo que hay ahora: el panel de ZUI solo en modo juego, los modos según el actual. */
     private fun items(): List<PanelItem> = buildList {
         // Arriba, brillo y volumen como barras (se arrastran con el dedo o se ajustan con A y ← →).
+        // Cada barra con su botón al lado (brillo automático, silencio), que también se toca con el dedo.
         if (SystemLevels.canBrightness(svc)) {
             val auto = SystemLevels.autoBrightness(svc)
             val b = SystemLevels.brightness(svc)
             add(PanelItem(
-                tr("Brillo", "Brightness"), if (auto) Icons.Outlined.BrightnessAuto else Icons.Outlined.BrightnessMedium,
-                Section.SLIDER, sub = if (auto) tr("Auto", "Auto") else "$b %",
-                adjust = { SystemLevels.stepBrightness(svc, it) }, level = b / 100f,
-                alt = { SystemLevels.setAutoBrightness(svc, !SystemLevels.autoBrightness(svc)) },
-                set = { SystemLevels.setBrightness(svc, it) },
-                hint = tr("← → ajustar · Y automático · A listo", "← → adjust · Y auto · A done")
+                tr("Brillo", "Brightness"), Icons.Outlined.BrightnessMedium, Section.SLIDER, sub = if (auto) tr("Auto · $b %", "Auto · $b %") else "$b %",
+                adjust = { SystemLevels.stepBrightness(svc, it) }, level = b / 100f, set = { SystemLevels.setBrightness(svc, it) },
+                hint = tr("← → ajustar · A o B listo", "← → adjust · A or B done")
             ))
+            add(PanelItem(tr("Brillo automático", "Auto brightness"), Icons.Outlined.BrightnessAuto, Section.SLIDER, active = auto) {
+                SystemLevels.setAutoBrightness(svc, !auto); refresh()
+            })
         }
         val vol = SystemLevels.volume(svc)
         add(PanelItem(
-            tr("Volumen", "Volume"), if (vol == 0) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
-            Section.SLIDER, sub = if (vol == 0) tr("Silencio", "Muted") else "$vol %",
-            adjust = { SystemLevels.stepVolume(svc, it) }, level = vol / 100f,
-            alt = { SystemLevels.toggleMute(svc) }, set = { SystemLevels.setVolume(svc, it) },
-            hint = tr("← → ajustar · Y silenciar · A listo", "← → adjust · Y mute · A done")
+            tr("Volumen", "Volume"), Icons.AutoMirrored.Outlined.VolumeUp, Section.SLIDER, sub = if (vol == 0) tr("Silencio", "Muted") else "$vol %",
+            adjust = { SystemLevels.stepVolume(svc, it) }, level = vol / 100f, set = { SystemLevels.setVolume(svc, it) },
+            hint = tr("← → ajustar · A o B listo", "← → adjust · A or B done")
         ))
+        add(PanelItem(tr("Silenciar", "Mute"), Icons.AutoMirrored.Outlined.VolumeOff, Section.SLIDER, active = vol == 0) {
+            SystemLevels.toggleMute(svc); refresh()
+        })
         // El juego. La captura toma solo la ventana del juego: no hace falta esperar a que el panel desaparezca.
-        add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = "Legion + RB") { hide(); screenshot() })
+        add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: Legion + RB", "Also: Legion + RB")) { hide(); screenshot() })
         if (ZuiGame.inGame(svc)) {
-            add(PanelItem("Game Assistant", Icons.Outlined.Tune, sub = tr("Abrir", "Open")) { afterHide { openGameAssistant() } })
-            // Se ve ahora: ocultarlo ya (y que quede oculto), sin esperar a cambiar de app.
-            if (gaShownByUs || ZuiGame.hiddenNow == false)
+            // Oculto: abrirlo. Visible: solo ocultarlo (abrirlo ya está a mano con su pestaña).
+            val gaVisible = gaShownByUs || ZuiGame.hiddenNow == false
+            if (!gaVisible) add(PanelItem("Game Assistant", Icons.Outlined.Tune, sub = tr("Abrir", "Open")) { afterHide { openGameAssistant() } })
+            else
                 add(PanelItem(tr("Ocultar", "Hide"), Icons.Outlined.VisibilityOff, sub = "Game Assistant") {
                     hide()
                     gaShownByUs = false
@@ -410,7 +440,12 @@ class GamePanel(private val svc: AutoModeService) {
         // Bypass (con Shizuku): con la tablet enchufada, o si ya está activo para poder quitarlo.
         val bypassOn = ZuiBattery.bypassNow == true
         if (Shell.state == Shell.State.READY && (bypassOn || ZuiBattery.plugged(svc)))
-            add(PanelItem("Bypass", Icons.Outlined.Power, sub = if (bypassOn) tr("Activado", "On") else tr("Apagado", "Off"), active = bypassOn) {
+            add(PanelItem("Bypass", Icons.Outlined.Power, active = bypassOn, sub = when {
+                // Quién lo encendió: el automático (o el límite de carga) o el usuario.
+                bypassOn && ZuiBattery.byAuto -> tr("Automático", "Automatic")
+                bypassOn -> tr("Manual", "Manual")
+                else -> tr("Apagado", "Off")
+            }) {
                 hide()
                 val want = !bypassOn
                 scope.launch {
@@ -436,6 +471,9 @@ class GamePanel(private val svc: AutoModeService) {
             })
         }
         // Abajo, Android: para no tener que tocar la pantalla (con la tablet en un dock, por ejemplo).
+        add(PanelItem(tr("Atrás", "Back"), Icons.AutoMirrored.Outlined.ArrowBack, Section.SYSTEM, sub = tr("Largo: Legion + LB", "Long: Legion + LB")) {
+            afterHide { svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
+        })
         add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, Section.SYSTEM, sub = "Android") { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })
         add(PanelItem(tr("Recientes", "Recents"), Icons.Outlined.Layers, Section.SYSTEM, sub = tr("Apps abiertas", "Open apps")) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) })
         add(PanelItem(tr("Ajustes rápidos", "Quick settings"), Icons.Outlined.ToggleOn, Section.SYSTEM, sub = "Android") {
@@ -635,10 +673,12 @@ class GamePanel(private val svc: AutoModeService) {
                 ZuiGame.PerfMode.BALANCED -> Icons.Outlined.Balance
                 ZuiGame.PerfMode.BEAST -> Icons.Outlined.Bolt
             }
-            PanelItem(if (m == current) "${m.label} ✓" else m.label, icon) { setPerf(m) }
+            PanelItem(m.label, icon, sub = if (m == current) tr("Actual", "Current") else null, active = m == current) { setPerf(m) }
         }
         val app = svc.foregroundApp
         val known = ZuiGame.knownPerf(app)
+        ui.sub = true
+        ui.title = tr("Rendimiento", "Performance")
         ui.items = build(known)
         ui.sel = known?.let { ZuiGame.PerfMode.entries.indexOf(it) } ?: 1
         poke()
@@ -828,7 +868,11 @@ class GamePanel(private val svc: AutoModeService) {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.CENTER }
+        ).apply {
+            gravity = Gravity.CENTER
+            // Aparece y se va desvaneciéndose (sin esto, Android lo desliza).
+            windowAnimations = android.R.style.Animation_Toast
+        }
         cv.setOnTouchListener { _, ev -> if (ev.action == MotionEvent.ACTION_OUTSIDE) { hide(); true } else false }
         runCatching { wm.addView(cv, lp) }.onSuccess { view = cv; owner = o; params = lp }.onFailure { o.destroy() }
     }
@@ -871,7 +915,11 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(ui.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     modifier = Modifier.weight(1f))
-                Text(ui.status, color = PANEL_MUTED, fontSize = 14.sp, maxLines = 1)
+                // En un submenú solo el título: lo demás ya se vio en el panel.
+                if (!ui.sub) {
+                    if (ui.battery >= 0) { BatteryGlyph(ui.battery, ui.charging); Spacer(Modifier.width(8.dp)) }
+                    Text(ui.status, color = PANEL_MUTED, fontSize = 14.sp, maxLines = 1)
+                }
             }
             Spacer(Modifier.height(16.dp))
             val rows = panelRows(ui.items)
@@ -879,33 +927,79 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
                 val section = ui.items[row[0]].section
                 // Un poco más de aire entre secciones (barras, juego, Android) que entre filas.
                 if (r > 0) Spacer(Modifier.height(if (ui.items[rows[r - 1][0]].section != section) 16.dp else GAP))
-                Row(horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                // Cada fila llena el ancho: los mosaicos se reparten el espacio (sin huecos al final).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                     row.forEach { i ->
                         val item = ui.items[i]
-                        if (section == Section.SLIDER)
-                            PanelSlider(item, i == ui.sel, ui.editing && i == ui.sel, Modifier.weight(1f)) { onSet(i, it) }
-                        else PanelTile(item, i == ui.sel) { onPick(i) }
+                        when {
+                            section != Section.SLIDER -> PanelTile(item, i == ui.sel, Modifier.weight(1f)) { onPick(i) }
+                            item.level != null -> PanelSlider(item, i == ui.sel, ui.editing && i == ui.sel, Modifier.weight(1f)) { onSet(i, it) }
+                            else -> PanelToggle(item, i == ui.sel) { onPick(i) }
+                        }
                     }
                 }
             }
             Spacer(Modifier.height(14.dp))
             Text(
                 ui.items.getOrNull(ui.sel)?.takeIf { ui.editing }?.hint
-                    ?: tr("Stick, cruceta o LB / RB mover · A elegir · B cerrar", "Stick, D-pad or LB / RB move · A select · B close"),
+                    ?: if (ui.sub) tr("A elegir · B volver", "A select · B back")
+                    else tr("Stick, cruceta o LB / RB mover · A elegir · B cerrar", "Stick, D-pad or LB / RB move · A select · B close"),
                 color = PANEL_MUTED, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
     }
 }
 
-/** Mosaico: ícono, nombre y estado; encendido = en color de acento. */
+/** Ícono de batería como el de la barra de Android: se llena con el nivel; con un rayo si carga o está en bypass. */
 @Composable
-private fun PanelTile(item: PanelItem, selected: Boolean, onClick: () -> Unit) {
+private fun BatteryGlyph(level: Int, charging: Boolean) {
+    val low = level <= 15 && !charging
+    androidx.compose.foundation.Canvas(Modifier.size(width = 26.dp, height = 13.dp)) {
+        val stroke = 1.5.dp.toPx()
+        val nub = 2.5.dp.toPx()
+        val body = androidx.compose.ui.geometry.Size(size.width - nub, size.height)
+        val r = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+        drawRoundRect(PANEL_MUTED, size = body, cornerRadius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawRoundRect(PANEL_MUTED, topLeft = androidx.compose.ui.geometry.Offset(body.width, size.height * 0.3f),
+            size = androidx.compose.ui.geometry.Size(nub, size.height * 0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()))
+        val pad = stroke + 1.dp.toPx()
+        val inner = androidx.compose.ui.geometry.Size((body.width - 2 * pad) * level.coerceIn(0, 100) / 100f, body.height - 2 * pad)
+        drawRoundRect(if (low) Color(0xFFFF6B6B) else if (charging) TILE_ON else Color.White,
+            topLeft = androidx.compose.ui.geometry.Offset(pad, pad), size = inner, cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx()))
+        if (charging) {
+            // Rayo al centro, con borde oscuro para que se vea sobre el relleno.
+            val cx = body.width / 2; val h = body.height
+            val bolt = androidx.compose.ui.graphics.Path().apply {
+                moveTo(cx + h * 0.10f, h * 0.12f); lineTo(cx - h * 0.22f, h * 0.56f); lineTo(cx - h * 0.02f, h * 0.56f)
+                lineTo(cx - h * 0.10f, h * 0.88f); lineTo(cx + h * 0.22f, h * 0.44f); lineTo(cx + h * 0.02f, h * 0.44f); close()
+            }
+            drawPath(bolt, PANEL_BG, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            drawPath(bolt, Color.White)
+        }
+    }
+}
+
+/** Botón pequeño al lado de una barra (brillo automático, silencio): encendido = en color de acento. */
+@Composable
+private fun PanelToggle(item: PanelItem, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(26.dp)
+    Box(
+        Modifier.size(52.dp).clip(shape).background(if (item.active) TILE_ON else TILE)
+            .then(if (selected) Modifier.border(2.5.dp, SELECTED, shape) else Modifier).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(item.icon, item.label, Modifier.size(22.dp), tint = if (item.active) ON_TILE_ON else Color.White)
+    }
+}
+
+/** Mosaico: ícono, nombre y estado; encendido = en color de acento. Toma el ancho que le da su fila. */
+@Composable
+private fun PanelTile(item: PanelItem, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val fg = if (item.active) ON_TILE_ON else Color.White
     Surface(
         color = if (item.active) TILE_ON else TILE, shape = RoundedCornerShape(22.dp),
         border = if (selected) BorderStroke(2.5.dp, SELECTED) else null,
-        modifier = Modifier.size(TILE_W, TILE_H).clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick)
+        modifier = modifier.height(TILE_H).clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick)
     ) {
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(item.icon, null, Modifier.size(24.dp), tint = fg)

@@ -28,9 +28,13 @@ object ZuiBattery {
     @Volatile var manualOverride = false
 
     /** Activa o desactiva el bypass. True si el servicio lo aceptó. [manual]: lo pidió el usuario (no el automático). */
+    /** El bypass encendido lo puso el automático (o el límite propio), no el usuario: para mostrarlo en el panel. */
+    @Volatile var byAuto = false
+        private set
+
     suspend fun setBypass(on: Boolean, manual: Boolean = true): Boolean {
         val ok = Shell.run(if (on) Shell.BYPASS_ON else Shell.BYPASS_OFF)?.let { parse(it) } == true
-        if (ok) { bypassNow = on; if (manual) manualOverride = true }
+        if (ok) { bypassNow = on; byAuto = on && !manual; if (manual) manualOverride = true }
         Log.d(AutoModeService.TAG, "bypass ${if (on) "activado" else "desactivado"}: $ok")
         return ok
     }
