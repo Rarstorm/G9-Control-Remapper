@@ -55,18 +55,27 @@ class PerfHud(private val svc: AutoModeService) {
             text = "…"
         }
         val pos = AutoRules.perfPos(svc)
+        // La ventana ocupa todo el ancho (transparente, no recibe toques) y la barra va adentro a un lado: así la
+        // ventana no cambia de tamaño cuando cambia el texto (ZUI animaba ese cambio como un deslizamiento).
+        val frame = android.widget.FrameLayout(svc).apply {
+            addView(v, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                when (pos.h) { -1 -> Gravity.START; 1 -> Gravity.END; else -> Gravity.CENTER_HORIZONTAL }
+            ).apply { marginStart = (12 * dp).toInt(); marginEnd = (12 * dp).toInt() })
+        }
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = when (pos.h) { -1 -> Gravity.START; 1 -> Gravity.END; else -> Gravity.CENTER_HORIZONTAL } or
-                when (pos.v) { -1 -> Gravity.TOP; 1 -> Gravity.BOTTOM; else -> Gravity.CENTER_VERTICAL }
-            x = (12 * dp).toInt(); y = (12 * dp).toInt()
+            gravity = when (pos.v) { -1 -> Gravity.TOP; 1 -> Gravity.BOTTOM; else -> Gravity.CENTER_VERTICAL }
+            y = (12 * dp).toInt()
+            windowAnimations = android.R.style.Animation_Toast   // aparece y se va desvaneciéndose
         }
-        if (runCatching { wm.addView(v, lp) }.onFailure { Log.w(AutoModeService.TAG, "monitor de rendimiento", it) }.isFailure) return
+        if (runCatching { wm.addView(frame, lp) }.onFailure { Log.w(AutoModeService.TAG, "monitor de rendimiento", it) }.isFailure) return
+        root = frame
         view = v
         task = worker.scheduleWithFixedDelay({ runCatching { sample() }.onFailure { Log.w(AutoModeService.TAG, "monitor: lectura", it) } },
             0, 1, TimeUnit.SECONDS)
@@ -75,9 +84,13 @@ class PerfHud(private val svc: AutoModeService) {
     fun hide() {
         task?.cancel(false)
         task = null
-        view?.let { runCatching { wm.removeView(it) } }
+        root?.let { runCatching { wm.removeView(it) } }
+        root = null
         view = null
     }
+
+    /** La ventana (todo el ancho) que contiene la barra. */
+    private var root: android.view.View? = null
 
     fun release() { hide(); worker.shutdownNow() }
 
@@ -132,7 +145,10 @@ class PerfHud(private val svc: AutoModeService) {
     private var layer: String? = null
     private var layerAt = 0L
 
-    /** Cuadros presentados en el último segundo por la capa de la app al frente; null sin Shizuku. */
+    /**
+     * Cuadros presentados en el último segundo por la capa de la app al frente; null sin Shizuku. (Los FPS de la
+     * pantalla del driver, `/sys/class/drm/sde-crtc-0/measured_fps`, SELinux no se los deja leer a las apps.)
+     */
     private fun fps(): Int? {
         if (Shell.state != Shell.State.READY) return null
         val app = svc.foregroundApp ?: return null
