@@ -213,7 +213,7 @@ class GamePanel(private val svc: AutoModeService) {
     /** Nombre de la app al frente, para el encabezado. */
     private fun appLabel(pkg: String?): String = pkg?.let {
         runCatching { svc.packageManager.getApplicationLabel(svc.packageManager.getApplicationInfo(it, 0)).toString() }.getOrNull()
-    } ?: "G9 Control"
+    } ?: "TBF Companion"
 
     /** Encabezado del panel: la app al frente, la batería (ícono con su nivel), "Bypass" o "Cargando" y la hora. */
     private fun header() {
@@ -556,7 +556,7 @@ class GamePanel(private val svc: AutoModeService) {
         if (mode != null) PadMode.entries.filter { it != mode }.forEach { m ->
             add(PanelItem(m.label, Icons.Outlined.SportsEsports, PanelRow.SYSTEM, sub = tr("Modo del control", "Controller mode")) { hide(); svc.manualSwitch(m) })
         }
-        add(PanelItem("G9 Control", Icons.Outlined.OpenInNew, PanelRow.SYSTEM, sub = tr("Abrir la app", "Open the app")) {
+        add(PanelItem("TBF Companion", Icons.Outlined.OpenInNew, PanelRow.SYSTEM, sub = tr("Abrir la app", "Open the app")) {
             hide()
             svc.startActivity(Intent(svc, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         })

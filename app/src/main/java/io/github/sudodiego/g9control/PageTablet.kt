@@ -310,7 +310,7 @@ fun GameAssistantSettings(s: AppState, a: MainActivity) {
             CompositionLocalProvider(LocalEditable provides ready) {
                 SwitchRow(
                     tr("Ocultar Game Assistant", "Hide Game Assistant"), gaHidden == true,
-                    tr("Sin pestaña ni panel. G9 Control lo muestra solo mientras lo usa.", "No side tab or panel. G9 Control shows it only while using it.")
+                    tr("Sin pestaña ni panel. TBF Companion lo muestra solo mientras lo usa.", "No side tab or panel. TBF Companion shows it only while using it.")
                 ) { want ->
                     if (ready) gaScope.launch { if (ZuiGame.setHidden(want)) { AutoRules.setGaHidden(a, want); gaHidden = want } }
                 }

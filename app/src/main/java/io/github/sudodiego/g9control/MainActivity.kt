@@ -835,7 +835,7 @@ class MainActivity : ComponentActivity() {
             saveProfiles(state.profiles.filter { it.name !in names } + got.map { it.copy(id = id++) })
             got.size
         }.onSuccess { state.status = if (it == 1) tr("Se importó 1 perfil.", "Imported 1 profile.") else tr("Se importaron $it perfiles.", "Imported $it profiles.") }
-            .onFailure { state.fail(tr("Error: el archivo no es un respaldo de G9 Control.", "Error: the file isn't a G9 Control backup.")) }
+            .onFailure { state.fail(tr("Error: el archivo no es un respaldo de TBF Companion.", "Error: the file isn't a TBF Companion backup.")) }
     }
 
     fun exportProfiles() = exportLauncher.launch(tr("G9Control-perfiles", "G9Control-profiles") + "-${java.time.LocalDate.now()}.json")
