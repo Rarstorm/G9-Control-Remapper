@@ -228,7 +228,7 @@ class GamePanel(private val svc: AutoModeService) {
     /** Guarda las capturas fuera del hilo principal: codificar un PNG de 2560 × 1600 tarda unos cientos de ms. */
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val flash = ShotFlash(svc)
-    private val sounds = ShotSounds()
+    private val sounds = ShotSounds(svc)
 
     /**
      * Captura solo la ventana del juego (Android 14+): sin el puntero del mouse ni superposiciones (Game
@@ -878,19 +878,37 @@ private class ShotFlash(private val svc: AccessibilityService) {
  * corto de dos notas. Los dos van por el volumen multimedia, el mismo del juego (el obturador del sistema,
  * `MediaActionSound`, usa el volumen del sistema y en esta tablet no se oye).
  */
-private class ShotSounds {
+private class ShotSounds(ctx: android.content.Context) {
     private val tracks = mutableMapOf<ShotSound, android.media.AudioTrack>()
+    private val audio = ctx.getSystemService(android.media.AudioManager::class.java)
+    private val main = Handler(Looper.getMainLooper())
+    private val attrs = android.media.AudioAttributes.Builder()
+        .setUsage(android.media.AudioAttributes.USAGE_GAME)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+
+    /**
+     * Foco de audio pasajero que deja bajar a los demás: Android baja el volumen del juego mientras suena (si no,
+     * los dos sonidos se mezclaban y no se distinguía) y lo devuelve al soltarlo, como con una notificación.
+     */
+    private val focus = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        .setAudioAttributes(attrs).setWillPauseWhenDucked(false).build()
+    private val unfocus = Runnable { audio.abandonAudioFocusRequest(focus) }
 
     fun play(s: ShotSound) {
         if (s == ShotSound.NONE) return
         runCatching {
-            tracks.getOrPut(s) { track(if (s == ShotSound.SHUTTER) shutter() else jingle()) }.run {
-                stop(); reloadStaticData(); play()
-            }
+            val t = tracks.getOrPut(s) { track(if (s == ShotSound.SHUTTER) shutter() else jingle()) }
+            main.removeCallbacks(unfocus)
+            audio.requestAudioFocus(focus)
+            t.stop(); t.reloadStaticData(); t.play()
+            // El sonido dura lo que sus muestras; un poco más para que el juego no vuelva de golpe.
+            main.postDelayed(unfocus, (t.bufferSizeInFrames * 1000L / RATE) + 250)
         }.onFailure { Log.w(AutoModeService.TAG, "no se pudo reproducir el sonido de captura", it) }
     }
 
     fun release() {
+        main.removeCallbacks(unfocus)
+        audio.abandonAudioFocusRequest(focus)
         tracks.values.forEach { it.release() }
         tracks.clear()
     }
@@ -926,9 +944,7 @@ private class ShotSounds {
     private fun track(samples: DoubleArray): android.media.AudioTrack {
         val pcm = ShortArray(samples.size) { (samples[it].coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort() }
         return android.media.AudioTrack.Builder()
-            .setAudioAttributes(android.media.AudioAttributes.Builder()
-                .setUsage(android.media.AudioAttributes.USAGE_GAME)
-                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            .setAudioAttributes(attrs)
             .setAudioFormat(android.media.AudioFormat.Builder()
                 .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
                 .setSampleRate(RATE).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())

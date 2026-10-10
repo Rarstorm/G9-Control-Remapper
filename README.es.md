@@ -33,8 +33,11 @@ Además hace cosas que la oficial no puede:
 | **Traseros** | L4, R4, L5 y R5 copian cualquier botón (incluidos Home y las direcciones de los sticks) o una macro. |
 | **Perfiles** | Guardar, aplicar y respaldar configuraciones completas. |
 | **Juegos** | Eliges en qué modo se abre cada app; el control cambia al abrirla. |
-| **Panel de juego** | L3 + R3 en cualquier juego: captura solo del juego (sin el puntero ni superposiciones) con un aviso con miniatura, Game Assistant y cambio de modo. |
+| **Panel de juego** | L3 + R3 en cualquier juego: captura solo del juego (sin el puntero ni superposiciones) con un aviso con miniatura, Game Assistant, modo de rendimiento, pantalla 16:9 y cambio de modo del control. |
+| **Rendimiento** | Ahorro, Equilibrado o Bestia (los de Game Assistant) desde el control, sin tocar la pantalla. Necesita Shizuku. |
+| **Pantalla 16:9** | Para un monitor externo: la imagen lo llena sin bordes. |
 | **Botón Legion** | Tocar: Atrás. Mantener: ajustes rápidos. |
+| **Volumen invertido** | Opcional: el botón de abajo de la tablet sube el volumen y el de arriba lo baja. |
 | **Ajustes rápidos** | Íconos Android, X-Input y DS5. |
 | **Idiomas** | Español e inglés. |
 
@@ -55,22 +58,32 @@ Además hace cosas que la oficial no puede:
 
 ### Sobre el servicio de accesibilidad
 
-El cambio automático por juego, la guía de Vista + Menú, los íconos de ajustes rápidos (desde X-Input/DS5), el panel de juego (L3 + R3) y el botón Legion usan un servicio de accesibilidad. Esto es lo que hace con él:
+El cambio automático por juego, la guía de Vista + Menú, los íconos de ajustes rápidos (desde X-Input/DS5), el panel de juego (L3 + R3), el botón Legion y el volumen invertido usan un servicio de accesibilidad. Esto es lo que hace con él:
 
 - **Ve qué app está en pantalla** (cambios de ventana), para cambiar el modo según el juego.
-- **Ve los botones del control**, para seguir Vista + Menú en la guía, manejar el panel de juego y el botón Legion y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla.
-- **Saca capturas cuando se lo pides** (desde el panel, con L3 + R3 mantenidos o con M dos veces en DS5): solo de la ventana del juego, guardadas en la tablet (Imágenes/Screenshots).
-- **Hace un solo gesto:** el deslizamiento que abre el Game Assistant de la tablet (Lenovo ZUI) desde su pestaña lateral.
+- **Ve los botones del control**, para seguir Vista + Menú en la guía, manejar el panel de juego y el botón Legion y, solo si lo eliges, bloquear los botones mientras hay un aviso en pantalla. Si inviertes el volumen, también los botones de volumen de la tablet.
+- **Saca capturas cuando se lo pides** (desde el panel, con L3 + R3 mantenidos o con M dos veces en DS5): solo de la ventana del juego, guardadas en la tablet (Imágenes/Screenshots). Mientras cambia el modo de rendimiento muestra una imagen congelada del juego, que solo está en memoria y no se guarda.
+- **Hace gestos solo sobre el Game Assistant de la tablet** (Lenovo ZUI): el deslizamiento que abre su panel desde la pestaña lateral y el toque en su botón de rendimiento.
 
 Para capturar solo la ventana del juego, Android exige el permiso de ver el contenido de las ventanas: sin él no dice cuál es la ventana del juego. Por eso, al activarlo, Android avisa que la app puede leer la pantalla. G9 Control usa ese permiso solo para la lista de ventanas (cuál es la del juego): no lee sus textos ni sus botones y no ve lo que escribes. La app no tiene permiso de internet, así que nada sale de la tablet.
 
 Si Android muestra **«Ajuste restringido»** al activarlo: Ajustes → Apps → G9 Control → ⋮ (arriba a la derecha) → **Permitir ajustes restringidos**, y vuelve a intentarlo.
+
+### Opcional: Shizuku y un permiso por adb
+
+Casi todo funciona sin nada extra. Dos cosas necesitan más permisos que los de una app normal:
+
+- **Pantalla 16:9:** un permiso que se da una sola vez desde un computador y queda (también tras reiniciar o actualizar):
+  `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
+- **Modo de rendimiento y ocultar Game Assistant:** [Shizuku](https://shizuku.rikka.app/) iniciado (hay que iniciarlo tras cada reinicio de la tablet). En Ajustes → Panel de juego → Shizuku, toca **Dar permiso a G9 Control**. G9 Control solo le pide a Shizuku una lista fija de comandos: mostrar u ocultar Game Assistant, leer su registro para saber el modo y, si falta el permiso de arriba, cambiar el tamaño de pantalla.
 
 ## Limitaciones
 
 - **No actualiza el firmware.** Es a propósito: una actualización que falla puede dejar el control inservible. Si alguna vez lo necesitas, usa la app oficial de Legion una vez.
 - La app solo configura el control en **modo Android**. En X-Input y DS5 el control no tiene canal de configuración, así que volver a Android siempre es con Vista + Menú (la app te guía).
 - En modo Android, los juegos hacen vibrar la tablet, no el control (comportamiento del firmware).
+- En modo Android, M dos veces saca la captura del sistema (Android la procesa antes que cualquier app). Para una captura limpia, mantén L3 + R3.
+- Algunas apps abiertas se cierran al cambiar entre 16:9 y 16:10 (por ejemplo Dolphin): conviene cambiarlo antes de abrirlas.
 
 ## Compilar
 

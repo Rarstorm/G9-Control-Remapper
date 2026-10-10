@@ -25,6 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -121,6 +124,7 @@ fun App(s: AppState, a: MainActivity) {
 }
 
 /** Pestañas horizontales, como en una consola: LB/RB a los lados para cambiar. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TabBar(s: AppState, a: MainActivity) {
     val c = MaterialTheme.colorScheme
@@ -149,10 +153,17 @@ private fun TabBar(s: AppState, a: MainActivity) {
             ) {
                 NAV.forEach { item ->
                     val sel = s.page == item.page
+                    // El foco del control se marca con un contorno, no con relleno: con relleno parecía otra pestaña
+                    // elegida (se veían dos resaltadas a la vez).
+                    val source = remember { MutableInteractionSource() }
+                    val focused by source.collectIsFocusedAsState()
+                    CompositionLocalProvider(LocalRippleConfiguration provides null) {
                     Surface(
                         onClick = { s.page = item.page },
                         shape = CircleShape,
                         color = if (sel) c.primaryContainer else Color.Transparent,
+                        border = if (focused) BorderStroke(2.dp, c.primary) else null,
+                        interactionSource = source,
                         modifier = Modifier.focusRequester(tabFocus.getValue(item.page))
                             .onGloballyPositioned { tabX[item.page] = it.positionInParent().x.toInt() to it.size.width }
                     ) {
@@ -167,6 +178,7 @@ private fun TabBar(s: AppState, a: MainActivity) {
                                 color = if (sel) c.onPrimaryContainer else c.onSurfaceVariant
                             )
                         }
+                    }
                     }
                 }
             }

@@ -58,10 +58,8 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     Text(version, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-        },
-        second = {
-            GamePanelSettings(s, a)
-            NoticesPanel(s, a)
+            // Izquierda: la app, la tablet y el control; derecha: lo que se usa dentro de los juegos.
+            TabletSettings(s, a)
             if (s.devInfo.isNotEmpty()) Panel(tr("Control", "Controller")) {
                 // El identificador solo con las herramientas de desarrollo.
                 s.devInfo.filter { dev || it.first !in setOf("Identificador", "Identifier") }.forEach { (k, v) ->
@@ -72,6 +70,11 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                 }
             }
             ResetPanel(s, a)
+        },
+        second = {
+            GamePanelSettings(s, a)
+            GameAssistantSettings(s, a)
+            NoticesPanel(s, a)
             if (dev) {
                 Panel(tr("Detalles técnicos", "Technical details"), trailing = {
                     TextButton(onClick = { dev = false; taps = 0; Prefs.setDevTools(a, false) }) { Text(tr("Ocultar", "Hide")) }
@@ -179,7 +182,7 @@ private fun NoticesPanel(s: AppState, a: MainActivity) {
                 side = { PosGrid(guidePos) { guidePos = it; AutoRules.setGuidePos(a, it) } }) {
                 LockChips(mini) { mini = it; AutoRules.setMiniBlock(a, it > 0); AutoRules.setMiniBlockSticks(a, it > 1) }
             }
-            NoticeBox(tr("Cuando la app cambia el modo", "When the app switches mode"), tr("Etiqueta que muestra el modo nuevo. No bloquea nada.", "Label showing the new mode. Doesn't block anything."),
+            NoticeBox(tr("Al cambiar de modo", "When switching mode"), tr("Etiqueta con el modo nuevo cuando la app lo cambia. No bloquea nada.", "Label with the new mode when the app switches it. Doesn't block anything."),
                 if (on && label) { { AutoRules.preview(a, "banner") } } else null,
                 side = if (label) { { PosGrid(pos) { pos = it; AutoRules.setNoticePos(a, it) } } } else null) {
                 SwitchRow(tr("Mostrar la etiqueta", "Show the label"), label) { label = it; AutoRules.setShowLabel(a, it) }
@@ -193,10 +196,7 @@ private fun NoticesPanel(s: AppState, a: MainActivity) {
     }
 }
 
-/**
- * Panel de juego (L3 + R3) y lo que se ve de Game Assistant, el de la ROM de la tablet: si está en modo
- * juego ahora (se actualiza solo) y un acceso a sus ajustes.
- */
+/** Panel de juego (L3 + R3): qué lo abre, la captura de M dos veces en DS5 y cómo se ve el aviso de captura. */
 @Composable
 private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
@@ -204,38 +204,16 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var shotPos by remember { mutableStateOf(AutoRules.shotPos(a)) }
     var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
-    var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
-    var swapVol by remember { mutableStateOf(AutoRules.swapVolume(a)) }
-    val zui = remember { ZuiGame.installed(a) }
-    var game by remember { mutableStateOf(ZuiGame.inGame(a)) }
-    if (zui) DisposableEffect(Unit) {
-        val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { game = ZuiGame.inGame(a) }
-        onDispose { ZuiGame.unobserve(a, o) }
-    }
     CompositionLocalProvider(LocalEditable provides true) {
-        Panel(tr("Panel de juego", "Game panel"), tr("Menú flotante para usar desde cualquier juego sin soltar el control.", "Floating menu to use from any game without letting go of the controller.")) {
-            SwitchRow(
-                tr("L3 + R3", "L3 + R3"), on,
-                tr("Tocar: abre el panel. Mantener medio segundo: captura directa (en cualquier modo).",
-                    "Tap: opens the panel. Hold half a second: direct screenshot (in any mode).")
-            ) { on = it; AutoRules.setGamePanel(a, it) }
+        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier juego sin soltar el control.", "A menu to use in any game without letting go of the controller.")) {
+            SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Tocar: abre el panel. Mantener: captura directa.", "Tap: opens the panel. Hold: direct screenshot.")) {
+                on = it; AutoRules.setGamePanel(a, it)
+            }
             SwitchRow(
                 tr("M dos veces en DS5: captura", "M twice in DS5: screenshot"), shot,
-                tr("Captura solo el juego, sin el puntero que aparece. El toque ya no llega al juego como clic del touchpad: apágalo si un juego lo usa o si conectas un mouse.",
-                    "Captures only the game, without the pointer that appears. The tap no longer reaches the game as a touchpad click: turn it off if a game uses it or if you connect a mouse.")
+                tr("Solo el juego, sin el puntero. Apágalo si un juego usa el clic del touchpad.", "Only the game, without the pointer. Turn it off if a game uses the touchpad click.")
             ) { shot = it; AutoRules.setTouchpadShot(a, it) }
-            SwitchRow(
-                tr("Botón Legion", "Legion button"), legion,
-                tr("Tocar: Atrás. Mantener medio segundo: ajustes rápidos. En cualquier modo y app, menos dentro de G9 Control.",
-                    "Tap: Back. Hold half a second: quick settings. In any mode and app, except inside G9 Control.")
-            ) { legion = it; AutoRules.setLegionKeys(a, it) }
-            SwitchRow(
-                tr("Invertir el volumen de la tablet", "Swap the tablet's volume buttons"), swapVol,
-                tr("El botón de abajo sube el volumen y el de arriba lo baja. Solo los botones de la tablet; los del control quedan igual.",
-                    "The lower button turns the volume up and the upper one turns it down. Only the tablet's buttons; the controller's stay the same.")
-            ) { swapVol = it; AutoRules.setSwapVolume(a, it) }
-            ScreenRow(a)
-            NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura de la captura que entra desde el borde.", "Thumbnail of the screenshot that slides in from the edge."),
+            NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura que entra desde el borde.", "Thumbnail that slides in from the edge."),
                 if (s.autoServiceOn) { { AutoRules.preview(a, "shot") } } else null,
                 side = { PosGrid(shotPos) { shotPos = it; AutoRules.setShotPos(a, it) } }) {
                 Text(tr("Sonido", "Sound"), fontSize = 14.sp)
@@ -243,73 +221,87 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 Text(tr("Animación", "Animation"), fontSize = 14.sp)
                 ChoiceChips(NoticeAnim.entries.map { it to it.label }, shotAnim) { shotAnim = it; AutoRules.setShotAnim(a, it) }
             }
-            Hint(tr("Captura de pantalla, panel de Game Assistant (si está activo), cambiar el modo del control y abrir G9 Control. " +
-                "Se maneja con LB / RB, A y B; mientras está abierto, los botones no llegan al juego.",
-                "Screenshot, Game Assistant panel (when active), switch controller mode and open G9 Control. " +
-                    "Use LB / RB, A and B; while it's open, buttons don't reach the game."))
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (en Juegos).", "Needs the accessibility service (in Games)."))
-            if (zui) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Game Assistant", Modifier.weight(1f), fontSize = 14.sp)
-                    Text(
-                        if (game) tr("En modo juego", "In game mode") else tr("Sin juego activo", "No game active"),
-                        fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
-                    Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
-                }
-                ShizukuRow(a)
+        }
+    }
+}
+
+/** Opciones de la tablet y sus botones: el botón Legion del control, el volumen invertido y la pantalla 16:9. */
+@Composable
+private fun TabletSettings(s: AppState, a: MainActivity) {
+    var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
+    var swapVol by remember { mutableStateOf(AutoRules.swapVolume(a)) }
+    CompositionLocalProvider(LocalEditable provides true) {
+        Panel(tr("Tablet y botones", "Tablet and buttons")) {
+            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: ajustes rápidos.", "Tap: Back. Hold: quick settings.")) {
+                legion = it; AutoRules.setLegionKeys(a, it)
             }
+            SwitchRow(
+                tr("Invertir el volumen", "Swap volume buttons"), swapVol,
+                tr("El botón de abajo sube y el de arriba baja. Los del control no cambian.", "The lower button turns it up and the upper one down. The controller's don't change.")
+            ) { swapVol = it; AutoRules.setSwapVolume(a, it) }
+            ScreenRow(a)
+            if (!s.autoServiceOn) Hint(tr("El botón Legion y el volumen necesitan el servicio de accesibilidad (en Juegos).", "The Legion button and the volume need the accessibility service (in Games)."))
         }
     }
 }
 
 /**
- * Shizuku: con él, el panel de juego puede cambiar el modo de rendimiento y mostrar Game Assistant aunque esté
- * oculto. Sin él, se explica cómo ocultarlo o mostrarlo a mano.
+ * Game Assistant, el de la ROM de la tablet: si hay un juego ahora (se actualiza solo), ocultarlo, Shizuku (para
+ * el rendimiento y ocultarlo) y un acceso a sus ajustes. Solo si la tablet lo tiene.
  */
 @Composable
-private fun ShizukuRow(a: MainActivity) {
+private fun GameAssistantSettings(s: AppState, a: MainActivity) {
+    val zui = remember { ZuiGame.installed(a) }
+    if (!zui) return
+    var game by remember { mutableStateOf(ZuiGame.inGame(a)) }
+    DisposableEffect(Unit) {
+        val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { game = ZuiGame.inGame(a) }
+        onDispose { ZuiGame.unobserve(a, o) }
+    }
     LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
     val st = Shell.state
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Shizuku", Modifier.weight(1f), fontSize = 14.sp)
-        Text(
+    CompositionLocalProvider(LocalEditable provides true) {
+        Panel("Game Assistant", trailing = {
+            Text(if (game) tr("En un juego", "In a game") else tr("Sin juego", "No game"), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Shizuku", Modifier.weight(1f), fontSize = 14.sp)
+                Text(
+                    when (st) {
+                        Shell.State.READY -> tr("Listo", "Ready")
+                        Shell.State.NO_PERMISSION -> tr("Falta el permiso", "Permission missing")
+                        Shell.State.NOT_RUNNING -> tr("No está iniciado", "Not started")
+                    },
+                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             when (st) {
-                Shell.State.READY -> tr("Listo", "Ready")
-                Shell.State.NO_PERMISSION -> tr("Falta el permiso", "Permission missing")
-                Shell.State.NOT_RUNNING -> tr("No está activo", "Not running")
-            },
-            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-    if (st == Shell.State.READY) {
-        val gaScope = rememberCoroutineScope()
-        var gaHidden by remember { mutableStateOf(AutoRules.gaHidden(a)) }
-        // Lo que el usuario eligió, no cómo está ahora: puede estar visible un rato porque G9 Control lo está usando
-        // (copiar el estado actual a la preferencia hacía que no se volviera a ocultar). Solo la primera vez, sin
-        // preferencia guardada, se toma de cómo está.
-        LaunchedEffect(Unit) { if (gaHidden == null) ZuiGame.hidden()?.let { gaHidden = it; AutoRules.setGaHidden(a, it) } }
-        SwitchRow(
-            tr("Ocultar Game Assistant", "Hide Game Assistant"), gaHidden == true,
-            tr("Quita su pestaña lateral, su panel y sus avisos (sigue funcionando por detrás). G9 Control lo muestra solo mientras lo usa.",
-                "Removes its side tab, panel and notices (it keeps working in the background). G9 Control shows it only while using it.")
-        ) { want ->
-            gaScope.launch {
-                if (ZuiGame.setHidden(want)) {
-                    AutoRules.setGaHidden(a, want)
-                    gaHidden = want
+                Shell.State.READY -> {
+                    val gaScope = rememberCoroutineScope()
+                    var gaHidden by remember { mutableStateOf(AutoRules.gaHidden(a)) }
+                    // Lo que el usuario eligió, no cómo está ahora: puede estar visible un rato porque G9 Control lo
+                    // está usando (copiar el estado actual a la preferencia hacía que no se volviera a ocultar). Solo
+                    // la primera vez, sin preferencia guardada, se toma de cómo está.
+                    LaunchedEffect(Unit) { if (gaHidden == null) ZuiGame.hidden()?.let { gaHidden = it; AutoRules.setGaHidden(a, it) } }
+                    SwitchRow(
+                        tr("Ocultar Game Assistant", "Hide Game Assistant"), gaHidden == true,
+                        tr("Sin pestaña ni panel. G9 Control lo muestra solo mientras lo usa.", "No side tab or panel. G9 Control shows it only while using it.")
+                    ) { want ->
+                        gaScope.launch {
+                            if (ZuiGame.setHidden(want)) { AutoRules.setGaHidden(a, want); gaHidden = want }
+                        }
+                    }
+                    Hint(tr("En un juego, el panel de juego cambia el rendimiento: Ahorro, Equilibrado o Bestia.", "In a game, the game panel changes performance: Power saving, Balanced or Beast."))
                 }
+                Shell.State.NO_PERMISSION -> OutlinedButton(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
+                Shell.State.NOT_RUNNING -> Hint(tr("Con Shizuku iniciado (tras cada reinicio), el panel de juego cambia el rendimiento y se puede ocultar Game Assistant.",
+                    "With Shizuku started (after every reboot), the game panel changes performance and Game Assistant can be hidden."))
+            }
+            OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
+                Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
             }
         }
-    }
-    when (st) {
-        Shell.State.READY -> Hint(tr("En un juego, el panel de juego ofrece Rendimiento (Ahorro, Equilibrado o Bestia) y muestra Game Assistant aunque esté oculto; al salir del juego lo vuelve a ocultar.",
-            "In a game, the game panel offers Performance (Power saving, Balanced or Beast) and shows Game Assistant even if it's hidden; it hides it again when you leave the game."))
-        Shell.State.NO_PERMISSION -> OutlinedButton(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
-        Shell.State.NOT_RUNNING -> Hint(tr("Con Shizuku (hay que iniciarlo tras cada reinicio), el panel de juego cambia el modo de rendimiento. Sin él, para ocultar Game Assistant: adb shell appops set ${ZuiGame.PACKAGE} SYSTEM_ALERT_WINDOW ignore (allow para mostrarlo).",
-            "With Shizuku (it must be started after every reboot), the game panel changes the performance mode. Without it, to hide Game Assistant: adb shell appops set ${ZuiGame.PACKAGE} SYSTEM_ALERT_WINDOW ignore (allow to show it)."))
     }
 }
 
@@ -323,14 +315,13 @@ private fun ScreenRow(a: MainActivity) {
     var wide by remember { mutableStateOf(Aspect.is169(a)) }
     if (!Aspect.available(a)) {
         Text(tr("Pantalla 16:9", "16:9 screen"), fontSize = 14.sp)
-        Hint(tr("Para un monitor externo sin bordes. Necesita un permiso que se da una vez desde un computador: ${Aspect.GRANT_COMMAND}",
-            "For an external monitor without borders. It needs a permission you grant once from a computer: ${Aspect.GRANT_COMMAND}"))
+        Hint(tr("Para un monitor externo sin bordes. Se activa una vez desde un computador: ${Aspect.GRANT_COMMAND}",
+            "For an external monitor without borders. Enable it once from a computer: ${Aspect.GRANT_COMMAND}"))
         return
     }
     SwitchRow(
         tr("Pantalla 16:9", "16:9 screen"), wide,
-        tr("Para un monitor externo: la imagen llena el monitor sin bordes (en la tablet quedan franjas negras). Se recuerda al reiniciar; también se cambia desde el panel de juego. Algunas apps abiertas se cierran al cambiarla (Dolphin).",
-            "For an external monitor: the picture fills it with no borders (the tablet shows black bars). It persists after a reboot; you can also switch it from the game panel. Some open apps close when it changes (Dolphin).")
+        tr("Monitor externo sin bordes. Cambiarla cierra Dolphin si está abierto.", "External monitor without borders. Switching closes Dolphin if it's open.")
     ) { want ->
         scope.launch {
             if (want != Aspect.is169(a)) Aspect.toggle(a)
@@ -354,7 +345,10 @@ private fun LockChips(level: Int, onPick: (Int) -> Unit) {
     }
 }
 
-/** Recuadro de un aviso: cuándo aparece, sus opciones, botón "Ver" y, a la derecha, su posición. */
+/**
+ * Recuadro de un aviso: arriba el título, qué es, el botón "Ver" y, a la derecha, su posición; debajo, a todo el
+ * ancho, sus opciones (al lado de la posición quedaban angostas y se partían en varias líneas).
+ */
 @Composable
 private fun NoticeBox(
     title: String, desc: String, onPreview: (() -> Unit)?, side: (@Composable () -> Unit)? = null,
@@ -362,19 +356,21 @@ private fun NoticeBox(
 ) {
     val c = MaterialTheme.colorScheme
     Surface(color = c.surfaceContainerHigh, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                    if (onPreview != null) TextButton(onClick = onPreview) { Text(tr("Ver", "Preview")) }
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                        if (onPreview != null) TextButton(onClick = onPreview) { Text(tr("Ver", "Preview")) }
+                    }
+                    Text(desc, fontSize = 13.sp, color = c.onSurfaceVariant)
                 }
-                Text(desc, fontSize = 13.sp, color = c.onSurfaceVariant)
-                content()
+                if (side != null) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(tr("Posición", "Position"), fontSize = 13.sp, color = c.onSurfaceVariant)
+                    side()
+                }
             }
-            if (side != null) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(tr("Posición", "Position"), fontSize = 13.sp, color = c.onSurfaceVariant)
-                side()
-            }
+            content()
         }
     }
 }
