@@ -92,6 +92,9 @@ object Monitor {
         setApplied(ctx, wide)
     }
 
+    /** La tablet se encendió a mano (botón de encendido o panel de juego) con el monitor conectado: no se oscurece sola. */
+    @Volatile var woken = false
+
     fun screen(ctx: Context) = sp(ctx).getString("monitor_screen", null)
         ?.let { s -> Screen.entries.firstOrNull { it.name == s } } ?: Screen.NORMAL
     fun setScreen(ctx: Context, v: Screen) = sp(ctx).edit().putString("monitor_screen", v.name).apply()

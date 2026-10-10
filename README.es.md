@@ -37,6 +37,7 @@ Además hace cosas que la oficial no puede:
 | **Rendimiento** | Ahorro, Equilibrado o Bestia (los de Game Assistant) desde el control, sin tocar la pantalla. Necesita Shizuku. |
 | **Bypass charging** | Jugando enchufada, el cargador alimenta la tablet y la batería no carga ni se calienta. Manual (también desde el panel de juego) o automático, con la batería y la temperatura mínimas que elijas. Necesita Shizuku. |
 | **Pantalla 16:9** | Para un monitor externo: la imagen lo llena sin bordes. |
+| **Monitor externo** | Al conectarlo en modo espejo pasa sola a 16:9 (en todos los monitores o según cada uno) y vuelve a 16:10 al desconectarlo. La pantalla de la tablet puede quedar oscura, sin luz o apagada mientras tanto (sin luz y apagada necesitan Shizuku). |
 | **Botón Legion** | Tocar: Atrás. Mantener: ajustes rápidos. |
 | **Volumen invertido** | Opcional: el botón de abajo de la tablet sube el volumen y el de arriba lo baja. |
 | **Ajustes rápidos** | Íconos Android, X-Input y DS5. |
@@ -76,7 +77,9 @@ Casi todo funciona sin nada extra. Dos cosas necesitan más permisos que los de 
 
 - **Pantalla 16:9:** un permiso que se da una sola vez desde un computador y queda (también tras reiniciar o actualizar):
   `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
-- **Bypass charging, modo de rendimiento y ocultar Game Assistant:** [Shizuku](https://shizuku.rikka.app/) iniciado (hay que iniciarlo tras cada reinicio de la tablet). En la pestaña Tablet → Shizuku, toca **Dar permiso a G9 Control**. La ROM solo deja estas funciones a apps del sistema, y el shell de Shizuku cuenta como tal. G9 Control solo le pide una lista fija de comandos: activar o leer el bypass y el límite de carga, mostrar u ocultar Game Assistant, leer su registro para saber el modo y, si falta el permiso de arriba, cambiar el tamaño de pantalla.
+- **Bypass charging, modo de rendimiento, ocultar Game Assistant y apagar la pantalla de la tablet con un monitor:** [Shizuku](https://shizuku.rikka.app/) iniciado (hay que iniciarlo tras cada reinicio de la tablet). En Ajustes → Permisos, toca **Dar permiso**. La ROM solo deja estas funciones a apps del sistema, y el shell de Shizuku cuenta como tal. G9 Control solo le pide una lista fija de comandos: activar o leer el bypass y el límite de carga, mostrar u ocultar Game Assistant, leer su registro para saber el modo, apagar o encender el panel (o solo su luz) y, si falta el permiso de arriba, cambiar el tamaño de pantalla.
+
+Ajustes → Permisos muestra el estado de todo esto y cómo activarlo, e Inicio avisa si falta algo que estás usando.
 
 ## Limitaciones
 

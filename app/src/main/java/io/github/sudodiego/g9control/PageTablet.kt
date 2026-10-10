@@ -167,8 +167,13 @@ private fun MonitorPanel(s: AppState, a: MainActivity) {
                     Monitor.Screen.OFF -> tr("Panel apagado, con Shizuku.", "Panel off, with Shizuku.")
                 }, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Encendida con el botón de encendido: volver a oscurecerla sin control.
+            if (screen != Monitor.Screen.NORMAL && monitor != null && mirror && remember(tick) { Monitor.woken }) {
+                OutlinedButton(onClick = { AutoRules.darkenTablet(a); tick++ }) { Text(tr("Oscurecer ahora", "Darken now")) }
+            }
             if (screen >= Monitor.Screen.NO_LIGHT && !ready) Hint(tr("Sin Shizuku queda oscura.", "Without Shizuku it's just dimmed."))
-            if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. Se enciende desde el panel de juego.", "With the monitor in mirror mode. Turn it on from the game panel."))
+            if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. El botón de encendido la enciende; se vuelve a oscurecer aquí o desde el panel de juego (L3 + R3, con cualquier control).",
+                "With the monitor in mirror mode. The power button turns it on; darken it again here or from the game panel (L3 + R3, any controller)."))
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
             if (known.isNotEmpty() && Aspect.available(a)) {
                 Text(tr("Monitores", "Monitors"), fontSize = 14.sp)

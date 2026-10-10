@@ -176,6 +176,10 @@ object AutoRules {
         ctx.sendBroadcast(Intent(ACTION_SWITCH).setPackage(ctx.packageName).putExtra("target", to.name))
     const val ACTION_SWITCH = "io.github.sudodiego.g9control.SWITCH_MODE"
 
+    /** Desde la app: volver a oscurecer la tablet con el monitor (después de encenderla con el botón). */
+    fun darkenTablet(ctx: Context) = ctx.sendBroadcast(Intent(ACTION_DARKEN).setPackage(ctx.packageName))
+    const val ACTION_DARKEN = "io.github.sudodiego.g9control.DARKEN_TABLET"
+
     fun rules(ctx: Context): Map<String, AutoTarget> {
         val x = sp(ctx).getStringSet("auto_xinput", emptySet()).orEmpty().associateWith { AutoTarget.XINPUT }
         val d = sp(ctx).getStringSet("auto_ds5", emptySet()).orEmpty().associateWith { AutoTarget.DS5 }
@@ -247,6 +251,7 @@ class AutoModeService : AccessibilityService() {
                     "shot" -> panel.previewShot()
                     else -> guide.preview(kind)
                 }
+                AutoRules.ACTION_DARKEN -> if (Monitor.woken) toggleTabletScreen()
                 AutoRules.ACTION_SWITCH -> i.getStringExtra("target")
                     ?.let { runCatching { PadMode.valueOf(it) }.getOrNull() }?.let(::manualSwitch)
                 // En esta tablet USER_PRESENT no siempre llega: al encender la pantalla se espera el desbloqueo.
@@ -256,7 +261,7 @@ class AutoModeService : AccessibilityService() {
                     // tablet si el control no sirve con el monitor). Se oscurece otra vez desde el panel de juego o al
                     // volver a conectar el monitor.
                     if (panelOff || lightOff || darkView != null) {
-                        panelOff = false; lightOff = false; tabletWoken = true
+                        panelOff = false; lightOff = false; Monitor.woken = true
                         main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 500)
                     }
                 }
@@ -319,13 +324,11 @@ class AutoModeService : AccessibilityService() {
                 if (Aspect.toggle(this@AutoModeService)) Log.d(TAG, "sin monitor en espejo: 16:10")
             }
         }
-        applyTabletScreen(if (m != null && mirror && !tabletWoken) Monitor.screen(this) else Monitor.Screen.NORMAL)
-        if (m == null) tabletWoken = false
+        applyTabletScreen(if (m != null && mirror && !Monitor.woken) Monitor.screen(this) else Monitor.Screen.NORMAL)
+        if (m == null) Monitor.woken = false
     }
     private var lastMonitor: String? = null
 
-    /** El usuario encendió la pantalla de la tablet a mano (desde el panel de juego) con el monitor conectado. */
-    private var tabletWoken = false
     /** Lo que G9 Control hizo con la pantalla de la tablet, para deshacerlo. */
     private var darkView: View? = null
     private var panelOff = false
@@ -379,7 +382,7 @@ class AutoModeService : AccessibilityService() {
 
     /** Desde el panel de juego: ver la tablet un rato con el monitor conectado (o volver a oscurecerla). */
     fun toggleTabletScreen() {
-        tabletWoken = !tabletWoken
+        Monitor.woken = !Monitor.woken
         main.removeCallbacks(monitorCheck)
         monitorCheck.run()
     }
@@ -452,6 +455,7 @@ class AutoModeService : AccessibilityService() {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AutoRules.ACTION_PREVIEW)
             addAction(AutoRules.ACTION_SWITCH)
+            addAction(AutoRules.ACTION_DARKEN)
         }, if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0)
     }
 
@@ -662,7 +666,7 @@ class AutoModeService : AccessibilityService() {
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
-        if (key == "monitor_screen") tabletWoken = false   // la opción recién elegida se ve al tiro
+        if (key == "monitor_screen") Monitor.woken = false   // la opción recién elegida se ve al tiro
         if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
             main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)
         }

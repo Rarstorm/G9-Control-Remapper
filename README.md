@@ -37,6 +37,7 @@ It also does a few things the official app can't:
 | **Performance** | Power saving, Balanced or Beast (Game Assistant's modes) from the controller, without touching the screen. Needs Shizuku. |
 | **Bypass charging** | While gaming plugged in, the charger powers the tablet and the battery doesn't charge or heat up. Manual (also from the game panel) or automatic, with the minimum battery and temperature you choose. Needs Shizuku. |
 | **16:9 screen** | For an external monitor: the picture fills it with no borders. |
+| **External monitor** | When connected in mirror mode it switches to 16:9 by itself (on every monitor or per monitor) and back to 16:10 when unplugged. Meanwhile the tablet's screen can be dimmed, backlight-off or off (the last two need Shizuku). |
 | **Legion button** | Tap: Back. Hold: quick settings. |
 | **Swapped volume** | Optional: the tablet's lower button turns the volume up and the upper one turns it down. |
 | **Quick settings** | Android, X-Input and DS5 tiles. |
@@ -81,7 +82,9 @@ Almost everything works with nothing extra. Two things need more than a regular 
 
 - **16:9 screen:** a permission you grant once from a computer; it stays (also after a reboot or an update):
   `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
-- **Bypass charging, performance mode and hiding Game Assistant:** [Shizuku](https://shizuku.rikka.app/) running (it must be started after every reboot). In the Tablet tab → Shizuku, tap **Grant permission to G9 Control**. The ROM only lets system apps use these, and Shizuku's shell counts as one. G9 Control only asks it for a fixed list of commands: turn on or read bypass and the charge limit, show or hide Game Assistant, read its log to know the mode and, if the permission above is missing, change the screen size.
+- **Bypass charging, performance mode, hiding Game Assistant and turning the tablet's screen off with a monitor:** [Shizuku](https://shizuku.rikka.app/) running (it must be started after every reboot). In Settings → Permissions, tap **Grant permission**. The ROM only lets system apps use these, and Shizuku's shell counts as one. G9 Control only asks it for a fixed list of commands: turn on or read bypass and the charge limit, show or hide Game Assistant, read its log to know the mode, turn the panel (or just its backlight) off or on and, if the permission above is missing, change the screen size.
+
+Settings → Permissions shows the state of all this and how to turn it on, and Home warns you if something you use is missing.
 
 ## Limitations
 
