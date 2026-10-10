@@ -30,6 +30,20 @@ Cualquier botón del mando reasignable, por app, con gestos (tap/largo/doble), d
 ## Retomar tras corte
 `git log` + PROGRESS.md + PLAN.md + vault `10-g9-remap-plan.md`. Cada hito = commit + push.
 
+## Diseño anclado al código (verificado 10-10-2026)
+- **Gancho de remapeo:** `AutoModeService.onKeyEvent` → `handleKey()` (AutoMode.kt:674-727) YA consume teclas del mando (Legion, panel, guía, bloqueo de Vista/Menú). El motor de remapeo entra ahí: consumir botón → detectar gesto (tap/largo/doble) → ejecutar destino. Per-app: `onAccessibilityEvent` (línea 575) ya entrega la app al frente (`lastPackage`).
+- **Inyección de teclado:** precedente probado en el repo: `Shell.BACK_LONG = "input keyevent --longpress 4"` vía Shizuku `newProcess`. Extender `Shell.allowed()` con `input keyevent <code>` / `input tap` / `input swipe` / `input motionevent`.
+- **Acciones Android:** `performGlobalAction` (Atrás/Inicio/Recientes/Notificaciones/Ajustes rápidos) + `dispatchGesture` + `takeScreenshotOfWindow` — todo declarado en `auto_mode_service.xml` (canRequestFilterKeyEvents, canPerformGestures, canTakeScreenshot).
+- **Mouse (stick→cursor):** el servicio debe recibir ejes joystick solo con modo mouse activo (patrón del autor: `motionEventSources = SOURCE_JOYSTICK` dinámico). Fallback: `getevent` vía Shell (patrón del touchpad, ya implementado).
+- **Modelo de datos:** perfiles JSON ya existen (`Profiles.kt`, sp "g9") y reglas por app ya existen (`AutoRules.rules` = Map<pkg, AutoTarget>). Extender con mapa app → (botón → gesto → acción) en la misma sp.
+- **UI:** reutilizar `PageAuto.AppPicker` (lista de apps con permiso ZUI `GET_INSTALLED_APPS`) + `BackPage` (dibujo del control) + chips. Nueva pestaña "Acciones".
+- **Macros:** `Macro(mode, loop, loopMs, steps(key, holdMs, waitMs))` — modelo ya serializado (Profiles.kt).
+
+## Ejecución del build (INSTRUCCIÓN de Roberto)
+- **El build del APK se ejecuta SOLO con el modelo pagado DeepSeek V4.1** (deepseek-flash vía orcarouter). Si el modelo activo es free, NO ejecutar build: dejarlo listo y esperar orden.
+- Workflow `android.yml` = SOLO `workflow_dispatch` (nunca automático). Disparar únicamente con orden explícita de Roberto.
+- Sin `keystore.properties` → APK firmada con debug key. Si la firma difiere de la v1.0.0 instalada, habrá que desinstalar primero (avisar antes).
+
 ## Notas
 - NO construir APK sin orden explícita (instrucción de Roberto).
 - Preferir ediciones quirúrgicas (patch) sobre reescrituras.

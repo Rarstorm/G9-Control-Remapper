@@ -1,0 +1,33 @@
+name: Build APK
+
+# SOLO manual (botón "Run workflow" en Actions). Nunca automático: el build se ejecuta
+# únicamente con orden explícita de Roberto y con el agente en modelo pagado DeepSeek V4.1.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        # Gradle 8.9 necesita Java 17 (el JBR de Android Studio es Java 25 y no sirve).
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build release APK
+        # Sin keystore.properties -> firma debug (instalable). Release igualmente con R8.
+        run: chmod +x gradlew && ./gradlew assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: g9control-apk
+          path: app/build/outputs/apk/release/*.apk

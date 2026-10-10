@@ -5,7 +5,8 @@
 - ✅ Rama `g9-remap-v2` creada (base: main = upstream v1.0.0 + commits posteriores).
 - ✅ Validación GCM en hardware (mando Legion G9 2026 + Y700 Gen 5): comandos 1F/53/08 responden.
 - ✅ Vault: `10-g9-remap-plan.md` (plan + estado) y `00-estado-default.md` actualizados.
-- [ ] F2 workflow GitHub Actions (build APK debug) — pendiente (NO construir sin orden).
-- [ ] Leer código: AutoMode.kt, PageAuto.kt, MainActivity.kt, Gcm.kt, BackKeys.kt, Macros.kt.
-- [ ] Diseño: tabla app→botones→gestos + inyección Shizuku (teclado/mouse/scroll).
+- [x] Leer código clave: AutoMode.kt (onKeyEvent/handleKey/onAccessibilityEvent), Shell.kt, Gcm.kt, BackKeys.kt, Profiles.kt, PageAuto.kt, MainActivity.kt, auto_mode_service.xml.
+- [x] Diseño anclado a código verificado (ver PLAN.md → "Diseño anclado al código").
+- [x] Workflow `android.yml` creado — SOLO `workflow_dispatch` (nunca build automático).
+- [ ] F2a: ejecutar build CI — pendiente de ORDEN explícita de Roberto; **solo con modelo pagado DeepSeek V4.1**.
 - [ ] F3 APK instalado en tablet.
