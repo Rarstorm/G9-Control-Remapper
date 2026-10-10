@@ -287,6 +287,9 @@ class AutoModeService : AccessibilityService() {
             return
         }
         if (ZuiBattery.manualOverride || Shell.state != Shell.State.READY) return
+        // Lo encendió el automático pero alguien lo apagó (a mano, en otra app): ya no está encendido por él. Si no,
+        // creería que sigue activo y no lo volvería a encender.
+        if (smartOn && ZuiBattery.bypassNow == false) smartOn = false
         val plugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
         val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 0) * 100 /
             i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
@@ -313,6 +316,12 @@ class AutoModeService : AccessibilityService() {
     private val monitorCheck = Runnable {
         val m = Monitor.current(this)
         val mirror = Monitor.mirror(this)
+        // Al arrancar el servicio (por ejemplo, tras actualizar la app con el panel apagado y el monitor ya quitado):
+        // si no toca tenerlo apagado, se enciende por si acaso. Encenderlo estando encendido no hace nada.
+        if (!panelChecked && Shell.state == Shell.State.READY && Monitor.screen(this) == Monitor.Screen.OFF) {
+            panelChecked = true
+            if (m == null || !mirror) scope.launch { Shell.run(Shell.screenPower(true)) }
+        }
         if (m != null && m.key != lastMonitor) { Monitor.remember(this, m); Log.d(TAG, "monitor conectado: ${m.name} (${m.key})") }
         lastMonitor = m?.key
         val want = m != null && mirror && Monitor.wants169(this, m.key)
@@ -328,6 +337,7 @@ class AutoModeService : AccessibilityService() {
         if (m == null) Monitor.woken = false
     }
     private var lastMonitor: String? = null
+    private var panelChecked = false
 
     /** Lo que G9 Control hizo con la pantalla de la tablet, para deshacerlo. */
     private var darkView: View? = null

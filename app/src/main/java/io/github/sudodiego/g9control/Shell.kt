@@ -96,7 +96,7 @@ object Shell {
     fun launchIntent(ctx: Context): android.content.Intent? =
         ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    /** Hay algo elegido que necesita Shizuku (bypass automático u ocultar Game Assistant): vale la pena avisar si falta. */
+    /** Hay algo elegido que necesita Shizuku (bypass automático, ocultar Game Assistant, tablet sin luz o apagada con el monitor): vale la pena avisar si falta. */
     fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true || Monitor.screen(ctx).let { it == Monitor.Screen.OFF || it == Monitor.Screen.NO_LIGHT }
 
     fun requestPermission() {

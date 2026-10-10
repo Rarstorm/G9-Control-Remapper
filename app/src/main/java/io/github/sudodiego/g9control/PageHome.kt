@@ -126,18 +126,19 @@ private fun QuickProfiles(s: AppState, a: MainActivity) {
 @Composable
 private fun ServiceWarning(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.warnService(a)) }
-    val used = (s.autoEnabled && s.autoRules.isNotEmpty()) || AutoRules.gamePanel(a) || AutoRules.legionKeys(a) || AutoRules.swapVolume(a)
+    val used = (s.autoEnabled && s.autoRules.isNotEmpty()) || AutoRules.gamePanel(a) || AutoRules.legionKeys(a) || AutoRules.swapVolume(a) ||
+        AutoRules.smartBypass(a) || Monitor.all169(a) || Monitor.screen(a) != Monitor.Screen.NORMAL
     if (!on || s.autoServiceOn || !used) return
     WarningStrip(
-        tr("El servicio de accesibilidad está apagado: el panel de juego, el cambio automático y el botón Legion no funcionan.",
-            "The accessibility service is off: the game panel, automatic switching and the Legion button don't work."),
+        tr("El servicio de accesibilidad está apagado: el panel de juego, el cambio automático, el botón Legion y lo automático de la tablet no funcionan.",
+            "The accessibility service is off: the game panel, automatic switching, the Legion button and the tablet's automatic features don't work."),
         tr("Activar", "Turn on"), { AutoRules.openServiceSettings(a) },
         onDismiss = { on = false; AutoRules.setWarnService(a, false) }
     )
 }
 
 /**
- * Shizuku no está listo y hay algo elegido que lo necesita (bypass automático u ocultar Game Assistant). Pasa tras
+ * Shizuku no está listo y hay algo elegido que lo necesita ([Shell.wanted]). Pasa tras
  * cada reinicio de la tablet: Shizuku hay que iniciarlo a mano.
  */
 @Composable
@@ -151,7 +152,8 @@ private fun ShizukuWarning(a: MainActivity) {
         WarningStrip(tr("G9 Control no tiene permiso de Shizuku.", "G9 Control has no Shizuku permission."),
             tr("Dar permiso", "Grant"), { Shell.requestPermission() }, onDismiss = { on = false; AutoRules.setWarnShizuku(a, false) })
     else
-        WarningStrip(tr("Shizuku no está iniciado: el bypass y ocultar Game Assistant no funcionan.", "Shizuku isn't started: bypass and hiding Game Assistant don't work."),
+        WarningStrip(tr("Shizuku no está iniciado: lo que lo necesita (bypass, ocultar Game Assistant, apagar la tablet con el monitor) no funciona.",
+            "Shizuku isn't started: what needs it (bypass, hiding Game Assistant, turning the tablet off with a monitor) doesn't work."),
             tr("Abrir Shizuku", "Open Shizuku"), { runCatching { a.startActivity(launch) } }, onDismiss = { on = false; AutoRules.setWarnShizuku(a, false) })
 }
 

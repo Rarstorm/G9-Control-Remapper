@@ -236,7 +236,8 @@ private fun PermissionsPanel(s: AppState, a: MainActivity) {
     Panel(tr("Permisos", "Permissions")) {
         PermRow(
             tr("Servicio de accesibilidad", "Accessibility service"), s.autoServiceOn,
-            tr("Cambio automático por juego, panel de juego, capturas, botón Legion y volumen invertido.", "Automatic switching per game, game panel, screenshots, Legion button and swapped volume.")
+            tr("Cambio automático por juego, panel de juego, capturas, botón Legion, volumen invertido, bypass automático y el monitor.",
+                "Automatic switching per game, game panel, screenshots, Legion button, swapped volume, automatic bypass and the monitor.")
         ) {
             Hint(tr("Busca «G9 Control» en la lista y actívalo. Si sale «Ajuste restringido»: Ajustes → Apps → G9 Control → ⋮ → Permitir ajustes restringidos.",
                 "Find “G9 Control” in the list and turn it on. If “Restricted setting” appears: Settings → Apps → G9 Control → ⋮ → Allow restricted settings."))
@@ -244,7 +245,8 @@ private fun PermissionsPanel(s: AppState, a: MainActivity) {
         }
         PermRow(
             "Shizuku", shizuku == Shell.State.READY,
-            tr("Bypass, modo de rendimiento y ocultar Game Assistant solo. Hay que iniciarlo tras cada reinicio.", "Bypass, performance mode and hiding Game Assistant automatically. Start it after every reboot."),
+            tr("Bypass, modo de rendimiento, ocultar Game Assistant solo y apagar la tablet con el monitor. Hay que iniciarlo tras cada reinicio.",
+                "Bypass, performance mode, hiding Game Assistant automatically and turning the tablet off with a monitor. Start it after every reboot."),
             off = if (shizuku == Shell.State.NO_PERMISSION) tr("Falta el permiso", "Permission missing") else tr("No está iniciado", "Not started")
         ) {
             val launch = remember { Shell.launchIntent(a) }

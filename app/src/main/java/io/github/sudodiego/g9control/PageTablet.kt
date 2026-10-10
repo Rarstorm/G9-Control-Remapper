@@ -21,15 +21,15 @@ import kotlinx.coroutines.launch
 fun TabletPage(s: AppState, a: MainActivity) {
     TwoPane(
         first = {
-            BatteryPanel(a)
+            BatteryPanel(s, a)
             ScreenButtonsPanel(s, a)
         },
         second = {
             GameAssistantSettings(s, a)
             MonitorPanel(s, a)
             // Sin Shizuku lo que lo necesita se ve atenuado; su estado y cómo iniciarlo están en Ajustes → Permisos.
-            if (Shell.state != Shell.State.READY) Hint(tr("El bypass y ocultar Game Assistant solo necesitan Shizuku (Ajustes → Permisos).",
-                "Bypass and hiding Game Assistant automatically need Shizuku (Settings → Permissions)."))
+            if (Shell.state != Shell.State.READY) Hint(tr("El bypass, ocultar Game Assistant y apagar la tablet con el monitor necesitan Shizuku (Ajustes → Permisos).",
+                "Bypass, hiding Game Assistant and turning the tablet off with a monitor need Shizuku (Settings → Permissions)."))
         }
     )
 }
@@ -53,7 +53,7 @@ private fun batteryNow(a: MainActivity): BatteryNow? {
  * rangos que se elijan. El bypass va con Shizuku (el servicio de batería de ZUI solo acepta apps del sistema).
  */
 @Composable
-private fun BatteryPanel(a: MainActivity) {
+private fun BatteryPanel(s: AppState, a: MainActivity) {
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(batteryNow(a)) }
     var bypass by remember { mutableStateOf(ZuiBattery.bypassNow) }
@@ -105,6 +105,7 @@ private fun BatteryPanel(a: MainActivity) {
                     if (it && Aspect.canWrite(a)) runCatching { Settings.Global.putInt(a.contentResolver, "intelligent_bypass_charging_value", 0) }
                 }
                 if (smart) {
+                    if (!s.autoServiceOn) Hint(tr("El automático necesita el servicio de accesibilidad (Ajustes → Permisos).", "Automatic needs the accessibility service (Settings → Permissions)."))
                     SwitchRow(tr("Solo en juegos", "Only in games"), games) { games = it; AutoRules.setSmartBypassGames(a, it) }
                     Text(tr("Batería mínima", "Minimum battery"), fontSize = 14.sp)
                     ChoiceChips(listOf(20, 40, 60, 80).map { it to "$it %" }, level) { level = it; AutoRules.setSmartBypassLevel(a, it) }
