@@ -26,6 +26,7 @@ fun TabletPage(s: AppState, a: MainActivity) {
         },
         second = {
             GameAssistantSettings(s, a)
+            MonitorPanel(s, a)
             // Sin Shizuku lo que lo necesita se ve atenuado; su estado y cómo iniciarlo están en Ajustes → Permisos.
             if (Shell.state != Shell.State.READY) Hint(tr("El bypass y ocultar Game Assistant solo necesitan Shizuku (Ajustes → Permisos).",
                 "Bypass and hiding Game Assistant automatically need Shizuku (Settings → Permissions)."))
@@ -118,6 +119,66 @@ private fun BatteryPanel(a: MainActivity) {
                 Text(tr("Optimización de carga (Ajustes)", "Charge optimization (Settings)"))
             }
             now?.cycles?.takeIf { it >= 0 }?.let { Text(tr("Ciclos de carga: $it", "Charge cycles: $it"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+/**
+ * Monitor externo en modo espejo: 16:9 al conectarlo (para todos, y cada monitor puede tener lo suyo), qué hace la
+ * pantalla de la tablet mientras tanto, y la lista de los que se han conectado. Lo aplica el servicio de accesibilidad.
+ */
+@Composable
+private fun MonitorPanel(s: AppState, a: MainActivity) {
+    var monitor by remember { mutableStateOf(Monitor.current(a)) }
+    var mirror by remember { mutableStateOf(Monitor.mirror(a)) }
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { monitor = Monitor.current(a); mirror = Monitor.mirror(a); tick++; delay(2000) } }
+    var all169 by remember { mutableStateOf(Monitor.all169(a)) }
+    var screen by remember { mutableStateOf(Monitor.screen(a)) }
+    val known = remember(tick) { Monitor.known(a) }
+    val ready = Shell.state == Shell.State.READY
+    CompositionLocalProvider(LocalEditable provides true) {
+        Panel(tr("Monitor", "Monitor"), trailing = {
+            val m = monitor
+            Text(
+                when {
+                    m == null -> tr("Sin monitor", "No monitor")
+                    mirror -> "${m.name} · " + tr("espejo", "mirror")
+                    else -> "${m.name} · " + tr("extendido", "extended")
+                }, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }) {
+            if (Aspect.available(a)) {
+                SwitchRow(
+                    tr("16:9 en cualquier monitor", "16:9 on any monitor"), all169,
+                    tr("Al conectarlo en modo espejo. Vuelve a 16:10 al desconectarlo.", "When connected in mirror mode. Back to 16:10 when unplugged.")
+                ) { all169 = it; Monitor.setAll169(a, it) }
+            }
+            Text(tr("Pantalla de la tablet", "Tablet screen"), fontSize = 14.sp)
+            ChoiceChips(
+                listOf(Monitor.Screen.NORMAL to tr("Normal", "Normal"), Monitor.Screen.DIM to tr("Oscura", "Dim"),
+                    Monitor.Screen.OFF to tr("Apagada", "Off")), screen
+            ) { screen = it; Monitor.setScreen(a, it) }
+            if (screen == Monitor.Screen.OFF && !ready) Hint(tr("Apagada necesita Shizuku; sin él queda oscura.", "Off needs Shizuku; without it, it's just dimmed."))
+            if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. Se enciende desde el panel de juego.", "With the monitor in mirror mode. Turn it on from the game panel."))
+            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
+            if (known.isNotEmpty() && Aspect.available(a)) {
+                Text(tr("Monitores", "Monitors"), fontSize = 14.sp)
+                known.forEach { k ->
+                    var fit by remember(k.key, tick) { mutableStateOf(Monitor.fit(a, k.key)) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            k.name + if (k.key == monitor?.key) tr(" (conectado)", " (connected)") else "",
+                            Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { Monitor.forget(a, k.key); tick++ }) { Text(tr("Olvidar", "Forget")) }
+                    }
+                    ChoiceChips(
+                        listOf(Monitor.Fit.ALL to (if (all169) tr("Como todos (16:9)", "Like all (16:9)") else tr("Como todos (16:10)", "Like all (16:10)")),
+                            Monitor.Fit.WIDE to "16:9", Monitor.Fit.NATIVE to "16:10"), fit
+                    ) { fit = it; Monitor.setFit(a, k.key, it) }
+                }
+            }
         }
     }
 }

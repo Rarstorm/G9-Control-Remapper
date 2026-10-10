@@ -42,8 +42,15 @@ object Shell {
     // Límite de carga de ZUI ("Maximum charge limit"): 89 = getStopChargingStatus, 48 = getMaxBatteryChargingLevel.
     const val LIMIT_GET = "service call zuibattery 89"
     const val LIMIT_LEVEL = "service call zuibattery 48"
+    // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel.
+    fun screenPower(on: Boolean) = screenCmd("power ${if (on) 2 else 0}")
+    private fun screenCmd(args: String) =
+        "app_process -Djava.class.path=${app?.applicationInfo?.sourceDir} /system/bin ${ScreenPower::class.java.name} $args"
+    private val SCREEN = Regex("power [02]")
+
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL) || WM_SIZE.matches(cmd)
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL) || WM_SIZE.matches(cmd) ||
+            (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
     var state by mutableStateOf(State.NOT_RUNNING)
@@ -88,7 +95,7 @@ object Shell {
         ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /** Hay algo elegido que necesita Shizuku (bypass automático u ocultar Game Assistant): vale la pena avisar si falta. */
-    fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true
+    fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true || Monitor.screen(ctx) == Monitor.Screen.OFF
 
     fun requestPermission() {
         if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) Shizuku.requestPermission(REQUEST)
@@ -112,7 +119,8 @@ object Shell {
             waiter.join(TimeUnit.SECONDS.toMillis(4))
             if (waiter.isAlive) { p.destroy(); error("tardó demasiado") }
             reader.join(500)
-            if (code != 0) error("salió con $code")
+            // ScreenPower termina matándose (137 = SIGKILL) para saltarse los destructores de libandroid_servers.
+            if (code != 0 && !(code == 137 && command.contains(ScreenPower::class.java.name))) error("salió con $code")
             synchronized(out) { out.toString() }
         }.onFailure { Log.w(AutoModeService.TAG, "Shizuku: $command falló", it) }.getOrNull()
     }

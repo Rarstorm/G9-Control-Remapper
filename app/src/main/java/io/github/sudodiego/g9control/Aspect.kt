@@ -52,10 +52,11 @@ object Aspect {
     suspend fun toggle(ctx: Context): Boolean {
         val wide = is169(ctx)
         val size = if (wide) null else size169(ctx) ?: return false
-        if (canWrite(ctx) && runCatching { setDirect(size) }.onFailure { Log.w(AutoModeService.TAG, "wm size directo falló", it) }.isSuccess)
-            return true
-        val cmd = if (size == null) Shell.WM_RESET else Shell.wmSize(size.first, size.second)
-        return Shell.run(cmd) != null
+        val ok = (canWrite(ctx) && runCatching { setDirect(size) }.onFailure { Log.w(AutoModeService.TAG, "wm size directo falló", it) }.isSuccess) ||
+            Shell.run(if (size == null) Shell.WM_RESET else Shell.wmSize(size.first, size.second)) != null
+        // Con un monitor en espejo, la elección queda para ese monitor (la próxima vez que se conecte se aplica sola).
+        if (ok) Monitor.rememberChoice(ctx, !wide)
+        return ok
     }
 
     /** IWindowManager.setForcedDisplaySize / clearForcedDisplaySize, lo que usa `wm size` (pide WRITE_SECURE_SETTINGS). */

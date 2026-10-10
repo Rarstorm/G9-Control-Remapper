@@ -15,6 +15,8 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
@@ -248,7 +250,11 @@ class AutoModeService : AccessibilityService() {
                 AutoRules.ACTION_SWITCH -> i.getStringExtra("target")
                     ?.let { runCatching { PadMode.valueOf(it) }.getOrNull() }?.let(::manualSwitch)
                 // En esta tablet USER_PRESENT no siempre llega: al encender la pantalla se espera el desbloqueo.
-                Intent.ACTION_SCREEN_ON -> { unlockTries = 0; main.removeCallbacks(waitUnlock); main.post(waitUnlock) }
+                Intent.ACTION_SCREEN_ON -> {
+                    unlockTries = 0; main.removeCallbacks(waitUnlock); main.post(waitUnlock)
+                    // Al encenderse con el botón, el sistema vuelve a encender el panel: se vuelve a apagar si toca.
+                    if (panelOff) { panelOff = false; main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 1500) }
+                }
                 Intent.ACTION_USER_PRESENT -> { main.removeCallbacks(waitUnlock); onUnlocked() }
             }
         }
@@ -287,6 +293,87 @@ class AutoModeService : AccessibilityService() {
     }
 
     private val bypassCheck = Runnable { evaluateBypass() }
+
+    /**
+     * Monitor externo: en modo espejo, si para ese monitor (o para todos) se eligió 16:9, se pone solo; al
+     * desconectarlo (o pasar al modo extendido) se vuelve a 16:10, solo si lo había puesto G9 Control. La pantalla
+     * de la tablet queda como se eligió (oscura o apagada) mientras tanto. Se revisa un momento después de cada
+     * cambio de pantalla o de modo (el monitor tarda en asentarse).
+     */
+    private val monitorCheck = Runnable {
+        val m = Monitor.current(this)
+        val mirror = Monitor.mirror(this)
+        if (m != null && m.key != lastMonitor) { Monitor.remember(this, m); Log.d(TAG, "monitor conectado: ${m.name} (${m.key})") }
+        lastMonitor = m?.key
+        val want = m != null && mirror && Monitor.wants169(this, m.key)
+        val wide = Aspect.is169(this)
+        when {
+            want && !wide -> scope.launch { if (Aspect.toggle(this@AutoModeService)) { Monitor.setApplied(this@AutoModeService, true); Log.d(TAG, "monitor ${m?.name}: 16:9") } }
+            !want && wide && Monitor.applied(this) -> scope.launch {
+                Monitor.setApplied(this@AutoModeService, false)
+                if (Aspect.toggle(this@AutoModeService)) Log.d(TAG, "sin monitor en espejo: 16:10")
+            }
+        }
+        applyTabletScreen(if (m != null && mirror && !tabletWoken) Monitor.screen(this) else Monitor.Screen.NORMAL)
+        if (m == null) tabletWoken = false
+    }
+    private var lastMonitor: String? = null
+
+    /** El usuario encendió la pantalla de la tablet a mano (desde el panel de juego) con el monitor conectado. */
+    private var tabletWoken = false
+    /** Lo que G9 Control hizo con la pantalla de la tablet, para deshacerlo. */
+    private var darkView: View? = null
+    private var panelOff = false
+
+    /**
+     * Pantalla de la tablet con un monitor en espejo. Oscura: una ventana invisible del servicio pide el brillo
+     * "apagado", que Android deja en el mínimo (sin Shizuku; una app no puede apagar la luz del todo). Apagada: el
+     * panel entero, con Shizuku, como Extinguish (si no está, queda oscura).
+     */
+    private fun applyTabletScreen(target: Monitor.Screen) {
+        val off = target == Monitor.Screen.OFF && Shell.state == Shell.State.READY
+        val dark = target == Monitor.Screen.DIM || (target == Monitor.Screen.OFF && !off)
+        if (dark && darkView == null) {
+            val v = View(this)
+            val p = WindowManager.LayoutParams(
+                1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+            }
+            runCatching { getSystemService(WindowManager::class.java).addView(v, p); darkView = v; Log.d(TAG, "tablet oscura") }
+                .onFailure { Log.w(TAG, "no se pudo quitar la luz", it) }
+        } else if (!dark && darkView != null) {
+            runCatching { getSystemService(WindowManager::class.java).removeView(darkView) }
+            darkView = null
+            Log.d(TAG, "tablet con luz")
+        }
+        if (off != panelOff) {
+            panelOff = off
+            scope.launch { Shell.run(Shell.screenPower(!off))?.let { Log.d(TAG, if (off) "panel de la tablet apagado" else "panel de la tablet encendido") } }
+        }
+    }
+
+    /** Desde el panel de juego: ver la tablet un rato con el monitor conectado (o volver a oscurecerla). */
+    fun toggleTabletScreen() {
+        tabletWoken = !tabletWoken
+        main.removeCallbacks(monitorCheck)
+        monitorCheck.run()
+    }
+    /** La pantalla de la tablet está oscurecida por el monitor (para el texto del panel de juego). */
+    val tabletDark get() = darkView != null || panelOff
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = later()
+        override fun onDisplayRemoved(id: Int) = later()
+        override fun onDisplayChanged(id: Int) { if (id != android.view.Display.DEFAULT_DISPLAY) later() }
+        fun later() { main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 1500) }
+    }
+    private val monitorModeObserver = object : android.database.ContentObserver(main) {
+        override fun onChange(selfChange: Boolean) { main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 1500) }
+    }
 
     private var unlockTries = 0
     /** Revisa cada 300 ms (hasta 2 min) si ya se quitó la pantalla de bloqueo. */
@@ -334,6 +421,9 @@ class AutoModeService : AccessibilityService() {
         updateTouchpad()
         getSharedPreferences("g9", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, main)
+        getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(displayListener, main)
+        contentResolver.registerContentObserver(Settings.System.getUriFor(Monitor.MODE_KEY), false, monitorModeObserver)
+        main.postDelayed(monitorCheck, 2000)   // por si el monitor ya estaba conectado
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
@@ -552,6 +642,9 @@ class AutoModeService : AccessibilityService() {
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
+        if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
+            main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)
+        }
     }
 
     /**
@@ -689,9 +782,14 @@ class AutoModeService : AccessibilityService() {
 
     override fun onDestroy() {
         getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputListener)
+        getSystemService(android.hardware.display.DisplayManager::class.java).unregisterDisplayListener(displayListener)
+        runCatching { contentResolver.unregisterContentObserver(monitorModeObserver) }
         getSharedPreferences("g9", Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
         runCatching { unregisterReceiver(screenReceiver) }
         main.removeCallbacksAndMessages(null)
+        // Que la tablet no quede a oscuras si el servicio se apaga con el monitor conectado.
+        darkView?.let { v -> runCatching { getSystemService(WindowManager::class.java).removeView(v) } }
+        if (panelOff) Thread { kotlinx.coroutines.runBlocking { Shell.run(Shell.screenPower(true)) } }.start()
         if (::guide.isInitialized) guide.hide()
         if (::panel.isInitialized) panel.release()
         scope.cancel()

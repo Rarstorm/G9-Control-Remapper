@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AspectRatio
+import androidx.compose.material.icons.outlined.TabletAndroid
 import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.EnergySavingsLeaf
@@ -228,6 +229,11 @@ class GamePanel(private val svc: AutoModeService) {
             add(PanelItem(if (Aspect.is169(svc)) tr("Pantalla 16:10", "Screen 16:10") else tr("Pantalla 16:9", "Screen 16:9"), Icons.Outlined.AspectRatio) {
                 hide()
                 scope.launch { if (!Aspect.toggle(svc)) toast(tr("No se pudo cambiar la pantalla.", "Couldn't change the screen.")) }
+            })
+        // Con un monitor en espejo y la pantalla de la tablet oscurecida (o encendida a mano): verla un rato o volver.
+        if (Monitor.screen(svc) != Monitor.Screen.NORMAL && Monitor.current(svc) != null && Monitor.mirror(svc))
+            add(PanelItem(if (svc.tabletDark) tr("Encender la tablet", "Turn tablet on") else tr("Oscurecer la tablet", "Darken tablet"), Icons.Outlined.TabletAndroid) {
+                hide(); svc.toggleTabletScreen()
             })
         val mode = ModeSwitcher.detect()
         if (mode != null) PadMode.entries.filter { it != mode }.forEach { m ->
