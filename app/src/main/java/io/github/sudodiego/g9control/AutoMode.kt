@@ -143,13 +143,16 @@ object AutoRules {
 
     /**
      * Apps de streaming de PC o consola: ahí el botón Legion pasa normal (es el botón guía del PC: modo Xbox, Game
-     * Bar). Si la app toma el control por USB (Artemis en X-Input), Android ni lo ve y da igual.
+     * Bar). En Moonlight y Artemis solo durante la transmisión ([STREAM_ACTIVITY]); en su lista de PCs sigue siendo
+     * Atrás, para poder salir. Si la app toma el control por USB (Artemis en X-Input), Android ni lo ve y da igual.
      */
     val STREAMING = setOf(
         "com.limelight", "com.limelight.noir", "com.limelight.unofficial",   // Moonlight, Artemis
         "com.valvesoftware.steamlink", "com.microsoft.xboxone.smartglass", "com.gamepass",
         "com.metallic.chiaki", "com.playstation.remoteplay", "tv.parsec.client", "com.nvidia.geforcenow",
     )
+    /** La pantalla de transmisión de Moonlight y sus derivados (Artemis). */
+    const val STREAM_ACTIVITY = "com.limelight.Game"
     fun setLegionKeys(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("legion_keys", v).apply()
 
     /** Aviso de captura: dónde sale (por defecto arriba a la izquierda, como en la Switch) y con qué sonido. */
@@ -227,6 +230,8 @@ class AutoModeService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val main = Handler(Looper.getMainLooper())
     private var lastPackage: String? = null
+    /** Transmitiendo desde un PC o consola (el botón Legion pasa normal). */
+    private var streaming = false
     /** App al frente (la última que no es pasajera). */
     val foregroundApp: String? get() = lastPackage
     /** App con regla que está (o estuvo) al frente; al salir de ella se recuerda volver a Android. */
@@ -497,6 +502,12 @@ class AutoModeService : AccessibilityService() {
         if (isTransient(pkg)) return
         // Ventana de la app al frente, para capturarla sola (sin puntero ni superposiciones). -1 si Android no la entrega.
         appWindowId = event.windowId
+        // Transmitiendo desde el PC: el botón Legion es el guía de allá. En Moonlight/Artemis solo en su pantalla de
+        // transmisión (las clases de diálogos o vistas sueltas no cuentan: solo las de la propia app).
+        val cls = event.className?.toString().orEmpty()
+        if (pkg !in AutoRules.STREAMING) streaming = false
+        else if (!pkg.startsWith("com.limelight")) streaming = true
+        else if (cls.startsWith("com.limelight.")) streaming = cls == AutoRules.STREAM_ACTIVITY
         if (pkg == lastPackage) return
         appInFront = false
         val wasHidden = hiddenForApp
@@ -588,6 +599,7 @@ class AutoModeService : AccessibilityService() {
         if (panel.busy && (KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
                 event.isFromSource(InputDevice.SOURCE_DPAD))) return true
         if (panelChord(event)) return true
+        if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
@@ -666,12 +678,33 @@ class AutoModeService : AccessibilityService() {
      * también ([AutoRules.STREAMING]: ahí es el botón guía del PC o la consola). Llega con algo de retraso: el
      * firmware espera por si es un doble toque o Home + cruceta. Devuelve si el evento es nuestro.
      */
+    /** RB o LB apretados junto con Legion: no llegan a la app (ni al bajar ni al soltar). */
+    private val chordSwallow = mutableSetOf<Int>()
+
+    /**
+     * Legion + RB = captura (como Steam + R1 en el Steam Deck) y Legion + LB = Inicio. Con Legion apretado y antes
+     * de que se abra el panel; así Legion no hace Atrás al soltarlo.
+     */
+    private fun legionChord(e: KeyEvent): Boolean {
+        val k = e.keyCode
+        if (k != KeyEvent.KEYCODE_BUTTON_R1 && k != KeyEvent.KEYCODE_BUTTON_L1) return false
+        if (e.action == KeyEvent.ACTION_UP) return chordSwallow.remove(k)
+        if (e.repeatCount > 0) return k in chordSwallow
+        if (!legionOwned || !legionPending) return false
+        legionPending = false
+        main.removeCallbacks(legionHold)
+        chordSwallow += k
+        if (k == KeyEvent.KEYCODE_BUTTON_R1) { Log.d(TAG, "Legion + RB: captura"); panel.capture() }
+        else { Log.d(TAG, "Legion + LB: inicio"); performGlobalAction(GLOBAL_ACTION_HOME) }
+        return true
+    }
+
     private fun legionKey(e: KeyEvent): Boolean {
         if (e.keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (e.repeatCount > 0) return legionOwned
-                legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput && lastPackage !in AutoRules.STREAMING
+                legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput && !streaming
                 if (legionOwned) { legionPending = true; main.postDelayed(legionHold, 500) }
                 return legionOwned
             }
@@ -706,9 +739,24 @@ class AutoModeService : AccessibilityService() {
         if (android.os.Build.VERSION.SDK_INT < 34) return
         val want = AutoRules.touchpadShot(this) && ModeSwitcher.detect() == PadMode.DS5
         if (want == touchpadOn) return
-        runCatching { serviceInfo = serviceInfo.apply { motionEventSources = if (want) InputDevice.SOURCE_MOUSE else 0 } }
-            .onSuccess { touchpadOn = want; Log.d(TAG, "touchpad del G9: ${if (want) "capturas" else "normal"}") }
-            .onFailure { Log.w(TAG, "no se pudo pedir el touchpad", it) }
+        touchpadOn = want
+        applyMotionSources()
+        Log.d(TAG, "touchpad del G9: ${if (want) "capturas" else "normal"}")
+    }
+
+    /** Sticks y cruceta (como ejes) mientras el panel de juego está abierto: lo navegan y no llegan al juego. */
+    private var panelSticks = false
+    fun setPanelSticks(on: Boolean) {
+        if (android.os.Build.VERSION.SDK_INT < 34 || on == panelSticks) return
+        panelSticks = on
+        applyMotionSources()
+    }
+
+    private fun applyMotionSources() {
+        if (android.os.Build.VERSION.SDK_INT < 34) return
+        val sources = (if (touchpadOn) InputDevice.SOURCE_MOUSE else 0) or (if (panelSticks) InputDevice.SOURCE_JOYSTICK else 0)
+        runCatching { serviceInfo = serviceInfo.apply { motionEventSources = sources } }
+            .onFailure { Log.w(TAG, "no se pudieron pedir los eventos de movimiento", it) }
     }
 
     /**
@@ -717,6 +765,7 @@ class AutoModeService : AccessibilityService() {
      * llegan mientras [updateTouchpad] los pidió.
      */
     override fun onMotionEvent(event: MotionEvent) {
+        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) { if (panel.isOpen) panel.onStick(event); return }
         if (!event.isFromSource(InputDevice.SOURCE_MOUSE)) return
         val now = android.os.SystemClock.uptimeMillis()
         val quiet = now - lastTouchpad > 1500

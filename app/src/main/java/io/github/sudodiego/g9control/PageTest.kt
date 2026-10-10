@@ -82,7 +82,8 @@ private fun LegionPanel(s: AppState, a: MainActivity) {
     var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
         Panel {
-            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: panel de juego. En apps de streaming (Artemis, Moonlight…) pasa normal.", "Tap: Back. Hold: game panel. In streaming apps (Artemis, Moonlight…) it passes through.")) {
+            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: panel de juego. Con RB: captura; con LB: Inicio. Transmitiendo desde el PC (Artemis, Moonlight…) es el botón guía.",
+                    "Tap: Back. Hold: game panel. With RB: screenshot; with LB: Home. While streaming from a PC (Artemis, Moonlight…) it's the guide button.")) {
                 legion = it; AutoRules.setLegionKeys(a, it)
             }
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))

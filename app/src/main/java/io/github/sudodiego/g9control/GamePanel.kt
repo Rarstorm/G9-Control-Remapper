@@ -24,6 +24,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,18 +85,22 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Una acción del panel de juego. [system]: va en la fila de abajo (Android: inicio, brillo, volumen…). [adjust]:
- * se ajusta con X (−1) e Y (+1) mientras está elegida, y [hint] dice qué hace cada botón.
+ * Una acción del panel de juego. [system]: va en la fila de abajo (Android: inicio, brillo, volumen…).
+ * Con [adjust], A no la ejecuta: entra a ajustarla (← → llaman a [adjust] con −1 o +1, Y llama a [alt], A o B
+ * salen); [level] (0..1) se dibuja como una barra y [hint] dice qué hace cada botón mientras se ajusta.
  */
 private class PanelItem(
     val label: String, val icon: ImageVector, val system: Boolean = false,
-    val adjust: ((Int) -> Unit)? = null, val hint: String? = null, val run: () -> Unit
+    val adjust: ((Int) -> Unit)? = null, val level: Float? = null, val alt: (() -> Unit)? = null,
+    val hint: String? = null, val run: () -> Unit = {}
 )
 
 /** Estado que dibuja el panel. */
 private class PanelUi {
     var items by mutableStateOf(listOf<PanelItem>())
     var sel by mutableIntStateOf(0)
+    /** Ajustando el ítem elegido (brillo, volumen). */
+    var editing by mutableStateOf(false)
 }
 
 /**
@@ -119,9 +124,11 @@ class GamePanel(private val svc: AutoModeService) {
 
     fun show() {
         inPerfMenu = false
+        ui.editing = false
         ui.items = items()
         ui.sel = 0
         if (view == null) create()
+        svc.setPanelSticks(true)
         poke()
         // Bypass: igual, lo que se sabe al instante y se confirma en segundo plano (también fuera de los juegos).
         if (Shell.state == Shell.State.READY) scope.launch {
@@ -156,6 +163,10 @@ class GamePanel(private val svc: AutoModeService) {
 
     fun hide() {
         main.removeCallbacks(timeout)
+        main.removeCallbacks(stickRepeat)
+        stickDir = 0 to 0
+        ui.editing = false
+        svc.setPanelSticks(false)
         view?.let { runCatching { wm.removeView(it) } }
         view = null
         owner?.destroy()
@@ -189,18 +200,89 @@ class GamePanel(private val svc: AutoModeService) {
         if (!pad) return false
         if (e.action != KeyEvent.ACTION_DOWN) return true
         poke()
+        val item = ui.items.getOrNull(ui.sel)
+        if (ui.editing && item?.adjust != null) {
+            when (e.keyCode) {
+                KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_DPAD_LEFT -> { item.adjust.invoke(-1); refresh() }
+                KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_DPAD_RIGHT -> { item.adjust.invoke(1); refresh() }
+                KeyEvent.KEYCODE_BUTTON_Y -> if (e.repeatCount == 0) { item.alt?.invoke(); refresh() }
+                KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK ->
+                    if (e.repeatCount == 0) ui.editing = false
+                KeyEvent.KEYCODE_BUTTON_MODE -> if (e.repeatCount == 0) hide()
+            }
+            return true
+        }
         when (e.keyCode) {
-            KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> move(-1)
-            KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_DOWN -> move(1)
-            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER ->
-                if (e.repeatCount == 0) ui.items.getOrNull(ui.sel)?.run?.invoke()
-            // Brillo y volumen: X baja, Y sube (mantener repite).
-            KeyEvent.KEYCODE_BUTTON_X -> ui.items.getOrNull(ui.sel)?.adjust?.let { it(-1); refresh() }
-            KeyEvent.KEYCODE_BUTTON_Y -> ui.items.getOrNull(ui.sel)?.adjust?.let { it(1); refresh() }
+            KeyEvent.KEYCODE_BUTTON_L1 -> move(-1)
+            KeyEvent.KEYCODE_BUTTON_R1 -> move(1)
+            KeyEvent.KEYCODE_DPAD_LEFT -> moveGrid(-1, 0)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> moveGrid(1, 0)
+            KeyEvent.KEYCODE_DPAD_UP -> moveGrid(0, -1)
+            KeyEvent.KEYCODE_DPAD_DOWN -> moveGrid(0, 1)
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER -> if (e.repeatCount == 0) {
+                if (item?.adjust != null) ui.editing = true else item?.run?.invoke()
+            }
             // B o tocar el botón Legion lo cierran (mantenerlo es lo que lo abre).
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_MODE -> if (e.repeatCount == 0) hide()
         }
         return true
+    }
+
+    /**
+     * Stick izquierdo o cruceta (en X-Input y DS5 la cruceta llega como eje, no como tecla): ← → dentro de la fila,
+     * ↑ ↓ entre filas; ajustando, ← → cambian el valor. Un paso al inclinarlo y, si se mantiene, se repite.
+     */
+    fun onStick(e: MotionEvent) {
+        val hx = e.getAxisValue(MotionEvent.AXIS_HAT_X)
+        val hy = e.getAxisValue(MotionEvent.AXIS_HAT_Y)
+        val x = if (kotlin.math.abs(hx) > 0.5f) hx else e.getAxisValue(MotionEvent.AXIS_X)
+        val y = if (kotlin.math.abs(hy) > 0.5f) hy else e.getAxisValue(MotionEvent.AXIS_Y)
+        // El eje más inclinado gana (en diagonal no se mueve en los dos).
+        val dir = when {
+            kotlin.math.abs(x) >= kotlin.math.abs(y) && kotlin.math.abs(x) > 0.6f -> (if (x > 0) 1 else -1) to 0
+            kotlin.math.abs(y) > 0.6f -> 0 to (if (y > 0) 1 else -1)
+            kotlin.math.abs(x) < 0.3f && kotlin.math.abs(y) < 0.3f -> 0 to 0
+            else -> return   // entre medio: se mantiene lo de antes
+        }
+        if (dir == stickDir) return
+        stickDir = dir
+        main.removeCallbacks(stickRepeat)
+        if (dir == 0 to 0) return
+        stickStep()
+        main.postDelayed(stickRepeat, 400)
+    }
+
+    private var stickDir = 0 to 0
+    private val stickRepeat: Runnable = object : Runnable {
+        override fun run() {
+            if (stickDir == 0 to 0 || !isOpen) return
+            stickStep()
+            main.postDelayed(this, 140)
+        }
+    }
+
+    private fun stickStep() {
+        poke()
+        val (dx, dy) = stickDir
+        val item = ui.items.getOrNull(ui.sel)
+        if (ui.editing && item?.adjust != null) {
+            if (dx != 0) { item.adjust.invoke(dx); refresh() }
+            return
+        }
+        moveGrid(dx, dy)
+    }
+
+    /** Mover en la grilla: las dos filas (el juego arriba, Android abajo), sin dar la vuelta. */
+    private fun moveGrid(dx: Int, dy: Int) {
+        val rows = ui.items.indices.partition { !ui.items[it].system }.toList().filter { it.isNotEmpty() }
+        val r = rows.indexOfFirst { ui.sel in it }.takeIf { it >= 0 } ?: return
+        val c = rows[r].indexOf(ui.sel)
+        if (dy != 0) {
+            val nr = (r + dy).coerceIn(0, rows.size - 1)
+            if (nr != r) ui.sel = rows[nr][c.coerceAtMost(rows[nr].size - 1)]
+        } else if (dx != 0) {
+            ui.sel = rows[r][(c + dx).coerceIn(0, rows[r].size - 1)]
+        }
     }
 
     /** Vuelve a armar los ítems (cambió un valor: brillo, volumen) sin mover la selección. */
@@ -271,20 +353,23 @@ class GamePanel(private val svc: AutoModeService) {
         })
         if (SystemLevels.canBrightness(svc)) {
             val auto = SystemLevels.autoBrightness(svc)
+            val b = SystemLevels.brightness(svc)
             add(PanelItem(
-                if (auto) tr("Brillo auto", "Auto brightness") else tr("Brillo ${SystemLevels.brightness(svc)} %", "Brightness ${SystemLevels.brightness(svc)} %"),
+                if (auto) tr("Brillo auto", "Auto brightness") else tr("Brillo $b %", "Brightness $b %"),
                 if (auto) Icons.Outlined.BrightnessAuto else Icons.Outlined.BrightnessMedium, system = true,
-                adjust = { SystemLevels.stepBrightness(svc, it) },
-                hint = tr("X − · Y + · A automático", "X − · Y + · A auto")
-            ) { SystemLevels.setAutoBrightness(svc, !auto); refresh() })
+                adjust = { SystemLevels.stepBrightness(svc, it) }, level = b / 100f,
+                alt = { SystemLevels.setAutoBrightness(svc, !SystemLevels.autoBrightness(svc)) },
+                hint = tr("← → ajustar · Y automático · A listo", "← → adjust · Y auto · A done")
+            ))
         }
         val vol = SystemLevels.volume(svc)
         add(PanelItem(
             if (vol == 0) tr("Silencio", "Muted") else tr("Volumen $vol %", "Volume $vol %"),
             if (vol == 0) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp, system = true,
-            adjust = { SystemLevels.stepVolume(svc, it) },
-            hint = tr("X − · Y + · A silenciar", "X − · Y + · A mute")
-        ) { SystemLevels.toggleMute(svc); refresh() })
+            adjust = { SystemLevels.stepVolume(svc, it) }, level = vol / 100f,
+            alt = { SystemLevels.toggleMute(svc) },
+            hint = tr("← → ajustar · Y silenciar · A listo", "← → adjust · Y mute · A done")
+        ))
         val mode = ModeSwitcher.detect()
         if (mode != null) PadMode.entries.filter { it != mode }.forEach { m ->
             add(PanelItem(m.label, Icons.Outlined.SportsEsports, system = true) { hide(); svc.manualSwitch(m) })
@@ -314,11 +399,22 @@ class GamePanel(private val svc: AutoModeService) {
      * Assistant, este panel). Si Android no la entrega, la captura normal de toda la pantalla.
      */
     private fun screenshot() {
+        // Android da una captura por segundo a los servicios de accesibilidad: más seguido falla (y antes se caía a
+        // la captura del sistema). Si es muy pronto, la siguiente espera su turno; como mucho una en espera.
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now < nextShot) {
+            if (!shotQueued) { shotQueued = true; main.postDelayed({ shotQueued = false; screenshot() }, nextShot - now) }
+            return
+        }
+        nextShot = now + 1100
         // La ventana con el foco ahora (la del evento puede ser una pasajera que ya no existe).
         val id = focusedAppWindow().takeIf { it >= 0 } ?: svc.appWindowId
-        if (Build.VERSION.SDK_INT >= 34 && id >= 0) {
-            Log.d(AutoModeService.TAG, "captura de la ventana $id (del evento: ${svc.appWindowId})")
-            svc.takeScreenshotOfWindow(id, io, object : AccessibilityService.TakeScreenshotCallback {
+        // Un launcher (Cocoon, el de ZUI) deja ver el fondo de pantalla, que es otra ventana: con solo la suya el
+        // fondo sale negro. Ahí, toda la pantalla (el panel ya se quitó; el puntero puede salir).
+        val launcher = isLauncher(svc.foregroundApp)
+        if (Build.VERSION.SDK_INT >= 34 && (id >= 0 || launcher)) {
+            Log.d(AutoModeService.TAG, if (launcher) "captura de la pantalla (launcher)" else "captura de la ventana $id (del evento: ${svc.appWindowId})")
+            val callback = object : AccessibilityService.TakeScreenshotCallback {
                 override fun onSuccess(r: AccessibilityService.ScreenshotResult) {
                     val saved = runCatching {
                         val bmp = try {
@@ -339,14 +435,31 @@ class GamePanel(private val svc: AutoModeService) {
                 }
                 override fun onFailure(code: Int) {
                     Log.w(AutoModeService.TAG, "captura de la ventana $id falló (código $code)")
-                    main.post { fullScreenshot() }
+                    // Muy seguido: se reintenta en su turno, no con la captura del sistema (que sale distinta).
+                    if (code == AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT) main.post {
+                        nextShot = android.os.SystemClock.uptimeMillis() + 1100
+                        if (!shotQueued) { shotQueued = true; main.postDelayed({ shotQueued = false; screenshot() }, 1100) }
+                    } else main.post { fullScreenshot() }
                 }
-            })
+            }
+            if (launcher) svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, io, callback)
+            else svc.takeScreenshotOfWindow(id, io, callback)
             return
         }
         Log.w(AutoModeService.TAG, "sin ventana para capturar (id $id)")
         fullScreenshot()
     }
+
+    /** La app es un launcher (responde a Inicio): su fondo es el fondo de pantalla del sistema. */
+    private val launchers: Set<String> by lazy {
+        svc.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            .map { it.activityInfo.packageName }.toSet()
+    }
+    private fun isLauncher(pkg: String?) = pkg != null && pkg in launchers
+
+    /** Cuándo se puede sacar la próxima captura, y si ya hay una esperando su turno. */
+    private var nextShot = 0L
+    private var shotQueued = false
 
     /** Ventana de app con el foco (o activa), de la lista de ventanas; solo su número, no su contenido. */
     private fun focusedAppWindow(): Int {
@@ -621,7 +734,9 @@ class GamePanel(private val svc: AutoModeService) {
                     // La tarjeta se mide con el ancho que necesite (sin el límite de la ventana) y la ventana toma
                     // ese ancho: así no tapa el juego a los lados (un gesto o un toque ahí cerraba el panel).
                     PanelCard(ui, Modifier.wrapContentWidth(unbounded = true).onSizeChanged { fitWidth(it.width) }) { i ->
-                        ui.sel = i; ui.items.getOrNull(i)?.run?.invoke()
+                        ui.sel = i
+                        // Tocar Brillo o Volumen entra al ajuste (o sale).
+                        ui.items.getOrNull(i)?.let { if (it.adjust != null) ui.editing = !ui.editing else it.run() }
                     }
                 }
             }
@@ -666,13 +781,13 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
             rows.forEachIndexed { r, row ->
                 if (r > 0) Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEach { (i, item) -> PanelTile(item, i == ui.sel) { onPick(i) } }
+                    row.forEach { (i, item) -> PanelTile(item, i == ui.sel, ui.editing && i == ui.sel) { onPick(i) } }
                 }
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                ui.items.getOrNull(ui.sel)?.hint?.let { "$it · B " + tr("cerrar", "close") }
-                    ?: tr("LB / RB mover · A elegir · B cerrar", "LB / RB move · A select · B close"),
+                ui.items.getOrNull(ui.sel)?.takeIf { ui.editing }?.hint
+                    ?: tr("Stick, cruceta o LB / RB mover · A elegir · B cerrar", "Stick, D-pad or LB / RB move · A select · B close"),
                 color = PANEL_MUTED, fontSize = 12.sp
             )
         }
@@ -680,9 +795,9 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
 }
 
 @Composable
-private fun PanelTile(item: PanelItem, on: Boolean, onClick: () -> Unit) {
+private fun PanelTile(item: PanelItem, on: Boolean, editing: Boolean, onClick: () -> Unit) {
     Surface(
-        color = TILE, shape = RoundedCornerShape(16.dp),
+        color = if (editing) PANEL_ACCENT.copy(alpha = 0.18f) else TILE, shape = RoundedCornerShape(16.dp),
         border = BorderStroke(2.dp, if (on) PANEL_ACCENT else Color.Transparent),
         modifier = Modifier.size(width = 112.dp, height = 96.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
     ) {
@@ -691,6 +806,13 @@ private fun PanelTile(item: PanelItem, on: Boolean, onClick: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text(item.label, color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2,
                 fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+            // Brillo y volumen: barra con el nivel (más visible mientras se ajusta).
+            item.level?.let { lv ->
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.15f))) {
+                    Box(Modifier.fillMaxWidth(lv.coerceIn(0f, 1f)).fillMaxHeight().background(if (editing || on) PANEL_ACCENT else PANEL_MUTED))
+                }
+            }
         }
     }
 }
