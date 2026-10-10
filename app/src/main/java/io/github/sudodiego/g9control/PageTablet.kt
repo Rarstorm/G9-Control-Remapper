@@ -157,9 +157,17 @@ private fun MonitorPanel(s: AppState, a: MainActivity) {
             Text(tr("Pantalla de la tablet", "Tablet screen"), fontSize = 14.sp)
             ChoiceChips(
                 listOf(Monitor.Screen.NORMAL to tr("Normal", "Normal"), Monitor.Screen.DIM to tr("Oscura", "Dim"),
-                    Monitor.Screen.OFF to tr("Apagada", "Off")), screen
+                    Monitor.Screen.NO_LIGHT to tr("Sin luz", "No light"), Monitor.Screen.OFF to tr("Apagada", "Off")), screen
             ) { screen = it; Monitor.setScreen(a, it) }
-            if (screen == Monitor.Screen.OFF && !ready) Hint(tr("Apagada necesita Shizuku; sin él queda oscura.", "Off needs Shizuku; without it, it's just dimmed."))
+            Text(
+                when (screen) {
+                    Monitor.Screen.NORMAL -> tr("La tablet sigue como siempre.", "The tablet stays as usual.")
+                    Monitor.Screen.DIM -> tr("Brillo al mínimo. Sin Shizuku.", "Minimum brightness. No Shizuku needed.")
+                    Monitor.Screen.NO_LIGHT -> tr("Sin luz, con Shizuku (como Extinguish).", "Backlight off, with Shizuku (like Extinguish).")
+                    Monitor.Screen.OFF -> tr("Panel apagado, con Shizuku.", "Panel off, with Shizuku.")
+                }, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (screen >= Monitor.Screen.NO_LIGHT && !ready) Hint(tr("Sin Shizuku queda oscura.", "Without Shizuku it's just dimmed."))
             if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. Se enciende desde el panel de juego.", "With the monitor in mirror mode. Turn it on from the game panel."))
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
             if (known.isNotEmpty() && Aspect.available(a)) {

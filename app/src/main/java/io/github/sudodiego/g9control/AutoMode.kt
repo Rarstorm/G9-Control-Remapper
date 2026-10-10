@@ -252,8 +252,13 @@ class AutoModeService : AccessibilityService() {
                 // En esta tablet USER_PRESENT no siempre llega: al encender la pantalla se espera el desbloqueo.
                 Intent.ACTION_SCREEN_ON -> {
                     unlockTries = 0; main.removeCallbacks(waitUnlock); main.post(waitUnlock)
-                    // Al encenderse con el botón, el sistema vuelve a encender el panel: se vuelve a apagar si toca.
-                    if (panelOff) { panelOff = false; main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 1500) }
+                    // Encendida con el botón: el sistema vuelve a encender el panel y queda así (es la forma de ver la
+                    // tablet si el control no sirve con el monitor). Se oscurece otra vez desde el panel de juego o al
+                    // volver a conectar el monitor.
+                    if (panelOff || lightOff || darkView != null) {
+                        panelOff = false; lightOff = false; tabletWoken = true
+                        main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 500)
+                    }
                 }
                 Intent.ACTION_USER_PRESENT -> { main.removeCallbacks(waitUnlock); onUnlocked() }
             }
@@ -328,11 +333,20 @@ class AutoModeService : AccessibilityService() {
     /**
      * Pantalla de la tablet con un monitor en espejo. Oscura: una ventana invisible del servicio pide el brillo
      * "apagado", que Android deja en el mínimo (sin Shizuku; una app no puede apagar la luz del todo). Apagada: el
-     * panel entero, con Shizuku, como Extinguish (si no está, queda oscura).
+     * panel entero, con Shizuku, como Extinguish (si no está, queda oscura). Sin luz: la ventana de Oscura (así el
+     * brillo automático no lo cambia) y, encima, el brillo en -1 con Shizuku, lo que hace Extinguish; al quitar la
+     * ventana Android vuelve a poner el brillo de siempre.
      */
     private fun applyTabletScreen(target: Monitor.Screen) {
-        val off = target == Monitor.Screen.OFF && Shell.state == Shell.State.READY
-        val dark = target == Monitor.Screen.DIM || (target == Monitor.Screen.OFF && !off)
+        val ready = Shell.state == Shell.State.READY
+        val off = target == Monitor.Screen.OFF && ready
+        val black = target == Monitor.Screen.NO_LIGHT && ready
+        val dark = !off && target != Monitor.Screen.NORMAL
+        // Saliendo de Sin luz: se quita la ventana para que Android vuelva a aplicar el brillo (después se pone si toca).
+        if (lightOff && !black) {
+            lightOff = false
+            darkView?.let { v -> runCatching { getSystemService(WindowManager::class.java).removeView(v) }; darkView = null }
+        }
         if (dark && darkView == null) {
             val v = View(this)
             val p = WindowManager.LayoutParams(
@@ -355,7 +369,13 @@ class AutoModeService : AccessibilityService() {
             panelOff = off
             scope.launch { Shell.run(Shell.screenPower(!off))?.let { Log.d(TAG, if (off) "panel de la tablet apagado" else "panel de la tablet encendido") } }
         }
+        if (black && !lightOff) {
+            lightOff = true
+            // Un momento después de la ventana: si no, el brillo mínimo que pide ella llega después y pisa el -1.
+            scope.launch { kotlinx.coroutines.delay(800); if (lightOff) Shell.run(Shell.SCREEN_LIGHT_OFF)?.let { Log.d(TAG, "tablet sin luz") } }
+        }
     }
+    private var lightOff = false
 
     /** Desde el panel de juego: ver la tablet un rato con el monitor conectado (o volver a oscurecerla). */
     fun toggleTabletScreen() {
@@ -642,6 +662,7 @@ class AutoModeService : AccessibilityService() {
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
+        if (key == "monitor_screen") tabletWoken = false   // la opción recién elegida se ve al tiro
         if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
             main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)
         }

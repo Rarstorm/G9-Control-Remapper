@@ -42,11 +42,13 @@ object Shell {
     // Límite de carga de ZUI ("Maximum charge limit"): 89 = getStopChargingStatus, 48 = getMaxBatteryChargingLevel.
     const val LIMIT_GET = "service call zuibattery 89"
     const val LIMIT_LEVEL = "service call zuibattery 48"
-    // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel.
+    // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel, o apagar
+    // solo la luz (brillo -1, como Extinguish; vuelve sola cuando Android cambia el brillo).
     fun screenPower(on: Boolean) = screenCmd("power ${if (on) 2 else 0}")
+    val SCREEN_LIGHT_OFF get() = screenCmd("light -1")
     private fun screenCmd(args: String) =
         "app_process -Djava.class.path=${app?.applicationInfo?.sourceDir} /system/bin ${ScreenPower::class.java.name} $args"
-    private val SCREEN = Regex("power [02]")
+    private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
         cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL) || WM_SIZE.matches(cmd) ||
@@ -95,7 +97,7 @@ object Shell {
         ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /** Hay algo elegido que necesita Shizuku (bypass automático u ocultar Game Assistant): vale la pena avisar si falta. */
-    fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true || Monitor.screen(ctx) == Monitor.Screen.OFF
+    fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true || Monitor.screen(ctx).let { it == Monitor.Screen.OFF || it == Monitor.Screen.NO_LIGHT }
 
     fun requestPermission() {
         if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) Shizuku.requestPermission(REQUEST)

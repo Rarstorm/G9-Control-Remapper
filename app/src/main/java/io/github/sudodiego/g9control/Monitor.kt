@@ -23,7 +23,7 @@ object Monitor {
     enum class Fit { ALL, WIDE, NATIVE }
 
     /** La pantalla de la tablet con un monitor en espejo. */
-    enum class Screen { NORMAL, DIM, OFF }
+    enum class Screen { NORMAL, DIM, NO_LIGHT, OFF }
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences("g9", Context.MODE_PRIVATE)
 
