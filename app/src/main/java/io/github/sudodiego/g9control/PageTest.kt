@@ -7,6 +7,11 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,9 +70,24 @@ fun pressedNow(s: AppState): Set<PadKey> = buildSet {
 fun ControlsPage(s: AppState, a: MainActivity) {
     val right: @Composable ColumnScope.() -> Unit = {
         ControlOptionsPanel(s, a)
+        LegionPanel(s, a)
         if (s.otherKeys.isNotEmpty()) Panel(tr("Otros botones", "Other buttons")) { Text(s.otherKeys.joinToString("\n"), fontSize = 13.sp) }
     }
     DrawingPane(drawing = { TestPanel(s) }, side = right)
+}
+
+/** Botón Legion (Home del control) en Android: lo hace G9 Control, no el control, así que siempre se puede cambiar. */
+@Composable
+private fun LegionPanel(s: AppState, a: MainActivity) {
+    var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
+    CompositionLocalProvider(LocalEditable provides true) {
+        Panel {
+            SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: ajustes rápidos.", "Tap: Back. Hold: quick settings.")) {
+                legion = it; AutoRules.setLegionKeys(a, it)
+            }
+            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (en Juegos).", "Needs the accessibility service (in Games)."))
+        }
+    }
 }
 
 @Composable

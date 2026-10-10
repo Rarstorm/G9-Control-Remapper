@@ -878,7 +878,7 @@ class MainActivity : ComponentActivity() {
 }
 
 /** Orden del menú y de LB/RB. TEST = "Botones"; DIAGNOSTICS = "Ajustes". */
-enum class Page { HOME, LIGHTS, STICKS, VIBRATION, TEST, BACK, PROFILES, AUTO, DIAGNOSTICS }
+enum class Page { HOME, LIGHTS, STICKS, VIBRATION, TEST, BACK, PROFILES, AUTO, TABLET, DIAGNOSTICS }
 
 enum class LightTarget { BOTH, LEFT, RIGHT, HOME }
 

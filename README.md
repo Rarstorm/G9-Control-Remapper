@@ -35,6 +35,7 @@ It also does a few things the official app can't:
 | **Games** | Choose which mode each app opens in; the controller switches when you open it. |
 | **Game panel** | L3 + R3 in any game: game-only screenshot (no pointer or overlays) with a thumbnail notice, Game Assistant, performance mode, 16:9 screen and controller mode switching. |
 | **Performance** | Power saving, Balanced or Beast (Game Assistant's modes) from the controller, without touching the screen. Needs Shizuku. |
+| **Bypass charging** | While gaming plugged in, the charger powers the tablet and the battery doesn't charge or heat up. Manual (also from the game panel) or automatic, with the minimum battery and temperature you choose. Needs Shizuku. |
 | **16:9 screen** | For an external monitor: the picture fills it with no borders. |
 | **Legion button** | Tap: Back. Hold: quick settings. |
 | **Swapped volume** | Optional: the tablet's lower button turns the volume up and the upper one turns it down. |
@@ -80,7 +81,7 @@ Almost everything works with nothing extra. Two things need more than a regular 
 
 - **16:9 screen:** a permission you grant once from a computer; it stays (also after a reboot or an update):
   `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
-- **Performance mode and hiding Game Assistant:** [Shizuku](https://shizuku.rikka.app/) running (it must be started after every reboot). In Settings → Game panel → Shizuku, tap **Grant permission to G9 Control**. G9 Control only asks Shizuku for a fixed list of commands: show or hide Game Assistant, read its log to know the mode and, if the permission above is missing, change the screen size.
+- **Bypass charging, performance mode and hiding Game Assistant:** [Shizuku](https://shizuku.rikka.app/) running (it must be started after every reboot). In the Tablet tab → Shizuku, tap **Grant permission to G9 Control**. The ROM only lets system apps use these, and Shizuku's shell counts as one. G9 Control only asks it for a fixed list of commands: turn on or read bypass and the charge limit, show or hide Game Assistant, read its log to know the mode and, if the permission above is missing, change the screen size.
 
 ## Limitations
 

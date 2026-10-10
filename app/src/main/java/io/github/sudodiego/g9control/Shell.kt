@@ -34,7 +34,16 @@ object Shell {
     const val WM_RESET = "wm size reset"
     fun wmSize(w: Int, h: Int) = "wm size ${w}x$h"
     private val WM_SIZE = Regex("wm size (reset|\\d{3,4}x\\d{3,4})")
-    private fun allowed(cmd: String) = cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG) || WM_SIZE.matches(cmd)
+    // Bypass charging: el servicio de batería de ZUI (IZuiBatteryManager) solo acepta apps del sistema, y shell lo es
+    // (com.android.shell). 20 = setBypassChargingStatus, 21 = getBypassChargingStatus.
+    const val BYPASS_GET = "service call zuibattery 21"
+    const val BYPASS_ON = "service call zuibattery 20 i32 1"
+    const val BYPASS_OFF = "service call zuibattery 20 i32 0"
+    // Límite de carga de ZUI ("Maximum charge limit"): 89 = getStopChargingStatus, 48 = getMaxBatteryChargingLevel.
+    const val LIMIT_GET = "service call zuibattery 89"
+    const val LIMIT_LEVEL = "service call zuibattery 48"
+    private fun allowed(cmd: String) =
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL) || WM_SIZE.matches(cmd)
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
     var state by mutableStateOf(State.NOT_RUNNING)

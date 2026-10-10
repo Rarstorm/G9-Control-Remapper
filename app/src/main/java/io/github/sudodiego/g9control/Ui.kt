@@ -91,6 +91,8 @@ private val NAV = listOf(
     NavItem(Page.BACK, "Traseros", "Paddles", Icons.Outlined.FlipToBack, Icons.Filled.FlipToBack),
     NavItem(Page.PROFILES, "Perfiles", "Profiles", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
     NavItem(Page.AUTO, "Juegos", "Games", Icons.Outlined.Apps, Icons.Filled.Apps),
+    // Lo que es de la tablet y no del control (en la barra va después de un divisor).
+    NavItem(Page.TABLET, "Tablet", "Tablet", Icons.Outlined.TabletAndroid, Icons.Filled.TabletAndroid),
     NavItem(Page.DIAGNOSTICS, "Ajustes", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
@@ -152,6 +154,9 @@ private fun TabBar(s: AppState, a: MainActivity) {
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 NAV.forEach { item ->
+                    // Divisor entre lo del control y lo de la tablet.
+                    if (item.page == Page.TABLET)
+                        VerticalDivider(Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp).height(24.dp), color = c.outlineVariant)
                     val sel = s.page == item.page
                     // El foco del control se marca con un contorno, no con relleno: con relleno parecía otra pestaña
                     // elegida (se veían dos resaltadas a la vez).
@@ -302,6 +307,7 @@ private fun PageHost(s: AppState, a: MainActivity, modifier: Modifier) {
                         Page.AUTO -> AutoPage(s, a)
                         Page.TEST -> ControlsPage(s, a)
                         Page.BACK -> BackPage(s, a)
+                        Page.TABLET -> TabletPage(s, a)
                         Page.DIAGNOSTICS -> DiagnosticsPage(s, a)
                     }
                 }

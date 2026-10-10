@@ -112,6 +112,20 @@ object AutoRules {
     fun gaHidden(ctx: Context): Boolean? = sp(ctx).takeIf { it.contains("ga_hidden") }?.getBoolean("ga_hidden", false)
     fun setGaHidden(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("ga_hidden", v).apply()
 
+    /**
+     * Bypass automático propio (como el inteligente de Game Assistant, pero con los rangos que se elijan): enchufada,
+     * con batería ≥ [smartBypassLevel] y temperatura ≥ [smartBypassTemp] (0 = sin mínimo), y si [smartBypassGames],
+     * solo en juegos. Necesita Shizuku.
+     */
+    fun smartBypass(ctx: Context) = sp(ctx).getBoolean("smart_bypass", false)
+    fun setSmartBypass(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("smart_bypass", v).apply()
+    fun smartBypassLevel(ctx: Context) = sp(ctx).getInt("smart_bypass_level", 40)
+    fun setSmartBypassLevel(ctx: Context, v: Int) = sp(ctx).edit().putInt("smart_bypass_level", v).apply()
+    fun smartBypassTemp(ctx: Context) = sp(ctx).getInt("smart_bypass_temp", 0)
+    fun setSmartBypassTemp(ctx: Context, v: Int) = sp(ctx).edit().putInt("smart_bypass_temp", v).apply()
+    fun smartBypassGames(ctx: Context) = sp(ctx).getBoolean("smart_bypass_games", true)
+    fun setSmartBypassGames(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("smart_bypass_games", v).apply()
+
     /** Botones de volumen de la tablet invertidos (el de abajo sube, el de arriba baja). Los del control no cambian. */
     fun swapVolume(ctx: Context) = sp(ctx).getBoolean("swap_volume", false)
     fun setSwapVolume(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("swap_volume", v).apply()
@@ -214,6 +228,13 @@ class AutoModeService : AccessibilityService() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_SCREEN_OFF -> { main.removeCallbacks(waitUnlock); guide.suspendForLock() }
+                // Sin cargador el bypass no sirve, y si quedara activo la próxima vez que se enchufe no cargaría.
+                Intent.ACTION_POWER_DISCONNECTED -> {
+                    ZuiBattery.manualOverride = false
+                    smartOn = false
+                    scope.launch { if (ZuiBattery.readBypass() == true) ZuiBattery.setBypass(false, manual = false) }
+                }
+                Intent.ACTION_BATTERY_CHANGED -> { lastBattery = i; evaluateBypass() }
                 AutoRules.ACTION_PREVIEW -> when (val kind = i.getStringExtra("kind") ?: "banner") {
                     "shot" -> panel.previewShot()
                     else -> guide.preview(kind)
@@ -226,6 +247,40 @@ class AutoModeService : AccessibilityService() {
             }
         }
     }
+
+    /** Último aviso de la batería (nivel, temperatura, cargador). */
+    private var lastBattery: Intent? = null
+    /** El bypass automático lo activó (solo apaga lo que él activó). */
+    private var smartOn = false
+
+    /**
+     * Bypass automático: enchufada, con batería ≥ mínimo y temperatura ≥ mínimo (y en un juego, si se eligió). Una vez
+     * activo se mantiene hasta que la batería baje 2 % o la temperatura 1 °C del mínimo (si no, parpadearía). Si el
+     * usuario lo cambió a mano, no lo toca hasta desconectar o cambiar de app.
+     */
+    private fun evaluateBypass() {
+        val i = lastBattery ?: return
+        if (!AutoRules.smartBypass(this)) {
+            if (smartOn) { smartOn = false; scope.launch { ZuiBattery.setBypass(false, manual = false) } }
+            return
+        }
+        if (ZuiBattery.manualOverride || Shell.state != Shell.State.READY) return
+        val plugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+        val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 0) * 100 /
+            i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        val temp = i.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) / 10f
+        val game = !AutoRules.smartBypassGames(this) || ZuiGame.inGame(this)
+        val minLevel = AutoRules.smartBypassLevel(this)
+        val minTemp = AutoRules.smartBypassTemp(this)
+        val margin = if (smartOn) 2 else 0
+        val want = plugged && game && level >= minLevel - margin && (minTemp == 0 || temp >= minTemp - margin / 2f)
+        if (want == smartOn) return
+        Log.d(TAG, "bypass automático: ${if (want) "activar" else "desactivar"} (batería $level %, $temp °C, juego $game)")
+        smartOn = want
+        scope.launch { if (!ZuiBattery.setBypass(want, manual = false) && want) smartOn = false }
+    }
+
+    private val bypassCheck = Runnable { evaluateBypass() }
 
     private var unlockTries = 0
     /** Revisa cada 300 ms (hasta 2 min) si ya se quitó la pantalla de bloqueo. */
@@ -277,6 +332,8 @@ class AutoModeService : AccessibilityService() {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+            addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AutoRules.ACTION_PREVIEW)
             addAction(AutoRules.ACTION_SWITCH)
         }, if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0)
@@ -303,6 +360,11 @@ class AutoModeService : AccessibilityService() {
         lastPackage = pkg
         panel.hide()
         panel.onAppChanged()
+        // Bypass automático: otra app, otra decisión (lo manual vale para la app en que se eligió). ZUI tarda un
+        // momento en decidir si es juego.
+        ZuiBattery.manualOverride = false
+        main.removeCallbacks(bypassCheck)
+        main.postDelayed(bypassCheck, 3000)
         Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
         if (!AutoRules.enabled(this)) return
 
@@ -483,6 +545,7 @@ class AutoModeService : AccessibilityService() {
     /** Al cambiar la opción en Ajustes se aplica enseguida (no recién al reconectar el control). */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
+        if (key?.startsWith("smart_bypass") == true) evaluateBypass()
     }
 
     /**

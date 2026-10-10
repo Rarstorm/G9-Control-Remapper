@@ -35,6 +35,7 @@ Además hace cosas que la oficial no puede:
 | **Juegos** | Eliges en qué modo se abre cada app; el control cambia al abrirla. |
 | **Panel de juego** | L3 + R3 en cualquier juego: captura solo del juego (sin el puntero ni superposiciones) con un aviso con miniatura, Game Assistant, modo de rendimiento, pantalla 16:9 y cambio de modo del control. |
 | **Rendimiento** | Ahorro, Equilibrado o Bestia (los de Game Assistant) desde el control, sin tocar la pantalla. Necesita Shizuku. |
+| **Bypass charging** | Jugando enchufada, el cargador alimenta la tablet y la batería no carga ni se calienta. Manual (también desde el panel de juego) o automático, con la batería y la temperatura mínimas que elijas. Necesita Shizuku. |
 | **Pantalla 16:9** | Para un monitor externo: la imagen lo llena sin bordes. |
 | **Botón Legion** | Tocar: Atrás. Mantener: ajustes rápidos. |
 | **Volumen invertido** | Opcional: el botón de abajo de la tablet sube el volumen y el de arriba lo baja. |
@@ -75,7 +76,7 @@ Casi todo funciona sin nada extra. Dos cosas necesitan más permisos que los de 
 
 - **Pantalla 16:9:** un permiso que se da una sola vez desde un computador y queda (también tras reiniciar o actualizar):
   `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
-- **Modo de rendimiento y ocultar Game Assistant:** [Shizuku](https://shizuku.rikka.app/) iniciado (hay que iniciarlo tras cada reinicio de la tablet). En Ajustes → Panel de juego → Shizuku, toca **Dar permiso a G9 Control**. G9 Control solo le pide a Shizuku una lista fija de comandos: mostrar u ocultar Game Assistant, leer su registro para saber el modo y, si falta el permiso de arriba, cambiar el tamaño de pantalla.
+- **Bypass charging, modo de rendimiento y ocultar Game Assistant:** [Shizuku](https://shizuku.rikka.app/) iniciado (hay que iniciarlo tras cada reinicio de la tablet). En la pestaña Tablet → Shizuku, toca **Dar permiso a G9 Control**. La ROM solo deja estas funciones a apps del sistema, y el shell de Shizuku cuenta como tal. G9 Control solo le pide una lista fija de comandos: activar o leer el bypass y el límite de carga, mostrar u ocultar Game Assistant, leer su registro para saber el modo y, si falta el permiso de arriba, cambiar el tamaño de pantalla.
 
 ## Limitaciones
 

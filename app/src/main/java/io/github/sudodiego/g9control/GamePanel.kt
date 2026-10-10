@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.EnergySavingsLeaf
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Power
 import androidx.compose.material.icons.outlined.Screenshot
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SportsEsports
@@ -105,6 +106,16 @@ class GamePanel(private val svc: AutoModeService) {
         ui.sel = 0
         if (view == null) create()
         poke()
+        // Bypass: igual, lo que se sabe al instante y se confirma en segundo plano (también fuera de los juegos).
+        if (Shell.state == Shell.State.READY) scope.launch {
+            val before = ZuiBattery.bypassNow
+            ZuiBattery.readBypass()
+            if (ZuiBattery.bypassNow != before && isOpen && !inPerfMenu) {
+                val sel = ui.sel
+                ui.items = items()
+                ui.sel = sel.coerceAtMost(ui.items.size - 1)
+            }
+        }
         // Lo que ya se sabe (Game Assistant visible, modo de rendimiento) se usa al instante; en segundo plano se
         // confirma con Shizuku y solo si cambió se corrige. Así los ítems no aparecen ni se mueven un momento después.
         if (ZuiGame.inGame(svc) && Shell.state == Shell.State.READY) scope.launch {
@@ -201,6 +212,18 @@ class GamePanel(private val svc: AutoModeService) {
             if (Shell.state == Shell.State.READY)
                 add(PanelItem(tr("Rendimiento", "Performance"), Icons.Outlined.Speed) { showPerfMenu() })
         }
+        // Bypass (con Shizuku): con la tablet enchufada, o si ya está activo para poder quitarlo.
+        val bypassOn = ZuiBattery.bypassNow == true
+        if (Shell.state == Shell.State.READY && (bypassOn || ZuiBattery.plugged(svc)))
+            add(PanelItem(if (bypassOn) tr("Bypass ✓", "Bypass ✓") else tr("Bypass", "Bypass"), Icons.Outlined.Power) {
+                hide()
+                val want = !bypassOn
+                scope.launch {
+                    if (!ZuiBattery.setBypass(want)) toast(tr("No se pudo cambiar el bypass.", "Couldn't change bypass."))
+                    else toast(if (want) tr("Bypass activado: el cargador alimenta la tablet y la batería no carga.", "Bypass on: the charger powers the tablet and the battery doesn't charge.")
+                        else tr("Bypass desactivado: la batería vuelve a cargar.", "Bypass off: the battery charges again."))
+                }
+            })
         if (Aspect.available(svc))
             add(PanelItem(if (Aspect.is169(svc)) tr("Pantalla 16:10", "Screen 16:10") else tr("Pantalla 16:9", "Screen 16:9"), Icons.Outlined.AspectRatio) {
                 hide()
