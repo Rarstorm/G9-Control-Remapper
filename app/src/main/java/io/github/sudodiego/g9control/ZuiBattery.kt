@@ -45,6 +45,27 @@ object ZuiBattery {
         return Shell.run(Shell.LIMIT_LEVEL)?.let { parseInt(it) }?.takeIf { it in 1..99 }
     }
 
+    /** Niveles que se pueden elegir para el límite (80 es el de ZUI). */
+    val LIMITS = listOf(70, 75, 80, 85, 90)
+
+    /**
+     * El nivel del límite elegido en G9 Control (null = no tocarlo). ZUI no parece guardarlo al reiniciar ni tras su
+     * calibración: el servicio lo vuelve a poner (al conectar el cargador y cuando Shizuku está listo).
+     */
+    fun wantedLimit(ctx: Context): Int? =
+        ctx.getSharedPreferences("g9", Context.MODE_PRIVATE).getInt("charge_limit", 0).takeIf { it in LIMITS }
+    fun setWantedLimit(ctx: Context, level: Int) =
+        ctx.getSharedPreferences("g9", Context.MODE_PRIVATE).edit().putInt("charge_limit", level).apply()
+
+    /** Cambia el nivel del límite de ZUI (solo si está activado). True si quedó en [level]. */
+    suspend fun setChargeLimit(level: Int): Boolean {
+        if (level !in LIMITS) return false
+        Shell.run(Shell.limitSet(level)) ?: return false
+        val now = readChargeLimit()
+        Log.d(AutoModeService.TAG, "límite de carga: $now %")
+        return now == level
+    }
+
     private fun parseInt(out: String): Int? =
         Regex("Parcel\\(\\s*[0-9a-f]{8} ([0-9a-f]{8})").find(out)?.groupValues?.get(1)?.toLong(16)?.toInt()
 

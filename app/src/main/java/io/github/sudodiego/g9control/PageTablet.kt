@@ -90,6 +90,17 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
         }) {
             // Sin Shizuku todo el bypass se ve atenuado (no haría nada); la tarjeta Shizuku dice qué falta.
             CompositionLocalProvider(LocalEditable provides ready) {
+                // Nivel del límite de carga de ZUI (solo si está activado allá; ZUI trae 80 %).
+                Text(tr("Límite de carga", "Charge limit"), fontSize = 14.sp)
+                val lim = limit
+                if (ready && lim == null) Hint(tr("El límite de carga de ZUI está apagado. Actívalo en Optimización de carga para elegir el nivel.",
+                    "ZUI's charge limit is off. Turn it on in Charge optimization to choose the level."))
+                else ChoiceChips(ZuiBattery.LIMITS.map { it to (if (it == 80) tr("80 % (ZUI)", "80 % (ZUI)") else "$it %") }, lim ?: 80) { lv ->
+                    if (ready) scope.launch {
+                        ZuiBattery.setWantedLimit(a, lv)
+                        if (ZuiBattery.setChargeLimit(lv)) limit = lv
+                    }
+                }
                 SwitchRow(
                     tr("Bypass", "Bypass"), bypass == true,
                     tr("El cargador alimenta la tablet; la batería no carga. Se apaga al desconectar.", "The charger powers the tablet; the battery doesn't charge. Off when unplugged.")

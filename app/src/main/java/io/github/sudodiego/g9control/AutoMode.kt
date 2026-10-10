@@ -247,6 +247,7 @@ class AutoModeService : AccessibilityService() {
                     scope.launch { if (ZuiBattery.readBypass() == true) ZuiBattery.setBypass(false, manual = false) }
                 }
                 Intent.ACTION_BATTERY_CHANGED -> { lastBattery = i; evaluateBypass() }
+                Intent.ACTION_POWER_CONNECTED -> { limitChecked = false; applyChargeLimit() }
                 AutoRules.ACTION_PREVIEW -> when (val kind = i.getStringExtra("kind") ?: "banner") {
                     "shot" -> panel.previewShot()
                     else -> guide.preview(kind)
@@ -282,6 +283,7 @@ class AutoModeService : AccessibilityService() {
      */
     private fun evaluateBypass() {
         val i = lastBattery ?: return
+        applyChargeLimit()
         if (!AutoRules.smartBypass(this)) {
             if (smartOn) { smartOn = false; scope.launch { ZuiBattery.setBypass(false, manual = false) } }
             return
@@ -306,6 +308,23 @@ class AutoModeService : AccessibilityService() {
     }
 
     private val bypassCheck = Runnable { evaluateBypass() }
+
+    /** El límite de carga ya se revisó (se vuelve a revisar al conectar el cargador o al cambiar la opción). */
+    private var limitChecked = false
+
+    /**
+     * Límite de carga elegido en G9 Control: ZUI no lo guarda al reiniciar (ni tras su calibración), así que se vuelve
+     * a poner una vez cuando Shizuku está listo (con el primer aviso de la batería) y al conectar el cargador.
+     */
+    private fun applyChargeLimit() {
+        if (limitChecked || Shell.state != Shell.State.READY) return
+        val want = ZuiBattery.wantedLimit(this) ?: return
+        limitChecked = true
+        scope.launch {
+            val now = ZuiBattery.readChargeLimit() ?: return@launch   // límite de ZUI apagado: nada que ajustar
+            if (now != want) ZuiBattery.setChargeLimit(want)
+        }
+    }
 
     /**
      * Monitor externo: en modo espejo, si para ese monitor (o para todos) se eligió 16:9, se pone solo; al
@@ -462,6 +481,7 @@ class AutoModeService : AccessibilityService() {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AutoRules.ACTION_PREVIEW)
             addAction(AutoRules.ACTION_SWITCH)
@@ -676,6 +696,7 @@ class AutoModeService : AccessibilityService() {
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
+        if (key == "charge_limit") { limitChecked = false; applyChargeLimit() }
         if (key == "monitor_screen") Monitor.woken = false   // la opción recién elegida se ve al tiro
         if (key == "monitor_screen" || key == "monitor_all_169" || key?.startsWith("monitor_fit_") == true) {
             main.removeCallbacks(monitorCheck); main.postDelayed(monitorCheck, 300)
