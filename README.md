@@ -93,6 +93,7 @@ Settings → Permissions shows the state of all this and how to turn it on, and 
 - In Android mode, games vibrate the tablet, not the controller (firmware behavior).
 - In Android mode, M twice takes the system screenshot (Android handles it before any app). For a clean screenshot, hold L3 + R3.
 - Some open apps close when switching between 16:9 and 16:10 (Dolphin, for example): switch before opening them.
+- With a monitor, if the tablet's screen stays off by mistake (for example, if G9 Control was force-closed), **pressing the power button twice** always turns it back on. Unplugging the monitor works too. With the monitor on the USB-C port the G9 doesn't respond: use another controller (Bluetooth, for example).
 
 ## Build from source
 

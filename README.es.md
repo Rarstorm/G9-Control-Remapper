@@ -88,6 +88,7 @@ Ajustes → Permisos muestra el estado de todo esto y cómo activarlo, e Inicio 
 - En modo Android, los juegos hacen vibrar la tablet, no el control (comportamiento del firmware).
 - En modo Android, M dos veces saca la captura del sistema (Android la procesa antes que cualquier app). Para una captura limpia, mantén L3 + R3.
 - Algunas apps abiertas se cierran al cambiar entre 16:9 y 16:10 (por ejemplo Dolphin): conviene cambiarlo antes de abrirlas.
+- Con un monitor, si la pantalla de la tablet queda apagada sin querer (por ejemplo, si G9 Control se cerró a la fuerza), **apretar dos veces el botón de encendido** siempre la vuelve a encender. Desconectar el monitor también sirve. Con el monitor conectado al USB-C el G9 no responde: usa otro control (por Bluetooth, por ejemplo).
 
 ## Compilar
 

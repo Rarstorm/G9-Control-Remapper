@@ -172,8 +172,8 @@ private fun MonitorPanel(s: AppState, a: MainActivity) {
                 OutlinedButton(onClick = { AutoRules.darkenTablet(a); tick++ }) { Text(tr("Oscurecer ahora", "Darken now")) }
             }
             if (screen >= Monitor.Screen.NO_LIGHT && !ready) Hint(tr("Sin Shizuku queda oscura.", "Without Shizuku it's just dimmed."))
-            if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. El botón de encendido la enciende; se vuelve a oscurecer aquí o desde el panel de juego (L3 + R3, con cualquier control).",
-                "With the monitor in mirror mode. The power button turns it on; darken it again here or from the game panel (L3 + R3, any controller)."))
+            if (screen != Monitor.Screen.NORMAL) Hint(tr("Con el monitor en espejo. Se vuelve a oscurecer aquí o desde el panel de juego (L3 + R3, con cualquier control). Si algo falla, el botón de encendido dos veces siempre la enciende.",
+                "With the monitor in mirror mode. Darken it again here or from the game panel (L3 + R3, any controller). If anything goes wrong, pressing the power button twice always turns it back on."))
             if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
             if (known.isNotEmpty() && Aspect.available(a)) {
                 Text(tr("Monitores", "Monitors"), fontSize = 14.sp)
