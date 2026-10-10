@@ -270,8 +270,9 @@ class GamePanel(private val svc: AutoModeService) {
     private fun pickHz(hz: Int?) {
         val app = svc.foregroundApp ?: return backToMain()
         RefreshRate.setForApp(svc, app, hz)
-        RefreshRate.applyFor(svc, app)
         backToMain()
+        // Cuando la pantalla ya cambió (unos cientos de ms), el mosaico muestra los Hz nuevos.
+        RefreshRate.applyFor(svc, app) { main.postDelayed({ refresh() }, 400) }
     }
 
     /** El panel muestra el submenú de rendimiento (no se reemplaza por la lista principal al confirmar algo). */
@@ -518,9 +519,10 @@ class GamePanel(private val svc: AutoModeService) {
         // Frecuencia de la pantalla para esta app (se recuerda por juego).
         val hzNow = RefreshRate.current(svc)
         val hzChosen = RefreshRate.forApp(svc, svc.foregroundApp)
-        if (RefreshRate.canWrite(svc))
+        if (RefreshRate.canWrite())
             add(PanelItem(tr("Frecuencia", "Refresh rate"), Icons.Outlined.DisplaySettings, active = hzChosen != null,
                 sub = (hzNow?.let { "$it Hz" } ?: "—") + if (hzChosen != null) tr(" · este juego", " · this game") else "") { showHzMenu() })
+        else add(PanelItem(tr("Frecuencia", "Refresh rate"), Icons.Outlined.DisplaySettings, sub = needs, enabled = false, run = ::fixShizuku))
         if (Aspect.available(svc)) {
             val wide = Aspect.is169(svc)
             add(PanelItem(tr("Pantalla 16:9", "16:9 screen"), Icons.Outlined.AspectRatio,
@@ -992,8 +994,9 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
     Surface(color = PANEL_BG, shape = RoundedCornerShape(28.dp), modifier = modifier) {
         Column(Modifier.padding(horizontal = CARD_PAD, vertical = 20.dp).width(width)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // El nombre ocupa lo que necesita (hasta la mitad); el resto empuja la batería y la hora a la derecha.
                 Text(ui.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    modifier = Modifier.weight(1f, fill = false))
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 340.dp))
                 // Modo del control, pequeño, como recordatorio.
                 if (!ui.sub) ui.mode?.let { m ->
                     Spacer(Modifier.width(10.dp))

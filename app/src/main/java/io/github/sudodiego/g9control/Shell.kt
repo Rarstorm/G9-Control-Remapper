@@ -48,6 +48,10 @@ object Shell {
     // FPS del juego para el monitor de rendimiento: las capas de SurfaceFlinger y los tiempos de los últimos 127
     // cuadros de una (el contador global, `service call SurfaceFlinger 1013`, no se le permite al shell).
     const val SF_LIST = "dumpsys SurfaceFlinger --list"
+    // Frecuencia de la pantalla: `peak_refresh_rate` y `min_refresh_rate` son privados del sistema; una app no los
+    // puede escribir ni con WRITE_SECURE_SETTINGS ("You cannot keep your settings in the secure settings"), el shell sí.
+    fun refreshRate(key: String, hz: Float) = "settings put system $key $hz"
+    private val REFRESH = Regex("settings put system (peak|min)_refresh_rate \\d{2,3}\\.\\d+")
     fun sfLatency(layer: String) = "dumpsys SurfaceFlinger --latency $layer"
     private val SF_LATENCY = Regex("dumpsys SurfaceFlinger --latency \\S+")
     // Pantalla de la tablet con un monitor (ScreenPower, con esta misma APK): apagar o encender el panel, o apagar
@@ -59,7 +63,7 @@ object Shell {
     private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) ||
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
