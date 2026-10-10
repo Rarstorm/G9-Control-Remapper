@@ -196,6 +196,7 @@ private fun GamesHzPanel(a: MainActivity) {
 @Composable
 fun NoticesPanel(s: AppState, a: MainActivity) {
     var small by remember { mutableStateOf(AutoRules.guideSmall(a)) }
+    var exitBig by remember { mutableStateOf(AutoRules.exitBig(a)) }
     var big by remember { mutableStateOf(lockOf(AutoRules.guideBlock(a), AutoRules.blockSticks(a))) }
     var mini by remember { mutableStateOf(lockOf(AutoRules.miniBlock(a), AutoRules.miniBlockSticks(a))) }
     var pos by remember { mutableStateOf(AutoRules.noticePos(a)) }
@@ -214,10 +215,14 @@ fun NoticesPanel(s: AppState, a: MainActivity) {
                 if (small) Hint(tr("Usa el mismo bloqueo y posición que el aviso al salir de un juego.", "Uses the same blocking and position as the notice when leaving a game."))
                 else LockChips(big) { big = it; AutoRules.setGuideBlock(a, it > 0); AutoRules.setBlockSticks(a, it > 1) }
             }
-            NoticeBox(tr("Al salir de un juego", "When leaving a game"), tr("Aviso pequeño para volver a Android.", "Small notice to return to Android."),
-                if (on) { { AutoRules.preview(a, "mini") } } else null,
+            NoticeBox(tr("Al salir de un juego", "When leaving a game"), tr("Recuerda volver a Android.", "Reminds you to return to Android."),
+                if (on) { { AutoRules.preview(a, if (exitBig) "big" else "mini") } } else null,
                 side = { PosGrid(guidePos) { guidePos = it; AutoRules.setGuidePos(a, it) } }) {
-                LockChips(mini) { mini = it; AutoRules.setMiniBlock(a, it > 0); AutoRules.setMiniBlockSticks(a, it > 1) }
+                ChoiceChips(listOf(true to tr("Tarjeta en el centro", "Card in the center"), false to tr("Aviso pequeño", "Small notice")), exitBig) {
+                    exitBig = it; AutoRules.setExitBig(a, it)
+                }
+                if (exitBig) Hint(tr("Usa el mismo bloqueo que la tarjeta al abrir un juego.", "Uses the same blocking as the card when opening a game."))
+                else LockChips(mini) { mini = it; AutoRules.setMiniBlock(a, it > 0); AutoRules.setMiniBlockSticks(a, it > 1) }
                 // Por qué: en X-Input y DS5 el G9 no tiene canal de configuración (solo vuelve con Vista + Menú).
                 Hint(tr("¿Por qué volver? Solo en Android la app puede cambiar el modo sola en el próximo juego y ajustar luces, sticks o traseros. Si no lo necesitas, puedes quedarte en DS5.",
                     "Why go back? Only in Android can the app switch the mode by itself for the next game and adjust lights, sticks or back buttons. If you don't need that, you can stay in DS5."))

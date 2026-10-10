@@ -95,6 +95,10 @@ object AutoRules {
     fun guideSmall(ctx: Context) = sp(ctx).getBoolean("guide_small", false)
     fun setGuideSmall(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("guide_small", v).apply()
 
+    /** Al salir de un juego: aviso pequeño (false, lo de siempre) o la tarjeta en el centro (true). */
+    fun exitBig(ctx: Context) = sp(ctx).getBoolean("exit_big", false)
+    fun setExitBig(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("exit_big", v).apply()
+
     /** Mostrar la etiqueta del modo cuando la app lo cambia sola. */
     fun showLabel(ctx: Context) = sp(ctx).getBoolean("show_label", true)
     fun setShowLabel(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("show_label", v).apply()
@@ -341,6 +345,12 @@ class AutoModeService : AccessibilityService() {
         scope.launch { if (!ZuiBattery.setBypass(want, manual = false) && want) smartOn = false }
     }
 
+    /** Aviso de volver a Android al salir de un juego: el pequeño o la tarjeta, según lo elegido. */
+    private fun showReturn() {
+        val big = AutoRules.exitBig(this)
+        guide.show(PadMode.ANDROID, mini = !big, big = big)
+    }
+
     /** El bypass vuelve al automático (desde el panel): decide ya con lo que hay ahora. */
     fun bypassToAuto() {
         ZuiBattery.returnToAuto()
@@ -514,7 +524,7 @@ class AutoModeService : AccessibilityService() {
         val mode = ModeSwitcher.detect()
         if (mode == PadMode.ANDROID) returnPending = false
         if (guide.resumeAfterLock()) return
-        if (returnPending && ruleApp == null && mode != null) guide.show(PadMode.ANDROID, mini = true)
+        if (returnPending && ruleApp == null && mode != null) showReturn()
     }
 
     private val inputListener = object : InputManager.InputDeviceListener {
@@ -609,11 +619,11 @@ class AutoModeService : AccessibilityService() {
                 if (AutoRules.remindReturn(this) && mode != null && mode != PadMode.ANDROID && lastG9Key >= ruleSince) {
                     returnPending = true
                     // Solo el aviso pequeño de arriba: recuerda volver sin tapar la pantalla.
-                    guide.show(PadMode.ANDROID, mini = true)
+                    showReturn()
                 }
             } else if (wasHidden && returnPending && ModeSwitcher.detect().let { it != null && it != PadMode.ANDROID }) {
                 // Se había quitado al abrir G9 Control: vuelve el aviso de volver a Android.
-                guide.show(PadMode.ANDROID, mini = true)
+                showReturn()
             }
             return
         }

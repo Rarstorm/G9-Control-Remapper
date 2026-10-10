@@ -121,7 +121,8 @@ fun App(s: AppState, a: MainActivity) {
         ) {
             Column(Modifier.fillMaxSize()) {
                 TabBar(s, a)
-                ModeStrip(s)
+                // La franja de Vista + Menú es del G9: en la sección Tablet no hace falta.
+                if (s.section == Section.G9) ModeStrip(s)
                 PageHost(s, a, Modifier.weight(1f))
                 HintBar(s)
             }
