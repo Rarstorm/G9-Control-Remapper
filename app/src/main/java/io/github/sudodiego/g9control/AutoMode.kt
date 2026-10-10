@@ -341,7 +341,8 @@ class AutoModeService : AccessibilityService() {
         scope.launch { if (!ZuiBattery.setBypass(want, manual = false) && want) smartOn = false }
     }
 
-    private val bypassCheck = Runnable { evaluateBypass() }
+    // También la frecuencia de los juegos: ZUI tarda en decir que es un juego.
+    private val bypassCheck = Runnable { evaluateBypass(); if (RefreshRate.forGames(this) != null) RefreshRate.applyFor(this, lastPackage) }
 
     /**
      * Monitor externo: en modo espejo, si para ese monitor (o para todos) se eligió 16:9, se pone solo; al

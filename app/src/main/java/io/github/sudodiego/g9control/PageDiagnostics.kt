@@ -20,7 +20,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 
-/** Página "Ajustes": opciones de la app, datos del control, valores de fábrica y detalles técnicos. */
+/**
+ * Página "Ajustes": la app y sus permisos en las dos secciones; lo del G9 (dibujo, datos, valores de fábrica, consola)
+ * solo dentro de la sección G9, que en la de Tablet no hace falta.
+ */
 @Composable
 fun DiagnosticsPage(s: AppState, a: MainActivity) {
     // Detalles técnicos ocultos: como el modo desarrollador de Android, aparecen al tocar la versión 5 veces.
@@ -47,11 +50,13 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     Text(version, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            // Izquierda: la app y sus permisos; derecha: lo del G9 y las herramientas de desarrollo.
-            PermissionsPanel(s, a)
+            // Izquierda: la app; derecha: lo del G9 y las herramientas de desarrollo. En la sección Tablet no sale
+            // nada del G9: los permisos pasan a la derecha.
+            if (s.section == Section.G9) PermissionsPanel(s, a)
         },
         second = {
-            CompositionLocalProvider(LocalEditable provides true) {
+            if (s.section == Section.TABLET) PermissionsPanel(s, a)
+            if (s.section == Section.G9) CompositionLocalProvider(LocalEditable provides true) {
                 Panel(tr("Control G9", "G9 controller")) {
                     Text(tr("Estilo del dibujo", "Drawing style"), fontSize = 14.sp)
                     ChoiceChips(ControllerSkin.entries.map { it to it.label }, SkinState.skin) {
@@ -73,8 +78,8 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     }
                 }
             }
-            ResetPanel(s, a)
-            if (dev) {
+            if (s.section == Section.G9) ResetPanel(s, a)
+            if (dev && s.section == Section.G9) {
                 Panel(tr("Detalles técnicos", "Technical details"), trailing = {
                     TextButton(onClick = { dev = false; taps = 0; Prefs.setDevTools(a, false) }) { Text(tr("Ocultar", "Hide")) }
                 }) {
@@ -85,6 +90,8 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     if (s.allDevicesText.trim() != s.deviceText.trim()) Mono(s.allDevicesText)
                 }
                 ConsolePanel(s, a)
+            }
+            if (dev) {
                 Panel(tr("Registro", "Log"), trailing = {
                     IconButton(onClick = { s.refreshLog() }) { Icon(Icons.Outlined.Refresh, tr("Actualizar", "Refresh")) }
                 }) {
@@ -98,7 +105,7 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
 @Composable
 private fun ResetPanel(s: AppState, a: MainActivity) {
     var ask by remember { mutableStateOf(false) }
-    Panel(tr("Valores de fábrica", "Factory settings")) {
+    Panel(tr("Valores de fábrica del G9", "G9 factory settings")) {
         OutlinedButton(onClick = { ask = true }, enabled = s.connected && !s.busy) {
             Text(tr("Restaurar valores de fábrica", "Restore factory settings"), color = MaterialTheme.colorScheme.error)
         }
@@ -163,8 +170,27 @@ private fun ConsolePanel(s: AppState, a: MainActivity) {
 fun GamePanelPage(s: AppState, a: MainActivity) {
     TwoPane(
         first = { GamePanelSettings(s, a) },
-        second = { GameAssistantSettings(s, a) }
+        second = { GamesHzPanel(a); GameAssistantSettings(s, a) }
     )
+}
+
+/** Frecuencia para todos los juegos: sin esto el sistema la mueve entre 30 y 120 (en Ahorro, a 30). */
+@Composable
+private fun GamesHzPanel(a: MainActivity) {
+    var hz by remember { mutableIntStateOf(RefreshRate.forGames(a) ?: 0) }
+    val ready = RefreshRate.canWrite()
+    CompositionLocalProvider(LocalEditable provides ready) {
+        Panel(tr("Frecuencia en juegos", "Refresh rate in games"),
+            tr("Fija la pantalla en todos los juegos. Cada juego puede tener la suya desde el panel.", "Locks the screen in every game. Each game can have its own from the panel.")) {
+            ChoiceChips(listOf(0 to tr("Sistema", "System")) + RefreshRate.supported(a).map { it to "$it Hz" }, hz) {
+                hz = it; RefreshRate.setForGames(a, it.takeIf { v -> v > 0 })
+            }
+            Text(if (hz == 0) tr("Sistema: entre 30 y 120 Hz según el juego y el modo (en Ahorro baja a 30).", "System: 30 to 120 Hz depending on the game and mode (Saver drops to 30).")
+                else tr("Siempre $hz Hz, en cualquier modo.", "Always $hz Hz, in any mode."),
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!ready) Hint(tr("Necesita Shizuku.", "Needs Shizuku."))
+        }
+    }
 }
 
 @Composable

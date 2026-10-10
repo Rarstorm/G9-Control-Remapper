@@ -10,6 +10,10 @@ Este archivo junta lo que se sabe del protocolo y del control, lo que se descart
 
 **Paleta (10 oct 2026):** inspirada en los fondos de anime de la Y700 (solo los colores; su arte y su personaje no van en la app): índigo profundo como principal (claro #3A55C8 / oscuro #8FB2FF), celeste brillante para lo encendido (#1E8FD6 / #5CC8FF), lila de detalle, fondos blanco hielo (#EDF2F8) o azul marino (#0D1220). El panel de juego y el monitor en azul marino con lo encendido en celeste.
 
+**Conclusión del G9 (10 oct 2026):** DS5 es su mejor modo en Android (vibración, giroscopio, captura con M dos veces, todo con G9 Control y Artemis). El jack de 3,5 mm del G9 no funciona en Android: se acepta así.
+
+**Hz en juegos:** en dumpsys display solo hay votos de usuario (peak 120, min 30): ZUI no fuerza nada. SurfaceFlinger elige dentro de 30–120 según lo que dibuja el juego, y en Ahorro (CPU lenta) baja a 30. Con min = max queda fijo; "Frecuencia en juegos" (Tablet → Juego) lo hace para todos los juegos (por app manda la elección del panel).
+
 ### Lo aprendido, en corto (10 oct 2026)
 
 | Qué | Cómo | Necesita |

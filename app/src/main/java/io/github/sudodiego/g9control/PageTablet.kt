@@ -152,46 +152,38 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
                     own = lv; ZuiBattery.setOwnLimit(a, lv.takeIf { it > 0 })
                 }
                 Text(
-                    if (own == 0) tr("El de ZUI (Optimización de carga) corta siempre en 80 %.", "ZUI's (Charge optimization) always stops at 80 %.")
-                    else tr("Al llegar a $own % enchufada se activa el bypass: la batería deja de cargar.", "At $own % while plugged in, bypass turns on: the battery stops charging."),
+                    if (own == 0) tr("Apagado: el de ZUI corta en 80 %.", "Off: ZUI's stops at 80 %.")
+                    else tr("Deja de cargar en $own %.", "Stops charging at $own %."),
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (own > 80 && limit != null) Hint(tr("El límite de ZUI está activado y corta en $limit %: apágalo para llegar a $own %.",
-                    "ZUI's limit is on and stops at $limit %: turn it off to reach $own %."))
+                if (own > 80 && limit != null) Hint(tr("Apaga el límite de ZUI para llegar a $own %.", "Turn ZUI's limit off to reach $own %."))
                 SwitchRow(
                     tr("Bypass", "Bypass"), bypass == true,
-                    tr("El cargador alimenta la tablet; la batería no carga. Se apaga al desconectar.", "The charger powers the tablet; the battery doesn't charge. Off when unplugged.")
+                    tr("El cargador alimenta la tablet y la batería no carga.", "The charger powers the tablet; the battery doesn't charge.")
                 ) { want ->
                     if (ready) scope.launch { if (ZuiBattery.setBypass(want)) bypass = want }
                 }
-                SwitchRow(
-                    tr("Bypass automático", "Automatic bypass"), smart,
-                    tr("Se enciende solo con el cargador conectado y cuando se cumple todo lo de abajo; se apaga cuando deja de cumplirse.",
-                        "Turns on by itself with the charger plugged in and when everything below is met; turns off when it no longer is.")
-                ) {
+                // Automático: un resumen de cuándo se activa, que cambia con lo que se elija.
+                val summary = listOfNotNull(
+                    tr("Enchufada", "Plugged in"),
+                    if (games) tr("en un juego", "in a game") else null,
+                    tr("desde $level %", "from $level %"),
+                    if (temp > 0) tr("desde $temp °C", "from $temp °C") else null
+                ).joinToString(" · ")
+                SwitchRow(tr("Bypass automático", "Automatic bypass"), smart, if (smart) summary else tr("Se activa solo cuando conviene.", "Turns on by itself when it makes sense.")) {
                     smart = it; AutoRules.setSmartBypass(a, it)
                     // Que no peleen: el inteligente de Game Assistant queda en Manual (se puede con WRITE_SECURE_SETTINGS).
                     if (it && Aspect.canWrite(a)) runCatching { Settings.Global.putInt(a.contentResolver, "intelligent_bypass_charging_value", 0) }
                 }
                 if (smart) {
-                    if (!s.autoServiceOn) Hint(tr("El automático necesita el servicio de accesibilidad (Ajustes → Permisos).", "Automatic needs the accessibility service (Settings → Permissions)."))
-                    SwitchRow(tr("Solo en juegos", "Only in games"), games,
-                        tr("Solo con un juego abierto (los que reconoce Game Assistant).", "Only with a game open (the ones Game Assistant recognizes).")) {
-                        games = it; AutoRules.setSmartBypassGames(a, it)
-                    }
-                    Text(tr("Batería mínima", "Minimum battery"), fontSize = 14.sp)
-                    Text(tr("Bajo este nivel no se activa: así la batería primero carga hasta ahí y después el cargador alimenta la tablet.",
-                        "Below this level it stays off: the battery charges up to it first, then the charger powers the tablet."),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
+                    Text(tr("Cuándo", "When"), fontSize = 14.sp)
+                    ChoiceChips(listOf(true to tr("En juegos", "In games"), false to tr("Siempre", "Always")), games) { games = it; AutoRules.setSmartBypassGames(a, it) }
+                    Text(tr("Batería desde", "Battery from"), fontSize = 14.sp)
                     ChoiceChips(listOf(20, 40, 60, 80).map { it to "$it %" }, level) { level = it; AutoRules.setSmartBypassLevel(a, it) }
-                    limit?.takeIf { level >= it - 5 }?.let {
-                        Hint(tr("Con el límite de carga de ZUI en $it %, este mínimo casi nunca se cumple.", "With ZUI's charge limit at $it %, this minimum will rarely be met."))
-                    }
-                    Text(tr("Temperatura mínima (batería)", "Minimum temperature (battery)"), fontSize = 14.sp)
-                    Text(tr("Solo se activa cuando la batería se calienta a esta temperatura: para que no se caliente más cargando mientras juegas. \"Sin mínimo\": a cualquier temperatura.",
-                        "It only turns on once the battery reaches this temperature, so it doesn't heat up more by charging while you play. \"None\": at any temperature."),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ChoiceChips(listOf(0 to tr("Sin mínimo", "None"), 35 to "35 °C", 38 to "38 °C", 41 to "41 °C"), temp) { temp = it; AutoRules.setSmartBypassTemp(a, it) }
+                    limit?.takeIf { level >= it - 5 }?.let { Hint(tr("El límite de ZUI ($it %) casi no deja llegar.", "ZUI's limit ($it %) barely lets it get there.")) }
+                    Text(tr("Temperatura de la batería desde", "Battery temperature from"), fontSize = 14.sp)
+                    ChoiceChips(listOf(0 to tr("Cualquiera", "Any"), 35 to "35 °C", 38 to "38 °C", 41 to "41 °C"), temp) { temp = it; AutoRules.setSmartBypassTemp(a, it) }
                 }
             }
             OutlinedButton(onClick = { runCatching { a.startActivity(Intent(Intent.ACTION_POWER_USAGE_SUMMARY)) } }) {

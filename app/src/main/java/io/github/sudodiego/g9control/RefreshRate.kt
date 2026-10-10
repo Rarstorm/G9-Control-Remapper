@@ -42,11 +42,22 @@ object RefreshRate {
         sp(ctx).edit().apply { if (hz == null) remove("hz_$pkg") else putInt("hz_$pkg", hz) }.apply()
 
     /**
-     * Aplica la frecuencia de esa app (al cambiar de app o al elegirla en el panel). Sin elección, vuelve a lo
-     * que había antes de la primera vez que G9 Control la cambió. [done] se llama al terminar (en otro hilo).
+     * Para todos los juegos sin elección propia (null = la del sistema). Sin esto, en un juego el sistema elige
+     * dentro de 30–120 según lo que dibuja el juego: en Ahorro la CPU va lenta, el juego dibuja menos y baja a 30.
+     */
+    fun forGames(ctx: Context): Int? = sp(ctx).getInt("hz_games", 0).takeIf { it > 0 }
+    fun setForGames(ctx: Context, hz: Int?) = sp(ctx).edit().putInt("hz_games", hz ?: 0).apply()
+
+    /** Lo que toca para esa app: su elección, o la de los juegos si es un juego. */
+    fun wanted(ctx: Context, pkg: String?): Int? = forApp(ctx, pkg) ?: forGames(ctx)?.takeIf { ZuiGame.inGame(ctx) }
+
+    /**
+     * Aplica la frecuencia de esa app (al cambiar de app, cuando ZUI dice que es un juego, o al elegirla en el
+     * panel). Sin elección, vuelve a lo que había antes de la primera vez que G9 Control la cambió. [done] se llama
+     * al terminar (en otro hilo).
      */
     fun applyFor(ctx: Context, pkg: String?, done: () -> Unit = {}) {
-        val want = forApp(ctx, pkg)
+        val want = wanted(ctx, pkg)
         val p = sp(ctx)
         if (want == null && !p.contains("hz_saved_peak")) return done()
         val cr = ctx.contentResolver

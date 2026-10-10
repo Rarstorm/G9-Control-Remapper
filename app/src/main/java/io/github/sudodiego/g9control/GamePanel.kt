@@ -259,7 +259,11 @@ class GamePanel(private val svc: AutoModeService) {
         val chosen = RefreshRate.forApp(svc, app)
         ui.sub = true
         ui.title = tr("Frecuencia de la pantalla", "Screen refresh rate")
-        ui.items = listOf(PanelItem(tr("Sistema", "System"), Icons.Outlined.Restore, sub = "${RefreshRate.systemPeak(svc)} Hz", active = chosen == null) { pickHz(null) }) +
+        // Sin elección propia: la de todos los juegos (si hay) o la del sistema.
+        val games = RefreshRate.forGames(svc)?.takeIf { ZuiGame.inGame(svc) }
+        val first = if (games != null) PanelItem(tr("Juegos", "Games"), Icons.Outlined.Restore, sub = "$games Hz", active = chosen == null) { pickHz(null) }
+            else PanelItem(tr("Sistema", "System"), Icons.Outlined.Restore, sub = "${RefreshRate.systemPeak(svc)} Hz", active = chosen == null) { pickHz(null) }
+        ui.items = listOf(first) +
             RefreshRate.supported(svc).map { hz ->
                 PanelItem("$hz Hz", Icons.Outlined.DisplaySettings, sub = if (hz == chosen) tr("Este juego", "This game") else null, active = hz == chosen) { pickHz(hz) }
             }
