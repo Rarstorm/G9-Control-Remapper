@@ -95,6 +95,10 @@ object AutoRules {
     fun guideSmall(ctx: Context) = sp(ctx).getBoolean("guide_small", false)
     fun setGuideSmall(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("guide_small", v).apply()
 
+    /** Ráfaga de capturas: mantener RB (con el botón guía) sigue sacando una por segundo. */
+    fun burstShots(ctx: Context) = sp(ctx).getBoolean("burst_shots", true)
+    fun setBurstShots(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("burst_shots", v).apply()
+
     /** Al salir de un juego: aviso pequeño (false, lo de siempre) o la tarjeta en el centro (true). */
     fun exitBig(ctx: Context) = sp(ctx).getBoolean("exit_big", false)
     fun setExitBig(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("exit_big", v).apply()
@@ -824,7 +828,7 @@ class AutoModeService : AccessibilityService() {
             Log.d(TAG, "Legion + RB: captura")
             panel.capture()
             main.removeCallbacks(burst)
-            main.postDelayed(burst, 1000)
+            if (AutoRules.burstShots(this)) main.postDelayed(burst, 1000)
         } else {
             Log.d(TAG, "Legion + LB: Atrás mantenido")
             scope.launch {

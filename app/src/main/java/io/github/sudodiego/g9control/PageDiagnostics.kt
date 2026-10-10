@@ -249,6 +249,7 @@ fun NoticesPanel(s: AppState, a: MainActivity) {
 private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
     var guide by remember { mutableStateOf(AutoRules.legionKeys(a)) }
+    var burst by remember { mutableStateOf(AutoRules.burstShots(a)) }
     var shotPos by remember { mutableStateOf(AutoRules.shotPos(a)) }
     var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
@@ -259,12 +260,16 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
         Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control, con cualquier control.",
             "A menu to use in any app without letting go of the controller, with any controller.")) {
             SwitchRow(tr("Botón guía", "Guide button"), guide,
-                tr("El del centro del control (Legion en el G9, Xbox, PS u Home). Tocar: Atrás. Mantener: panel de juego. Con RB: captura (mantener RB: ráfaga). Con LB: mantener Atrás (con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) pasa al PC.",
-                    "The one in the middle of the controller (Legion on the G9, Xbox, PS or Home). Tap: Back. Hold: game panel. With RB: screenshot (hold RB: burst). With LB: hold Back (with Shizuku). While streaming from a PC (Artemis, Moonlight…) it goes to the PC.")) {
+                tr("El del centro del control (Legion en el G9, Xbox, PS u Home). Tocar: Atrás. Mantener: panel de juego. Con RB: captura. Con LB: mantener Atrás (con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) pasa al PC.",
+                    "The one in the middle of the controller (Legion on the G9, Xbox, PS or Home). Tap: Back. Hold: game panel. With RB: screenshot. With LB: hold Back (with Shizuku). While streaming from a PC (Artemis, Moonlight…) it goes to the PC.")) {
                 guide = it; AutoRules.setLegionKeys(a, it)
             }
             SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Para controles sin botón guía. Tocar: abre el panel. Mantener: captura.", "For controllers without a guide button. Tap: opens the panel. Hold: screenshot.")) {
                 on = it; AutoRules.setGamePanel(a, it)
+            }
+            SwitchRow(tr("Ráfaga de capturas", "Screenshot burst"), burst,
+                tr("Guía + RB y seguir manteniendo RB: una captura por segundo hasta soltarlo.", "Guide + RB and keep holding RB: one screenshot per second until you let go.")) {
+                burst = it; AutoRules.setBurstShots(a, it)
             }
             NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura que entra desde el borde.", "Thumbnail that slides in from the edge."),
                 if (s.autoServiceOn) { { AutoRules.preview(a, "shot") } } else null,

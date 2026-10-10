@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ícono: "G9" en blanco, como el distintivo del menú lateral. Zona segura: 66 dp al centro. -->
+<!-- Ícono: la tablet en horizontal con un anillo celeste que brilla al centro (como el de los fondos). Zona segura: 66 dp al centro. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="6.5" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M52.5,45 A12.5,12.5 0 1,0 54,60.5 L54,55 L46.5,55"/>
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="6.5" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M75,49 A6.5,6.5 0 1,0 62,49 A6.5,6.5 0 1,0 75,49 M75,49 L75,57.5 Q75,66.5 66,66.5"/>
+    <!-- Tablet -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4"
+        android:pathData="M33,37 H75 A6,6 0 0,1 81,43 V65 A6,6 0 0,1 75,71 H33 A6,6 0 0,1 27,65 V43 A6,6 0 0,1 33,37 Z"/>
+    <!-- Brillo del anillo -->
+    <path android:strokeColor="#555CC8FF" android:strokeWidth="8" android:strokeLineCap="round"
+        android:pathData="M54,44 A10,10 0 1,1 44,54"/>
+    <!-- Anillo abierto -->
+    <path android:strokeColor="#FF7FD6FF" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M54,44 A10,10 0 1,1 44,54"/>
+    <!-- Punto en la abertura -->
+    <path android:fillColor="#FF7FD6FF" android:pathData="M48.6,47.6 m-2.2,0 a2.2,2.2 0 1,0 4.4,0 a2.2,2.2 0 1,0 -4.4,0"/>
 </vector>
