@@ -142,15 +142,25 @@ class PerfHud(private val svc: AutoModeService) {
         sep()
         label("GPU "); sb.append(gpu?.let { "$it %" } ?: "—"); temp(maxTemp("gpu"), 70, 85)
         sep()
-        label("BAT "); sb.append(level?.let { "$it %" } ?: "—"); temp(batTemp, 40, 45)
+        // Batería como en el panel: el ícono con su nivel, con rayo cargando y con enchufe si está enchufada sin cargar.
+        val charging = bat?.getIntExtra(BatteryManager.EXTRA_STATUS, 0) == BatteryManager.BATTERY_STATUS_CHARGING
+        val plugged = (bat?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        val icon = BatteryIcon(level ?: 0, charging, plugged && !charging, svc.resources.displayMetrics.density)
+        val st = sb.length
+        sb.append("  ")
+        sb.setSpan(android.text.style.ImageSpan(icon, android.text.style.DynamicDrawableSpan.ALIGN_CENTER), st, st + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sb.append(level?.let { "$it %" } ?: "—"); temp(batTemp, 40, 45)
 
         // Completa: segunda línea con la energía, el tiempo, los Hz y el calor de la tablet.
         if (AutoRules.perfFull(svc)) {
             sb.append("\n")
-            val charging = bat?.getIntExtra(BatteryManager.EXTRA_STATUS, 0) == BatteryManager.BATTERY_STATUS_CHARGING
             val watts = watts(bat)
-            if (watts != null) { sb.append(if (charging) "+" else ""); sb.append("%.1f ".format(watts)); label("W"); sep() }
-            remaining(bat, charging)?.let { sb.append(it); sep() }
+            // Enchufada sin cargar (bypass o límite): la batería casi no da ni recibe nada, los watts y el tiempo
+            // saldrían absurdos ("48 h"); el enchufe del ícono ya lo dice.
+            if (!(plugged && !charging)) {
+                if (watts != null) { sb.append(if (charging) "+" else ""); sb.append("%.1f ".format(watts)); label("W"); sep() }
+                remaining(bat, charging)?.let { sb.append(it); sep() }
+            }
             hz()?.let { sb.append("$it "); label("Hz"); sep() }
             label(tr("Tablet", "Tablet")); temp(maxTemp("skin"), 40, 45)
             thermal()?.let { colored("  $it", HOT) }
@@ -248,6 +258,53 @@ class PerfHud(private val svc: AutoModeService) {
         // Primera línea: período de refresco; después "pedido presentado listo" en ns (CLOCK_MONOTONIC, como nanoTime).
         return out.lines().drop(1).mapNotNull { it.trim().split(Regex("\\s+")).getOrNull(1)?.toLongOrNull() }
             .filter { it in 1 until Long.MAX_VALUE }
+    }
+
+    /**
+     * Ícono de batería (el mismo dibujo que el encabezado del panel): contorno y relleno según el nivel; con un rayo
+     * cargando, y un enchufe al lado si está enchufada sin cargar (bypass o límite de carga).
+     */
+    private class BatteryIcon(val pct: Int, val charging: Boolean, val plugged: Boolean, dp: Float) : android.graphics.drawable.Drawable() {
+        private val d = dp
+        private val bodyW = 22 * dp
+        private val h = 11 * dp
+        private val plugW = if (plugged) 14 * dp else 0f
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+        init { setBounds(0, 0, (plugW + bodyW + 3 * dp).toInt(), h.toInt()) }
+
+        override fun draw(c: android.graphics.Canvas) {
+            val x0 = plugW
+            if (plugged) {
+                // Enchufe: dos patas y el cuerpo, en celeste.
+                paint.color = ACCENT; paint.style = android.graphics.Paint.Style.FILL
+                c.drawRect(2 * d, 2 * d, 3.5f * d, 4.5f * d, paint)
+                c.drawRect(6 * d, 2 * d, 7.5f * d, 4.5f * d, paint)
+                c.drawRoundRect(1 * d, 4.5f * d, 8.5f * d, 8 * d, 1.5f * d, 1.5f * d, paint)
+                c.drawRect(4 * d, 8 * d, 5.5f * d, 11 * d, paint)
+            }
+            paint.style = android.graphics.Paint.Style.STROKE; paint.strokeWidth = 1.4f * d; paint.color = 0xFFB4BCC8.toInt()
+            c.drawRoundRect(x0 + 0.7f * d, 0.7f * d, x0 + bodyW - 0.7f * d, h - 0.7f * d, 2.5f * d, 2.5f * d, paint)
+            paint.style = android.graphics.Paint.Style.FILL
+            c.drawRoundRect(x0 + bodyW, h * 0.3f, x0 + bodyW + 2.2f * d, h * 0.7f, 1f * d, 1f * d, paint)
+            val pad = 2.4f * d
+            val w = (bodyW - 2 * pad) * pct.coerceIn(0, 100) / 100f
+            paint.color = if (pct <= 15 && !charging && !plugged) HOT else if (charging || plugged) ACCENT else WHITE
+            c.drawRoundRect(x0 + pad, pad, x0 + pad + w, h - pad, 1.2f * d, 1.2f * d, paint)
+            if (charging) {
+                val cx = x0 + bodyW / 2
+                val bolt = android.graphics.Path().apply {
+                    moveTo(cx + h * 0.10f, h * 0.12f); lineTo(cx - h * 0.22f, h * 0.56f); lineTo(cx - h * 0.02f, h * 0.56f)
+                    lineTo(cx - h * 0.10f, h * 0.88f); lineTo(cx + h * 0.22f, h * 0.44f); lineTo(cx + h * 0.02f, h * 0.44f); close()
+                }
+                paint.color = WHITE; c.drawPath(bolt, paint)
+            }
+        }
+
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
     }
 
     private companion object {

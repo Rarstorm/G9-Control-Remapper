@@ -27,9 +27,9 @@ object RefreshRate {
 
     fun canWrite() = Shell.state == Shell.State.READY
 
-    /** Frecuencias que admite la pantalla (sin 30: para jugar no sirve). */
+    /** Frecuencias que admite la pantalla (30 sirve para juegos a 30 FPS). */
     fun supported(ctx: Context): List<Int> =
-        display(ctx)?.supportedModes?.map { it.refreshRate.roundToInt() }?.filter { it >= 60 }?.distinct()?.sorted().orEmpty()
+        display(ctx)?.supportedModes?.map { it.refreshRate.roundToInt() }?.filter { it >= 30 }?.distinct()?.sorted().orEmpty()
 
     private fun display(ctx: Context) = ctx.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
 

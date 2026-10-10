@@ -63,7 +63,7 @@ object Shell {
     private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) ||
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
@@ -136,6 +136,27 @@ object Shell {
             // ScreenPower termina matándose (137 = SIGKILL) para saltarse los destructores de libandroid_servers.
             if (code != 0 && !(code == 137 && command.contains(ScreenPower::class.java.name))) error("salió con $code")
             synchronized(out) { out.toString() }
+        }.onFailure { Log.w(AutoModeService.TAG, "Shizuku: $command falló", it) }.getOrNull()
+    }
+
+    // Eventos crudos de un dispositivo de entrada (el touchpad del G9, para M dos veces cuando una app captura el
+    // puntero): solo leerlos, no los bloquea. `getevent -pl` lista los dispositivos y sale.
+    const val INPUT_LIST = "getevent -pl"
+    fun inputEvents(dev: String) = "getevent -lq $dev"
+    private val INPUT_EVENTS = Regex("getevent -lq /dev/input/event\\d{1,2}")
+
+    /**
+     * Deja corriendo un comando permitido y entrega cada línea de su salida (en otro hilo). Devuelve el proceso para
+     * cortarlo con `destroy()`; null si no está listo o no está permitido.
+     */
+    fun stream(command: String, onLine: (String) -> Unit): Process? {
+        refresh()
+        if (state != State.READY || !(command == INPUT_LIST || INPUT_EVENTS.matches(command))) return null
+        val m = newProcess ?: return null
+        return runCatching {
+            val p = m.invoke(null, command.split(' ').toTypedArray(), null, null) as Process
+            Thread { runCatching { p.inputStream.bufferedReader().forEachLine(onLine) } }.apply { isDaemon = true }.start()
+            p
         }.onFailure { Log.w(AutoModeService.TAG, "Shizuku: $command falló", it) }.getOrNull()
     }
 }

@@ -490,6 +490,7 @@ class AutoModeService : AccessibilityService() {
         private fun changed() {
             ModeTileService.refreshAll(this@AutoModeService)
             updateTouchpad()
+            updatePadWatch()
             if (ModeSwitcher.detect() == PadMode.ANDROID) returnPending = false
             guide.update()
         }
@@ -543,7 +544,7 @@ class AutoModeService : AccessibilityService() {
         if (pkg !in AutoRules.STREAMING) streaming = false
         else if (!pkg.startsWith("com.limelight")) streaming = true
         else if (cls.startsWith("com.limelight.")) streaming = cls == AutoRules.STREAM_ACTIVITY
-        if (streaming != wasStreaming) Log.d(TAG, "transmitiendo: $streaming ($pkg, $cls)")
+        if (streaming != wasStreaming) { Log.d(TAG, "transmitiendo: $streaming ($pkg, $cls)"); updatePadWatch() }
         if (pkg == lastPackage) return
         appInFront = false
         val wasHidden = hiddenForApp
@@ -850,6 +851,45 @@ class AutoModeService : AccessibilityService() {
         Log.d(TAG, "touchpad del G9: ${if (want) "capturas" else "normal"}")
     }
 
+    /**
+     * M dos veces transmitiendo (Artemis/Moonlight en DS5): la app captura el puntero y el clic del touchpad no llega
+     * al servicio. Con Shizuku se leen los eventos crudos del touchpad del G9 (`getevent`, solo lectura: la app
+     * igual recibe el clic) y cada clic saca la captura. Solo mientras se transmite.
+     */
+    private var padWatch: Process? = null
+    private fun updatePadWatch() {
+        val want = streaming && AutoRules.touchpadShot(this) && ModeSwitcher.detect() == PadMode.DS5 && Shell.state == Shell.State.READY
+        if (want == (padWatch != null)) return
+        if (!want) { padWatch?.destroy(); padWatch = null; Log.d(TAG, "touchpad crudo: no"); return }
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // "add device 13: /dev/input/event12" y después '  name:     "… G9 Touchpad"'.
+            val list = Shell.run(Shell.INPUT_LIST) ?: return@launch
+            var last: String? = null
+            var dev: String? = null
+            for (line in list.lines()) {
+                if (line.startsWith("add device")) last = line.substringAfter(": ").trim()
+                else if ("name:" in line && "Touchpad" in line && ("G9" in line || "Legion" in line)) { dev = last; break }
+            }
+            val d = dev ?: return@launch
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (padWatch != null || !streaming) return@withContext
+                padWatch = Shell.stream(Shell.inputEvents(d)) { l ->
+                    if ("BTN_MOUSE" in l && "DOWN" in l) main.post { onPadClick() }
+                }
+                Log.d(TAG, "touchpad crudo: $d")
+            }
+        }
+    }
+
+    /** Clic del touchpad (M dos veces): captura, como en [onMotionEvent] (uno por toque, no cada evento). */
+    private fun onPadClick() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastTouchpad < 700) return
+        lastTouchpad = now
+        Log.d(TAG, "M dos veces transmitiendo (touchpad crudo): captura")
+        panel.capture()
+    }
+
     /** Sticks y cruceta (como ejes) mientras el panel de juego está abierto: lo navegan y no llegan al juego. */
     private var panelSticks = false
     fun setPanelSticks(on: Boolean) {
@@ -999,6 +1039,7 @@ class AutoModeService : AccessibilityService() {
         if (::guide.isInitialized) guide.hide()
         if (::panel.isInitialized) panel.release()
         if (::perfHud.isInitialized) perfHud.release()
+        padWatch?.destroy()
         scope.cancel()
         super.onDestroy()
     }
