@@ -82,6 +82,14 @@ object Shell {
         }
     }
 
+    /** La app de Shizuku, para abrirla e iniciarlo (null si no está instalada). */
+    const val PACKAGE = "moe.shizuku.privileged.api"
+    fun launchIntent(ctx: Context): android.content.Intent? =
+        ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** Hay algo elegido que necesita Shizuku (bypass automático u ocultar Game Assistant): vale la pena avisar si falta. */
+    fun wanted(ctx: Context) = AutoRules.smartBypass(ctx) || AutoRules.gaHidden(ctx) == true
+
     fun requestPermission() {
         if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) Shizuku.requestPermission(REQUEST)
     }

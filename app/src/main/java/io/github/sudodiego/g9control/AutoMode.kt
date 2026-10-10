@@ -126,6 +126,12 @@ object AutoRules {
     fun smartBypassGames(ctx: Context) = sp(ctx).getBoolean("smart_bypass_games", true)
     fun setSmartBypassGames(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("smart_bypass_games", v).apply()
 
+    /** Avisos en Inicio: el cambio automático está apagado (hay reglas pero no el servicio) / Shizuku no está listo. */
+    fun warnService(ctx: Context) = sp(ctx).getBoolean("warn_service", true)
+    fun setWarnService(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("warn_service", v).apply()
+    fun warnShizuku(ctx: Context) = sp(ctx).getBoolean("warn_shizuku", true)
+    fun setWarnShizuku(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("warn_shizuku", v).apply()
+
     /** Botones de volumen de la tablet invertidos (el de abajo sube, el de arriba baja). Los del control no cambian. */
     fun swapVolume(ctx: Context) = sp(ctx).getBoolean("swap_volume", false)
     fun setSwapVolume(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("swap_volume", v).apply()

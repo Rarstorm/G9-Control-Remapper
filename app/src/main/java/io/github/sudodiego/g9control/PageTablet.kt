@@ -26,7 +26,9 @@ fun TabletPage(s: AppState, a: MainActivity) {
         },
         second = {
             GameAssistantSettings(s, a)
-            ShizukuPanel()
+            // Sin Shizuku lo que lo necesita se ve atenuado; su estado y cómo iniciarlo están en Ajustes → Permisos.
+            if (Shell.state != Shell.State.READY) Hint(tr("El bypass y ocultar Game Assistant solo necesitan Shizuku (Ajustes → Permisos).",
+                "Bypass and hiding Game Assistant automatically need Shizuku (Settings → Permissions)."))
         }
     )
 }
@@ -131,7 +133,7 @@ private fun ScreenButtonsPanel(s: AppState, a: MainActivity) {
                 tr("Invertir el volumen", "Swap volume buttons"), swapVol,
                 tr("El botón de abajo sube y el de arriba baja. Los del control no cambian.", "The lower button turns it up and the upper one down. The controller's don't change.")
             ) { swapVol = it; AutoRules.setSwapVolume(a, it) }
-            if (!s.autoServiceOn) Hint(tr("El volumen invertido necesita el servicio de accesibilidad (en Juegos).", "Swapped volume needs the accessibility service (in Games)."))
+            if (!s.autoServiceOn) Hint(tr("El volumen invertido necesita el servicio de accesibilidad (Ajustes → Permisos).", "Swapped volume needs the accessibility service (Settings → Permissions)."))
         }
     }
 }
@@ -174,37 +176,6 @@ private fun GameAssistantSettings(s: AppState, a: MainActivity) {
             }
             OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
                 Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
-            }
-        }
-    }
-}
-
-private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
-
-/** Shizuku: su estado, para qué se usa (una línea) y, si falta algo, el botón para arreglarlo. */
-@Composable
-private fun ShizukuPanel() {
-    val a = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
-    val st = Shell.state
-    Panel("Shizuku", tr("Para el bypass, el rendimiento y ocultar Game Assistant solo.", "For bypass, performance and hiding Game Assistant automatically."), trailing = {
-        Text(
-            when (st) {
-                Shell.State.READY -> tr("Listo", "Ready")
-                Shell.State.NO_PERMISSION -> tr("Falta el permiso", "Permission missing")
-                Shell.State.NOT_RUNNING -> tr("No está iniciado", "Not started")
-            },
-            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }) {
-        when (st) {
-            Shell.State.READY -> Unit
-            Shell.State.NO_PERMISSION -> OutlinedButton(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
-            Shell.State.NOT_RUNNING -> {
-                val launch = remember { a.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE) }
-                if (launch != null) OutlinedButton(onClick = { runCatching { a.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }) {
-                    Text(tr("Abrir Shizuku", "Open Shizuku"))
-                } else Hint(tr("Shizuku no está instalado (shizuku.rikka.app).", "Shizuku isn't installed (shizuku.rikka.app)."))
             }
         }
     }

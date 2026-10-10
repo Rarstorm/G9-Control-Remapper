@@ -85,7 +85,7 @@ private fun LegionPanel(s: AppState, a: MainActivity) {
             SwitchRow(tr("Botón Legion", "Legion button"), legion, tr("Tocar: Atrás. Mantener: ajustes rápidos.", "Tap: Back. Hold: quick settings.")) {
                 legion = it; AutoRules.setLegionKeys(a, it)
             }
-            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (en Juegos).", "Needs the accessibility service (in Games)."))
+            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
         }
     }
 }

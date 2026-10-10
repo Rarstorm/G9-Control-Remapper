@@ -58,7 +58,8 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     Text(version, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            // Izquierda: la app y el control; derecha: lo que se usa dentro de los juegos. Lo de la tablet está en su pestaña.
+            // Izquierda: la app, sus permisos y el control; derecha: lo que se usa dentro de los juegos.
+            PermissionsPanel(s, a)
             if (s.devInfo.isNotEmpty()) Panel(tr("Control", "Controller")) {
                 // El identificador solo con las herramientas de desarrollo.
                 s.devInfo.filter { dev || it.first !in setOf("Identificador", "Identifier") }.forEach { (k, v) ->
@@ -189,7 +190,7 @@ private fun NoticesPanel(s: AppState, a: MainActivity) {
                 Hint(tr("Para quitar un aviso que bloquea sin cambiar de modo: mantén presionada la pantalla 2 s.", "To dismiss a blocking notice without switching mode: press and hold the screen for 2 s."))
             Text(tr("Animación", "Animation"), fontSize = 14.sp)
             ChoiceChips(NoticeAnim.entries.map { it to it.label }, anim) { anim = it; AutoRules.setNoticeAnim(a, it) }
-            if (!on) Hint(tr("Para ver los avisos hay que activar el servicio de accesibilidad (en Juegos).", "To see the notices, turn on the accessibility service (in Games)."))
+            if (!on) Hint(tr("Para ver los avisos hay que activar el servicio de accesibilidad (Ajustes → Permisos).", "To see the notices, turn on the accessibility service (Settings → Permissions)."))
         }
     }
 }
@@ -219,8 +220,72 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 Text(tr("Animación", "Animation"), fontSize = 14.sp)
                 ChoiceChips(NoticeAnim.entries.map { it to it.label }, shotAnim) { shotAnim = it; AutoRules.setShotAnim(a, it) }
             }
-            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (en Juegos).", "Needs the accessibility service (in Games)."))
+            if (!s.autoServiceOn) Hint(tr("Necesita el servicio de accesibilidad (Ajustes → Permisos).", "Needs the accessibility service (Settings → Permissions)."))
         }
+    }
+}
+
+/**
+ * Permisos de la app en un solo lugar: el servicio de accesibilidad (lo usan muchas cosas, no solo el cambio por app),
+ * Shizuku y el permiso de adb para la pantalla 16:9. Cada uno con su estado, para qué sirve y cómo activarlo.
+ */
+@Composable
+private fun PermissionsPanel(s: AppState, a: MainActivity) {
+    LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
+    val shizuku = Shell.state
+    Panel(tr("Permisos", "Permissions")) {
+        PermRow(
+            tr("Servicio de accesibilidad", "Accessibility service"), s.autoServiceOn,
+            tr("Cambio automático por juego, panel de juego, capturas, botón Legion y volumen invertido.", "Automatic switching per game, game panel, screenshots, Legion button and swapped volume.")
+        ) {
+            Hint(tr("Busca «G9 Control» en la lista y actívalo. Si sale «Ajuste restringido»: Ajustes → Apps → G9 Control → ⋮ → Permitir ajustes restringidos.",
+                "Find “G9 Control” in the list and turn it on. If “Restricted setting” appears: Settings → Apps → G9 Control → ⋮ → Allow restricted settings."))
+            Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Abrir accesibilidad", "Open accessibility")) }
+        }
+        PermRow(
+            "Shizuku", shizuku == Shell.State.READY,
+            tr("Bypass, modo de rendimiento y ocultar Game Assistant solo. Hay que iniciarlo tras cada reinicio.", "Bypass, performance mode and hiding Game Assistant automatically. Start it after every reboot."),
+            off = if (shizuku == Shell.State.NO_PERMISSION) tr("Falta el permiso", "Permission missing") else tr("No está iniciado", "Not started")
+        ) {
+            val launch = remember { Shell.launchIntent(a) }
+            when {
+                shizuku == Shell.State.NO_PERMISSION -> Button(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
+                launch != null -> Button(onClick = { runCatching { a.startActivity(launch) } }) { Text(tr("Abrir Shizuku", "Open Shizuku")) }
+                else -> Hint(tr("Shizuku no está instalado (shizuku.rikka.app).", "Shizuku isn't installed (shizuku.rikka.app)."))
+            }
+        }
+        PermRow(
+            tr("Permiso de pantalla", "Screen permission"), Aspect.canWrite(a),
+            tr("Pantalla 16:9 sin Shizuku. Se da una vez desde un computador.", "16:9 screen without Shizuku. Granted once from a computer."),
+            off = tr("Falta", "Missing")
+        ) {
+            Hint(Aspect.GRANT_COMMAND)
+        }
+        // Avisos de Inicio si falta algo (también se apagan con "No avisar" en el propio aviso).
+        var warnService by remember { mutableStateOf(AutoRules.warnService(a)) }
+        var warnShizuku by remember { mutableStateOf(AutoRules.warnShizuku(a)) }
+        CompositionLocalProvider(LocalEditable provides true) {
+            SwitchRow(tr("Avisar en Inicio si el servicio está apagado", "Warn on Home if the service is off"), warnService) {
+                warnService = it; AutoRules.setWarnService(a, it)
+            }
+            SwitchRow(tr("Avisar en Inicio si Shizuku no está iniciado", "Warn on Home if Shizuku isn't started"), warnShizuku) {
+                warnShizuku = it; AutoRules.setWarnShizuku(a, it)
+            }
+        }
+    }
+}
+
+/** Un permiso: nombre y estado en una fila, para qué sirve debajo y, si falta, cómo darlo. */
+@Composable
+private fun PermRow(title: String, ok: Boolean, desc: String, off: String = tr("Apagado", "Off"), fix: @Composable ColumnScope.() -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(if (ok) tr("Activo", "On") else off, fontSize = 14.sp, color = if (ok) c.primary else c.error)
+        }
+        Text(desc, fontSize = 13.sp, color = c.onSurfaceVariant)
+        if (!ok) fix()
     }
 }
 

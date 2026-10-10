@@ -10,6 +10,8 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -47,7 +49,7 @@ fun HomePage(s: AppState, a: MainActivity) {
                 }
             }
         },
-        side = { ServiceWarning(s, a); ModePanel(s, a); QuickProfiles(s, a); ShortcutsPanel() }
+        side = { ServiceWarning(s, a); ShizukuWarning(a); ModePanel(s, a); QuickProfiles(s, a); ShortcutsPanel() }
     )
 }
 
@@ -117,17 +119,53 @@ private fun QuickProfiles(s: AppState, a: MainActivity) {
     }
 }
 
-/** Hay reglas por app pero el servicio de accesibilidad está apagado (por ejemplo, tras reiniciar). */
+/**
+ * El servicio de accesibilidad está apagado y hay algo que lo usa (cambio por juego, panel de juego, botón Legion o
+ * volumen invertido): por ejemplo, tras reiniciar o actualizar. El aviso dice lo que deja de funcionar.
+ */
 @Composable
 private fun ServiceWarning(s: AppState, a: MainActivity) {
-    if (s.autoServiceOn || !s.autoEnabled || s.autoRules.isEmpty()) return
+    var on by remember { mutableStateOf(AutoRules.warnService(a)) }
+    val used = (s.autoEnabled && s.autoRules.isNotEmpty()) || AutoRules.gamePanel(a) || AutoRules.legionKeys(a) || AutoRules.swapVolume(a)
+    if (!on || s.autoServiceOn || !used) return
+    WarningStrip(
+        tr("El servicio de accesibilidad está apagado: el panel de juego, el cambio automático y el botón Legion no funcionan.",
+            "The accessibility service is off: the game panel, automatic switching and the Legion button don't work."),
+        tr("Activar", "Turn on"), { AutoRules.openServiceSettings(a) },
+        onDismiss = { on = false; AutoRules.setWarnService(a, false) }
+    )
+}
+
+/**
+ * Shizuku no está listo y hay algo elegido que lo necesita (bypass automático u ocultar Game Assistant). Pasa tras
+ * cada reinicio de la tablet: Shizuku hay que iniciarlo a mano.
+ */
+@Composable
+private fun ShizukuWarning(a: MainActivity) {
+    var on by remember { mutableStateOf(AutoRules.warnShizuku(a)) }
+    LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
+    val st = Shell.state
+    if (!on || st == Shell.State.READY || !Shell.wanted(a)) return
+    val launch = remember { Shell.launchIntent(a) } ?: return
+    if (st == Shell.State.NO_PERMISSION)
+        WarningStrip(tr("G9 Control no tiene permiso de Shizuku.", "G9 Control has no Shizuku permission."),
+            tr("Dar permiso", "Grant"), { Shell.requestPermission() }, onDismiss = { on = false; AutoRules.setWarnShizuku(a, false) })
+    else
+        WarningStrip(tr("Shizuku no está iniciado: el bypass y ocultar Game Assistant no funcionan.", "Shizuku isn't started: bypass and hiding Game Assistant don't work."),
+            tr("Abrir Shizuku", "Open Shizuku"), { runCatching { a.startActivity(launch) } }, onDismiss = { on = false; AutoRules.setWarnShizuku(a, false) })
+}
+
+/** Franja de aviso de Inicio: el problema, el botón que lo arregla y "No avisar" (se vuelve a activar en Ajustes). */
+@Composable
+private fun WarningStrip(text: String, action: String, onAction: () -> Unit, onDismiss: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Surface(color = c.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.WarningAmber, null, tint = c.onErrorContainer)
             Spacer(Modifier.width(12.dp))
-            Text(tr("El cambio automático por app está apagado.", "Automatic switching per app is off."), Modifier.weight(1f), color = c.onErrorContainer)
-            Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Activar", "Turn on")) }
+            Text(text, Modifier.weight(1f), color = c.onErrorContainer)
+            TextButton(onClick = onDismiss) { Text(tr("No avisar", "Don't warn"), color = c.onErrorContainer) }
+            Button(onClick = onAction) { Text(action) }
         }
     }
 }

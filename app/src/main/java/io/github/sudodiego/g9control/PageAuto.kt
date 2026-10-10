@@ -58,29 +58,16 @@ fun AutoPage(s: AppState, a: MainActivity) {
     AppPicker(s, a)
 }
 
+/** Sin el servicio de accesibilidad el cambio por juego no funciona. Los pasos completos están en Ajustes → Permisos. */
 @Composable
 private fun ServiceSetup(a: MainActivity) {
-    Row(verticalAlignment = Alignment.Top) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary)
         Spacer(Modifier.width(8.dp))
-        Text(tr("Falta activar el servicio de accesibilidad de G9 Control.", "G9 Control's accessibility service isn't on yet."), fontWeight = FontWeight.Medium)
+        Text(tr("El cambio automático necesita el servicio de accesibilidad (Ajustes → Permisos).", "Automatic switching needs the accessibility service (Settings → Permissions)."),
+            Modifier.weight(1f), fontWeight = FontWeight.Medium)
+        Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Activar", "Turn on")) }
     }
-    Text(
-        tr(
-            "1. Toca «Abrir accesibilidad».\n" +
-                "2. Busca «G9 Control: cambio automático» (puede estar en «Apps instaladas» o «Servicios descargados»).\n" +
-                "3. Actívalo y acepta.\n\n" +
-                "Si aparece «Ajuste restringido» y no te deja activarlo: ve a Ajustes → Apps → G9 Control, toca el menú " +
-                "⋮ (arriba a la derecha) → «Permitir ajustes restringidos», y repite los pasos.",
-            "1. Tap “Open accessibility”.\n" +
-                "2. Find “G9 Control: automatic mode switching” (it may be under “Installed apps” or “Downloaded services”).\n" +
-                "3. Turn it on and accept.\n\n" +
-                "If “Restricted setting” appears and it won't let you turn it on: go to Settings → Apps → G9 Control, tap the " +
-                "⋮ menu (top right) → “Allow restricted settings”, and repeat the steps."
-        ),
-        fontSize = 13.sp, lineHeight = 19.sp
-    )
-    Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Abrir accesibilidad", "Open accessibility")) }
 }
 
 @Composable
