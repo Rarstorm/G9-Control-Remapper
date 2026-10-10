@@ -26,6 +26,8 @@
         </intent>
         <!-- Game Assistant de ZUI: saber si está instalado y abrir sus ajustes. -->
         <package android:name="com.zui.game.service" />
+        <!-- Shizuku: abrirlo desde la pestaña Tablet si no está iniciado. -->
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application

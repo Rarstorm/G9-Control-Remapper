@@ -85,33 +85,32 @@ private fun BatteryPanel(a: MainActivity) {
                 Text("${b.level} % · ${"%.0f".format(b.tempC)} °C · $state", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }) {
-            if (!ready) Hint(tr("El bypass necesita Shizuku (a la derecha).", "Bypass needs Shizuku (on the right)."))
-            SwitchRow(
-                tr("Bypass", "Bypass"), bypass == true,
-                tr("El cargador alimenta la tablet; la batería no carga. Se apaga al desconectar.", "The charger powers the tablet; the battery doesn't charge. Off when unplugged.")
-            ) { want ->
-                if (ready) scope.launch { if (ZuiBattery.setBypass(want)) bypass = want }
-            }
-            SwitchRow(
-                tr("Bypass automático", "Automatic bypass"), smart,
-                tr("Enchufada y con lo que elijas abajo; se apaga si deja de cumplirse.", "When plugged in and what you choose below; off when it isn't.")
-            ) {
-                smart = it; AutoRules.setSmartBypass(a, it)
-                // Que no peleen: el inteligente de Game Assistant queda en Manual (se puede con WRITE_SECURE_SETTINGS).
-                if (it && Aspect.canWrite(a)) runCatching { Settings.Global.putInt(a.contentResolver, "intelligent_bypass_charging_value", 0) }
-            }
-            if (smart) {
-                SwitchRow(tr("Solo en juegos", "Only in games"), games) { games = it; AutoRules.setSmartBypassGames(a, it) }
-                Text(tr("Batería mínima", "Minimum battery"), fontSize = 14.sp)
-                ChoiceChips(listOf(20, 40, 60, 80).map { it to "$it %" }, level) { level = it; AutoRules.setSmartBypassLevel(a, it) }
-                limit?.takeIf { level >= it - 5 }?.let {
-                    Hint(tr("El límite de carga de ZUI deja la batería en ~$it %: con este mínimo casi nunca se activa. Elige uno menor o apaga el límite en Optimización de carga.",
-                        "ZUI's charge limit keeps the battery around $it %: with this minimum it will rarely turn on. Pick a lower one or turn the limit off in Charge optimization."))
+            // Sin Shizuku todo el bypass se ve atenuado (no haría nada); la tarjeta Shizuku dice qué falta.
+            CompositionLocalProvider(LocalEditable provides ready) {
+                SwitchRow(
+                    tr("Bypass", "Bypass"), bypass == true,
+                    tr("El cargador alimenta la tablet; la batería no carga. Se apaga al desconectar.", "The charger powers the tablet; the battery doesn't charge. Off when unplugged.")
+                ) { want ->
+                    if (ready) scope.launch { if (ZuiBattery.setBypass(want)) bypass = want }
                 }
-                Text(tr("Temperatura mínima", "Minimum temperature"), fontSize = 14.sp)
-                ChoiceChips(listOf(0 to tr("Sin mínimo", "None"), 35 to "35 °C", 38 to "38 °C", 41 to "41 °C"), temp) { temp = it; AutoRules.setSmartBypassTemp(a, it) }
-                Hint(tr("Temperatura de la batería. El bypass inteligente de Game Assistant queda en Manual para que no se peleen.",
-                    "Battery temperature. Game Assistant's smart bypass is set to Manual so they don't fight."))
+                SwitchRow(
+                    tr("Bypass automático", "Automatic bypass"), smart,
+                    tr("Enchufada y con lo que elijas abajo; se apaga si deja de cumplirse.", "When plugged in and what you choose below; off when it isn't.")
+                ) {
+                    smart = it; AutoRules.setSmartBypass(a, it)
+                    // Que no peleen: el inteligente de Game Assistant queda en Manual (se puede con WRITE_SECURE_SETTINGS).
+                    if (it && Aspect.canWrite(a)) runCatching { Settings.Global.putInt(a.contentResolver, "intelligent_bypass_charging_value", 0) }
+                }
+                if (smart) {
+                    SwitchRow(tr("Solo en juegos", "Only in games"), games) { games = it; AutoRules.setSmartBypassGames(a, it) }
+                    Text(tr("Batería mínima", "Minimum battery"), fontSize = 14.sp)
+                    ChoiceChips(listOf(20, 40, 60, 80).map { it to "$it %" }, level) { level = it; AutoRules.setSmartBypassLevel(a, it) }
+                    limit?.takeIf { level >= it - 5 }?.let {
+                        Hint(tr("Con el límite de carga de ZUI en $it %, este mínimo casi nunca se cumple.", "With ZUI's charge limit at $it %, this minimum will rarely be met."))
+                    }
+                    Text(tr("Temperatura mínima (batería)", "Minimum temperature (battery)"), fontSize = 14.sp)
+                    ChoiceChips(listOf(0 to tr("Sin mínimo", "None"), 35 to "35 °C", 38 to "38 °C", 41 to "41 °C"), temp) { temp = it; AutoRules.setSmartBypassTemp(a, it) }
+                }
             }
             OutlinedButton(onClick = { runCatching { a.startActivity(Intent(Intent.ACTION_POWER_USAGE_SUMMARY)) } }) {
                 Text(tr("Optimización de carga (Ajustes)", "Charge optimization (Settings)"))
@@ -138,8 +137,9 @@ private fun ScreenButtonsPanel(s: AppState, a: MainActivity) {
 }
 
 /**
- * Game Assistant, el de la ROM de la tablet: si hay un juego ahora (se actualiza solo), ocultarlo (con Shizuku) y un
- * acceso a sus ajustes. Solo si la tablet lo tiene.
+ * Game Assistant, el de la ROM de la tablet: si hay un juego ahora (se actualiza solo), ocultarlo y un acceso a sus
+ * ajustes. Ocultarlo es quitarle "Mostrar sobre otras apps": con Shizuku G9 Control lo hace solo (y lo muestra un
+ * momento para cambiar el rendimiento); sin Shizuku se puede a mano en Ajustes. Solo si la tablet lo tiene.
  */
 @Composable
 private fun GameAssistantSettings(s: AppState, a: MainActivity) {
@@ -150,27 +150,28 @@ private fun GameAssistantSettings(s: AppState, a: MainActivity) {
         val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { game = ZuiGame.inGame(a) }
         onDispose { ZuiGame.unobserve(a, o) }
     }
+    val ready = Shell.state == Shell.State.READY
+    val gaScope = rememberCoroutineScope()
+    var gaHidden by remember { mutableStateOf(AutoRules.gaHidden(a)) }
+    // Lo que el usuario eligió, no cómo está ahora: puede estar visible un rato porque G9 Control lo está usando
+    // (copiar el estado actual a la preferencia hacía que no se volviera a ocultar). Solo la primera vez, sin
+    // preferencia guardada, se toma de cómo está.
+    LaunchedEffect(ready) { if (ready && gaHidden == null) ZuiGame.hidden()?.let { gaHidden = it; AutoRules.setGaHidden(a, it) } }
     CompositionLocalProvider(LocalEditable provides true) {
         Panel("Game Assistant", trailing = {
             Text(if (game) tr("En un juego", "In a game") else tr("Sin juego", "No game"), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }) {
-            if (Shell.state == Shell.State.READY) {
-                val gaScope = rememberCoroutineScope()
-                var gaHidden by remember { mutableStateOf(AutoRules.gaHidden(a)) }
-                // Lo que el usuario eligió, no cómo está ahora: puede estar visible un rato porque G9 Control lo está
-                // usando (copiar el estado actual a la preferencia hacía que no se volviera a ocultar). Solo la
-                // primera vez, sin preferencia guardada, se toma de cómo está.
-                LaunchedEffect(Unit) { if (gaHidden == null) ZuiGame.hidden()?.let { gaHidden = it; AutoRules.setGaHidden(a, it) } }
+            CompositionLocalProvider(LocalEditable provides ready) {
                 SwitchRow(
                     tr("Ocultar Game Assistant", "Hide Game Assistant"), gaHidden == true,
                     tr("Sin pestaña ni panel. G9 Control lo muestra solo mientras lo usa.", "No side tab or panel. G9 Control shows it only while using it.")
                 ) { want ->
-                    gaScope.launch {
-                        if (ZuiGame.setHidden(want)) { AutoRules.setGaHidden(a, want); gaHidden = want }
-                    }
+                    if (ready) gaScope.launch { if (ZuiGame.setHidden(want)) { AutoRules.setGaHidden(a, want); gaHidden = want } }
                 }
-                Hint(tr("En un juego, el panel de juego cambia el rendimiento: Ahorro, Equilibrado o Bestia.", "In a game, the game panel changes performance: Power saving, Balanced or Beast."))
-            } else Hint(tr("Ocultarlo y cambiar el rendimiento necesitan Shizuku (abajo).", "Hiding it and changing performance need Shizuku (below)."))
+            }
+            if (!ready) OutlinedButton(onClick = { runCatching { a.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) } }) {
+                Text(tr("Ocultarlo a mano (Mostrar sobre otras apps)", "Hide it manually (Display over other apps)"))
+            }
             OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
                 Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
             }
@@ -178,16 +179,15 @@ private fun GameAssistantSettings(s: AppState, a: MainActivity) {
     }
 }
 
-/**
- * Shizuku: qué funciones de G9 Control lo necesitan (las que la ROM solo deja a apps del sistema o al shell), su
- * estado y el permiso. La pantalla 16:9 no: usa un permiso que se da una vez por adb.
- */
+private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
+/** Shizuku: su estado, para qué se usa (una línea) y, si falta algo, el botón para arreglarlo. */
 @Composable
 private fun ShizukuPanel() {
     val a = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
     val st = Shell.state
-    Panel("Shizuku", trailing = {
+    Panel("Shizuku", tr("Para el bypass, el rendimiento y ocultar Game Assistant solo.", "For bypass, performance and hiding Game Assistant automatically."), trailing = {
         Text(
             when (st) {
                 Shell.State.READY -> tr("Listo", "Ready")
@@ -197,16 +197,16 @@ private fun ShizukuPanel() {
             fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }) {
-        Text(tr("Lo necesitan:", "Needed for:"), fontSize = 14.sp)
-        Text(tr("• Bypass (manual y automático)\n• Modo de rendimiento\n• Ocultar Game Assistant",
-            "• Bypass (manual and automatic)\n• Performance mode\n• Hiding Game Assistant"),
-            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (st) {
             Shell.State.READY -> Unit
             Shell.State.NO_PERMISSION -> OutlinedButton(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
-            Shell.State.NOT_RUNNING -> Hint(tr("Abre Shizuku e inícialo (hay que hacerlo tras cada reinicio de la tablet).", "Open Shizuku and start it (needed after every reboot)."))
+            Shell.State.NOT_RUNNING -> {
+                val launch = remember { a.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE) }
+                if (launch != null) OutlinedButton(onClick = { runCatching { a.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }) {
+                    Text(tr("Abrir Shizuku", "Open Shizuku"))
+                } else Hint(tr("Shizuku no está instalado (shizuku.rikka.app).", "Shizuku isn't installed (shizuku.rikka.app)."))
+            }
         }
-        Hint(tr("G9 Control solo le pide una lista fija de comandos. La pantalla 16:9 no lo necesita.", "G9 Control only asks it for a fixed list of commands. The 16:9 screen doesn't need it."))
     }
 }
 
