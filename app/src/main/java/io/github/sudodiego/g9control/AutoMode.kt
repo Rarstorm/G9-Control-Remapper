@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.content.IntentFilter
 import android.hardware.input.InputManager
 import android.os.Handler
@@ -104,6 +105,17 @@ object AutoRules {
     fun touchpadShot(ctx: Context) = sp(ctx).getBoolean("touchpad_shot", true)
     fun setTouchpadShot(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("touchpad_shot", v).apply()
 
+    /**
+     * Game Assistant oculto (appops, con Shizuku): G9 Control lo muestra solo mientras lo usa y después lo vuelve
+     * a dejar así. Null mientras no se sabe (se toma de cómo esté la primera vez).
+     */
+    fun gaHidden(ctx: Context): Boolean? = sp(ctx).takeIf { it.contains("ga_hidden") }?.getBoolean("ga_hidden", false)
+    fun setGaHidden(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("ga_hidden", v).apply()
+
+    /** Botones de volumen de la tablet invertidos (el de abajo sube, el de arriba baja). Los del control no cambian. */
+    fun swapVolume(ctx: Context) = sp(ctx).getBoolean("swap_volume", false)
+    fun setSwapVolume(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("swap_volume", v).apply()
+
     /** Botón Legion (Home del control): tocar = Atrás, mantener = ajustes rápidos. */
     fun legionKeys(ctx: Context) = sp(ctx).getBoolean("legion_keys", true)
     fun setLegionKeys(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("legion_keys", v).apply()
@@ -179,6 +191,8 @@ class AutoModeService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val main = Handler(Looper.getMainLooper())
     private var lastPackage: String? = null
+    /** App al frente (la última que no es pasajera). */
+    val foregroundApp: String? get() = lastPackage
     /** App con regla que está (o estuvo) al frente; al salir de ella se recuerda volver a Android. */
     private var ruleApp: String? = null
     private lateinit var guide: ModeGuide
@@ -254,6 +268,8 @@ class AutoModeService : AccessibilityService() {
         Lang.load(this)
         guide = ModeGuide(this)
         panel = GamePanel(this)
+        Shell.init(this)
+        ZuiGame.initPerf(this)
         updateTouchpad()
         getSharedPreferences("g9", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, main)
@@ -286,6 +302,7 @@ class AutoModeService : AccessibilityService() {
         hiddenForApp = false
         lastPackage = pkg
         panel.hide()
+        panel.onAppChanged()
         Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
         if (!AutoRules.enabled(this)) return
 
@@ -329,11 +346,29 @@ class AutoModeService : AccessibilityService() {
     /** Start/Select que se retuvieron mientras estaba la guía; su "soltar" también se retiene. */
     private val held = mutableSetOf<Int>()
 
+    /** Botones del control cuya presión llegó a la app: su soltar tiene que llegar también. */
+    private val delivered = mutableSetOf<Int>()
+
     /**
-     * Mientras la guía está en pantalla, Start y Select no llegan al juego (para cambiar de modo sin
-     * pausar ni abrir menús). El resto de los botones pasa normal.
+     * Si la presión de un botón llegó a la app, su soltar llega siempre, aunque mientras tanto se haya abierto el
+     * panel o la guía (si no, la app lo cree apretado para siempre: pasaba con el primer stick de L3 + R3).
      */
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        val k = event.keyCode
+        if (event.action == KeyEvent.ACTION_UP && delivered.remove(k)) {
+            handleKey(event)   // para que el resto (L3 + R3, la guía) se entere de que se soltó
+            return false
+        }
+        val consumed = handleKey(event)
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && !consumed && KeyEvent.isGamepadButton(k)) delivered += k
+        return consumed
+    }
+
+    /**
+     * Mientras la guía está en pantalla, Start y Select no llegan al juego (para cambiar de modo sin
+     * pausar ni abrir menús). El resto de los botones pasa normal. Devuelve si el evento es nuestro.
+     */
+    private fun handleKey(event: KeyEvent): Boolean {
         val k = event.keyCode
         // Teclas que no llegan a las apps (encendido, volumen…): se pasan a la prueba de botones.
         KeyBus.listener?.let { l ->
@@ -342,6 +377,10 @@ class AutoModeService : AccessibilityService() {
                 main.post { l(copy) }
             }
         }
+        if (volumeSwap(event)) return true
+        // Imagen congelada (cambiando el rendimiento): moverse sin ver a dónde, no. Los sticks los toma su ventana.
+        if (panel.busy && (KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
+                event.isFromSource(InputDevice.SOURCE_DPAD))) return true
         if (panelChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
@@ -360,6 +399,50 @@ class AutoModeService : AccessibilityService() {
             else -> false
         }
     }
+
+    /**
+     * Volumen invertido en los botones de la tablet: el servicio se queda con la tecla y sube o baja al revés,
+     * como lo haría Android (el volumen que corresponda y su barra). Solo los botones físicos de la tablet (no
+     * externos ni virtuales): los del control y las teclas inyectadas quedan igual. La captura con encendido +
+     * bajar volumen la procesa Android antes y sigue con el botón físico de siempre.
+     */
+    private fun volumeSwap(e: KeyEvent): Boolean {
+        val k = e.keyCode
+        if (k != KeyEvent.KEYCODE_VOLUME_UP && k != KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        if (!AutoRules.swapVolume(this)) return false
+        val dev = e.device ?: return false
+        if (dev.isExternal || dev.isVirtual) return false
+        when (e.action) {
+            KeyEvent.ACTION_DOWN -> if (e.repeatCount == 0) {
+                volDir = if (k == KeyEvent.KEYCODE_VOLUME_UP) AudioManager.ADJUST_LOWER else AudioManager.ADJUST_RAISE
+                adjustVolume(volDir)
+                volSteps = 0
+                main.removeCallbacks(volRepeat)
+                main.postDelayed(volRepeat, 400)
+            }
+            KeyEvent.ACTION_UP -> main.removeCallbacks(volRepeat)
+        }
+        return true
+    }
+
+    private var volDir = 0
+    private var volSteps = 0
+    /**
+     * Mantener el botón: el servicio recibe la tecla antes de que Android genere las repeticiones (solo ve apretar y
+     * soltar), así que las hace él, con los tiempos de Android: 400 ms y después un paso cada 80 ms. Como mucho
+     * 40 pasos (más de lo que hay de 0 a 100 %): si el soltar no llega (pantalla apagada, la captura se lo quedó),
+     * no sigue para siempre.
+     */
+    private val volRepeat: Runnable = object : Runnable {
+        override fun run() {
+            if (++volSteps > 40) return
+            adjustVolume(volDir)
+            main.postDelayed(this, 80)
+        }
+    }
+
+    private fun adjustVolume(dir: Int) = getSystemService(AudioManager::class.java)
+        .adjustSuggestedStreamVolume(dir, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
     private var legionOwned = false

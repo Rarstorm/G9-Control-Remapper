@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -204,10 +205,11 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var shotSound by remember { mutableStateOf(AutoRules.shotSound(a)) }
     var shotAnim by remember { mutableStateOf(AutoRules.shotAnim(a)) }
     var legion by remember { mutableStateOf(AutoRules.legionKeys(a)) }
+    var swapVol by remember { mutableStateOf(AutoRules.swapVolume(a)) }
     val zui = remember { ZuiGame.installed(a) }
-    var bar by remember { mutableStateOf(ZuiGame.sideBar(a)) }
+    var game by remember { mutableStateOf(ZuiGame.inGame(a)) }
     if (zui) DisposableEffect(Unit) {
-        val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { bar = it }
+        val o = ZuiGame.observe(a, android.os.Handler(a.mainLooper)) { game = ZuiGame.inGame(a) }
         onDispose { ZuiGame.unobserve(a, o) }
     }
     CompositionLocalProvider(LocalEditable provides true) {
@@ -227,6 +229,12 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 tr("Tocar: Atrás. Mantener medio segundo: ajustes rápidos. En cualquier modo y app, menos dentro de G9 Control.",
                     "Tap: Back. Hold half a second: quick settings. In any mode and app, except inside G9 Control.")
             ) { legion = it; AutoRules.setLegionKeys(a, it) }
+            SwitchRow(
+                tr("Invertir el volumen de la tablet", "Swap the tablet's volume buttons"), swapVol,
+                tr("El botón de abajo sube el volumen y el de arriba lo baja. Solo los botones de la tablet; los del control quedan igual.",
+                    "The lower button turns the volume up and the upper one turns it down. Only the tablet's buttons; the controller's stay the same.")
+            ) { swapVol = it; AutoRules.setSwapVolume(a, it) }
+            ScreenRow(a)
             NoticeBox(tr("Aviso de captura", "Screenshot notice"), tr("Miniatura de la captura que entra desde el borde.", "Thumbnail of the screenshot that slides in from the edge."),
                 if (s.autoServiceOn) { { AutoRules.preview(a, "shot") } } else null,
                 side = { PosGrid(shotPos) { shotPos = it; AutoRules.setShotPos(a, it) } }) {
@@ -244,14 +252,90 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Game Assistant", Modifier.weight(1f), fontSize = 14.sp)
                     Text(
-                        if (bar != null) tr("En modo juego", "In game mode") else tr("Sin juego activo", "No game active"),
+                        if (game) tr("En modo juego", "In game mode") else tr("Sin juego activo", "No game active"),
                         fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
                     Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
                 }
+                ShizukuRow(a)
             }
+        }
+    }
+}
+
+/**
+ * Shizuku: con él, el panel de juego puede cambiar el modo de rendimiento y mostrar Game Assistant aunque esté
+ * oculto. Sin él, se explica cómo ocultarlo o mostrarlo a mano.
+ */
+@Composable
+private fun ShizukuRow(a: MainActivity) {
+    LaunchedEffect(Unit) { Shell.init(a); Shell.refresh() }
+    val st = Shell.state
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Shizuku", Modifier.weight(1f), fontSize = 14.sp)
+        Text(
+            when (st) {
+                Shell.State.READY -> tr("Listo", "Ready")
+                Shell.State.NO_PERMISSION -> tr("Falta el permiso", "Permission missing")
+                Shell.State.NOT_RUNNING -> tr("No está activo", "Not running")
+            },
+            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    if (st == Shell.State.READY) {
+        val gaScope = rememberCoroutineScope()
+        var gaHidden by remember { mutableStateOf(AutoRules.gaHidden(a)) }
+        // Lo que el usuario eligió, no cómo está ahora: puede estar visible un rato porque G9 Control lo está usando
+        // (copiar el estado actual a la preferencia hacía que no se volviera a ocultar). Solo la primera vez, sin
+        // preferencia guardada, se toma de cómo está.
+        LaunchedEffect(Unit) { if (gaHidden == null) ZuiGame.hidden()?.let { gaHidden = it; AutoRules.setGaHidden(a, it) } }
+        SwitchRow(
+            tr("Ocultar Game Assistant", "Hide Game Assistant"), gaHidden == true,
+            tr("Quita su pestaña lateral, su panel y sus avisos (sigue funcionando por detrás). G9 Control lo muestra solo mientras lo usa.",
+                "Removes its side tab, panel and notices (it keeps working in the background). G9 Control shows it only while using it.")
+        ) { want ->
+            gaScope.launch {
+                if (ZuiGame.setHidden(want)) {
+                    AutoRules.setGaHidden(a, want)
+                    gaHidden = want
+                }
+            }
+        }
+    }
+    when (st) {
+        Shell.State.READY -> Hint(tr("En un juego, el panel de juego ofrece Rendimiento (Ahorro, Equilibrado o Bestia) y muestra Game Assistant aunque esté oculto; al salir del juego lo vuelve a ocultar.",
+            "In a game, the game panel offers Performance (Power saving, Balanced or Beast) and shows Game Assistant even if it's hidden; it hides it again when you leave the game."))
+        Shell.State.NO_PERMISSION -> OutlinedButton(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control", "Grant permission to G9 Control")) }
+        Shell.State.NOT_RUNNING -> Hint(tr("Con Shizuku (hay que iniciarlo tras cada reinicio), el panel de juego cambia el modo de rendimiento. Sin él, para ocultar Game Assistant: adb shell appops set ${ZuiGame.PACKAGE} SYSTEM_ALERT_WINDOW ignore (allow para mostrarlo).",
+            "With Shizuku (it must be started after every reboot), the game panel changes the performance mode. Without it, to hide Game Assistant: adb shell appops set ${ZuiGame.PACKAGE} SYSTEM_ALERT_WINDOW ignore (allow to show it)."))
+    }
+}
+
+/**
+ * Pantalla 16:9 para un monitor externo. Sin Shizuku si la app tiene WRITE_SECURE_SETTINGS (se da una vez con
+ * adb); si no, con Shizuku; si no hay ninguno, el comando para darlo.
+ */
+@Composable
+private fun ScreenRow(a: MainActivity) {
+    val scope = rememberCoroutineScope()
+    var wide by remember { mutableStateOf(Aspect.is169(a)) }
+    if (!Aspect.available(a)) {
+        Text(tr("Pantalla 16:9", "16:9 screen"), fontSize = 14.sp)
+        Hint(tr("Para un monitor externo sin bordes. Necesita un permiso que se da una vez desde un computador: ${Aspect.GRANT_COMMAND}",
+            "For an external monitor without borders. It needs a permission you grant once from a computer: ${Aspect.GRANT_COMMAND}"))
+        return
+    }
+    SwitchRow(
+        tr("Pantalla 16:9", "16:9 screen"), wide,
+        tr("Para un monitor externo: la imagen llena el monitor sin bordes (en la tablet quedan franjas negras). Se recuerda al reiniciar; también se cambia desde el panel de juego. Algunas apps abiertas se cierran al cambiarla (Dolphin).",
+            "For an external monitor: the picture fills it with no borders (the tablet shows black bars). It persists after a reboot; you can also switch it from the game panel. Some open apps close when it changes (Dolphin).")
+    ) { want ->
+        scope.launch {
+            if (want != Aspect.is169(a)) Aspect.toggle(a)
+            kotlinx.coroutines.delay(500)
+            wide = Aspect.is169(a)
         }
     }
 }

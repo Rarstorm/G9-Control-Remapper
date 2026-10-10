@@ -57,4 +57,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Shizuku: comandos de shell para mostrar u ocultar Game Assistant y leer su modo de rendimiento.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    // Pantalla 16:9 sin Shizuku: IWindowManager (oculta) con WRITE_SECURE_SETTINGS dado una vez por adb.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 }
