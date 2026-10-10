@@ -230,7 +230,7 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                 null, side = { PosGrid(perfPos) { perfPos = it; AutoRules.setPerfPos(a, it) } }) {
                 SwitchRow(tr("Mostrar", "Show"), perfHud) { perfHud = it; AutoRules.setPerfHud(a, it) }
                 SwitchRow(tr("Más datos", "More data"), perfFull,
-                    tr("Segunda línea: watts, tiempo de batería, Hz y temperatura de la tablet.", "Second line: watts, battery time, Hz and tablet temperature.")) {
+                    tr("Segunda línea: watts, tiempo de batería, Hz y aviso de calor.", "Second line: watts, battery time, Hz and heat warning.")) {
                     perfFull = it; AutoRules.setPerfFull(a, it)
                 }
             }

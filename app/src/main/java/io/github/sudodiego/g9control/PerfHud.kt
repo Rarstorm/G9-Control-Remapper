@@ -109,8 +109,6 @@ class PerfHud(private val svc: AutoModeService) {
             val group = when {
                 type.startsWith("cpu-") || type.startsWith("cpuss-") -> "cpu"
                 type.startsWith("gpuss-") -> "gpu"
-                // La de la carcasa (la que se siente en la mano; la usa la ROM para su control de temperatura).
-                type == "user_temp" || type == "skin-msm-therm" -> "skin"
                 else -> return@mapNotNull null
             }
             group to File(z, "temp")
@@ -161,9 +159,9 @@ class PerfHud(private val svc: AutoModeService) {
                 if (watts != null) { sb.append(if (charging) "+" else ""); sb.append("%.1f ".format(watts)); label("W"); sep() }
                 remaining(bat, charging)?.let { sb.append(it); sep() }
             }
-            hz()?.let { sb.append("$it "); label("Hz"); sep() }
-            label(tr("Tablet", "Tablet")); temp(maxTemp("skin"), 40, 45)
-            thermal()?.let { colored("  $it", HOT) }
+            hz()?.let { sb.append("$it "); label("Hz") }
+            // Android ya baja (o va a bajar) el rendimiento por calor, mida lo que mida la ROM.
+            thermal()?.let { sep(); colored(it, HOT) }
         }
         main.post { view?.text = sb }
     }
