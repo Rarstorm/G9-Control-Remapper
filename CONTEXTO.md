@@ -8,6 +8,8 @@ Este archivo junta lo que se sabe del protocolo y del control, lo que se descart
 
 **Estructura (10 oct 2026, paso 2 hecho):** selector **Tablet | G9** arriba a la izquierda (`Section`, con un punto verde si el G9 está conectado). Tablet: Inicio (avisos, la tablet ahora, Rápido: bypass/monitor/16:9, controles conectados de cualquier marca, atajos), Batería (bypass, automático, límite + "Ahora": estado, temperatura, W, ciclos), Pantalla (16:9, volumen, monitor externo), Juego (panel de juego, capturas, monitor de rendimiento, Game Assistant), Ajustes. G9: Inicio (dibujo, modo, perfiles), Modos (por juego + avisos de cambio de modo), Luces, Sticks, Vibración, Botones, Traseros, Perfiles, Ajustes. Ajustes es la misma en las dos (Aplicación, Permisos, "Control G9": dibujo, abrir al conectar, datos del control, valores de fábrica). LB/RB recorren las pestañas de la sección (dan la vuelta); LT/RT cambian entre Tablet y G9 (no en Vibración ni Sticks, donde prueban los gatillos). La app abre en Tablet; al abrirse por conectar el G9, en G9. La conexión del G9 (píldora) solo se ve en su sección. Falta: renombrar, Juegos por app en Tablet (Hz), estadísticas.
 
+**Paleta (10 oct 2026):** inspirada en los fondos de anime de la Y700 (solo los colores; su arte y su personaje no van en la app): índigo profundo como principal (claro #3A55C8 / oscuro #8FB2FF), celeste brillante para lo encendido (#1E8FD6 / #5CC8FF), lila de detalle, fondos blanco hielo (#EDF2F8) o azul marino (#0D1220). El panel de juego y el monitor en azul marino con lo encendido en celeste.
+
 ### Lo aprendido, en corto (10 oct 2026)
 
 | Qué | Cómo | Necesita |

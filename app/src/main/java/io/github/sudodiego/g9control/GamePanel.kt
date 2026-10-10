@@ -971,12 +971,13 @@ class GamePanel(private val svc: AutoModeService) {
 
 // Colores del panel, como los ajustes rápidos de Android en oscuro: fondo casi negro, mosaicos grises y los
 // encendidos en el color de acento con el contenido oscuro.
-private val PANEL_BG = Color(0xF0101418)
-private val TILE = Color(0xFF232931)
-private val TILE_ON = Color(0xFF7DD8F5)
-private val ON_TILE_ON = Color(0xFF062530)
-private val PANEL_ACCENT = Color(0xFF3DD6FF)
-private val PANEL_MUTED = Color(0xFF97A1AE)
+// Azul marino con lo encendido en celeste, como la paleta de la app (los fondos de la Y700).
+private val PANEL_BG = Color(0xF00E1424)
+private val TILE = Color(0xFF1F2A42)
+private val TILE_ON = Color(0xFF6EC9FF)
+private val ON_TILE_ON = Color(0xFF052238)
+private val PANEL_ACCENT = Color(0xFF5CC8FF)
+private val PANEL_MUTED = Color(0xFF9AA6BF)
 private val SELECTED = Color.White
 
 private val TILE_W = 172.dp

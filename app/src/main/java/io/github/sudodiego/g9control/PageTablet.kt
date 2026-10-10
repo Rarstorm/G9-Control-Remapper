@@ -166,7 +166,8 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
                 }
                 SwitchRow(
                     tr("Bypass automático", "Automatic bypass"), smart,
-                    tr("Enchufada y con lo que elijas abajo; se apaga si deja de cumplirse.", "When plugged in and what you choose below; off when it isn't.")
+                    tr("Se enciende solo con el cargador conectado y cuando se cumple todo lo de abajo; se apaga cuando deja de cumplirse.",
+                        "Turns on by itself with the charger plugged in and when everything below is met; turns off when it no longer is.")
                 ) {
                     smart = it; AutoRules.setSmartBypass(a, it)
                     // Que no peleen: el inteligente de Game Assistant queda en Manual (se puede con WRITE_SECURE_SETTINGS).
@@ -174,13 +175,22 @@ private fun BatteryPanel(s: AppState, a: MainActivity) {
                 }
                 if (smart) {
                     if (!s.autoServiceOn) Hint(tr("El automático necesita el servicio de accesibilidad (Ajustes → Permisos).", "Automatic needs the accessibility service (Settings → Permissions)."))
-                    SwitchRow(tr("Solo en juegos", "Only in games"), games) { games = it; AutoRules.setSmartBypassGames(a, it) }
+                    SwitchRow(tr("Solo en juegos", "Only in games"), games,
+                        tr("Solo con un juego abierto (los que reconoce Game Assistant).", "Only with a game open (the ones Game Assistant recognizes).")) {
+                        games = it; AutoRules.setSmartBypassGames(a, it)
+                    }
                     Text(tr("Batería mínima", "Minimum battery"), fontSize = 14.sp)
+                    Text(tr("Bajo este nivel no se activa: así la batería primero carga hasta ahí y después el cargador alimenta la tablet.",
+                        "Below this level it stays off: the battery charges up to it first, then the charger powers the tablet."),
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ChoiceChips(listOf(20, 40, 60, 80).map { it to "$it %" }, level) { level = it; AutoRules.setSmartBypassLevel(a, it) }
                     limit?.takeIf { level >= it - 5 }?.let {
                         Hint(tr("Con el límite de carga de ZUI en $it %, este mínimo casi nunca se cumple.", "With ZUI's charge limit at $it %, this minimum will rarely be met."))
                     }
                     Text(tr("Temperatura mínima (batería)", "Minimum temperature (battery)"), fontSize = 14.sp)
+                    Text(tr("Solo se activa cuando la batería se calienta a esta temperatura: para que no se caliente más cargando mientras juegas. \"Sin mínimo\": a cualquier temperatura.",
+                        "It only turns on once the battery reaches this temperature, so it doesn't heat up more by charging while you play. \"None\": at any temperature."),
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ChoiceChips(listOf(0 to tr("Sin mínimo", "None"), 35 to "35 °C", 38 to "38 °C", 41 to "41 °C"), temp) { temp = it; AutoRules.setSmartBypassTemp(a, it) }
                 }
             }

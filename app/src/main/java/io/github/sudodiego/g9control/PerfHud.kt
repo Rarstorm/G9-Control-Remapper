@@ -54,7 +54,7 @@ class PerfHud(private val svc: AutoModeService) {
             setLineSpacing(3 * dp, 1f)
             setTextColor(android.graphics.Color.WHITE)
             setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
-            background = GradientDrawable().apply { setColor(0xB0101418.toInt()); cornerRadius = 12 * dp }
+            background = GradientDrawable().apply { setColor(0xB80E1424.toInt()); cornerRadius = 12 * dp }
             text = "…"
         }
         val pos = AutoRules.perfPos(svc)
