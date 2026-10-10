@@ -22,12 +22,20 @@ object ZuiBattery {
         Shell.run(Shell.BYPASS_GET)?.let { parse(it) }?.also { bypassNow = it }
 
     /**
-     * El usuario lo cambió a mano: el bypass automático no lo toca hasta desconectar el cargador o cambiar de app
-     * (si no, lo volvería a cambiar en el siguiente aviso de la batería).
+     * El usuario lo cambió a mano: el bypass automático (y el límite de carga) no lo tocan hasta desconectar el
+     * cargador (si no, lo volverían a cambiar en el siguiente aviso de la batería). Se guarda: dura aunque se cambie
+     * de app o el servicio se reinicie (al actualizar la app).
      */
     @Volatile var manualOverride = false
+        set(v) { field = v; prefs?.edit()?.putBoolean("bypass_manual", v)?.apply() }
+    private var prefs: android.content.SharedPreferences? = null
 
-    /** Activa o desactiva el bypass. True si el servicio lo aceptó. [manual]: lo pidió el usuario (no el automático). */
+    /** Al arrancar el servicio: la elección manual que había, si sigue enchufada. */
+    fun init(ctx: Context) {
+        prefs = ctx.getSharedPreferences("g9", Context.MODE_PRIVATE)
+        manualOverride = plugged(ctx) && prefs!!.getBoolean("bypass_manual", false)
+    }
+
     /** El bypass encendido lo puso el automático (o el límite propio), no el usuario: para mostrarlo en el panel. */
     @Volatile var byAuto = false
         private set

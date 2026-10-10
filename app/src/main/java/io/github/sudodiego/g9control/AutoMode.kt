@@ -445,6 +445,28 @@ class AutoModeService : AccessibilityService() {
     }
 
     /**
+     * Moonlight/Artemis está transmitiendo. La vista del video se reporta como un `View` genérico, así que se mira
+     * la forma: transmitiendo, su ventana activa son apenas un marco y unas pocas vistas (probado: FrameLayout con
+     * View, View y el TextView de las estadísticas); en sus listas de PCs y apps hay grillas, imágenes y botones.
+     * Solo nombres de clase, no el contenido.
+     */
+    private fun limelightStreaming(): Boolean {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return streaming
+        // Transmitiendo hay un TextView (las estadísticas de Artemis): ese no cuenta.
+        val ui = listOf("Button", "ListView", "GridView", "RecyclerView", "ImageView", "EditText", "ScrollView")
+        val queue = ArrayDeque(listOf(root))
+        var count = 0
+        while (queue.isNotEmpty()) {
+            val n = queue.removeFirst()
+            if (++count > 8) return false
+            val cls = n.className?.toString().orEmpty()
+            if (ui.any { cls.endsWith(it) }) return false
+            for (i in 0 until n.childCount) n.getChild(i)?.let { queue.addLast(it) }
+        }
+        return true
+    }
+
+    /**
      * Al arrancar el servicio (al actualizar la app, por ejemplo) no llega ningún "cambio de app" hasta cambiar de
      * verdad: la app al frente se lee de la lista de ventanas (para el panel, las capturas en un launcher, etc.).
      */
@@ -456,7 +478,8 @@ class AutoModeService : AccessibilityService() {
         if (isTransient(pkg)) return
         lastPackage = pkg
         appWindowId = w.id
-        Log.d(TAG, "app al frente al arrancar: $pkg")
+        if (pkg in AutoRules.STREAMING) { streaming = !pkg.startsWith("com.limelight") || limelightStreaming(); updatePadWatch() }
+        Log.d(TAG, "app al frente al arrancar: $pkg${if (streaming) " (transmitiendo)" else ""}")
     }
 
     private var unlockTries = 0
@@ -503,6 +526,7 @@ class AutoModeService : AccessibilityService() {
         panel = GamePanel(this)
         perfHud = PerfHud(this).also { it.update() }
         Shell.init(this)
+        ZuiBattery.init(this)
         ZuiGame.initPerf(this)
         updateTouchpad()
         getSharedPreferences("g9", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
@@ -552,9 +576,8 @@ class AutoModeService : AccessibilityService() {
         lastPackage = pkg
         panel.hide()
         panel.onAppChanged()
-        // Bypass automático: otra app, otra decisión (lo manual vale para la app en que se eligió). ZUI tarda un
-        // momento en decidir si es juego.
-        ZuiBattery.manualOverride = false
+        // Bypass automático: otra app, otra decisión ("solo en juegos"). Lo manual sigue valiendo hasta desconectar el
+        // cargador. ZUI tarda un momento en decidir si es juego.
         main.removeCallbacks(bypassCheck)
         main.postDelayed(bypassCheck, 3000)
         Log.d(TAG, "app al frente: $pkg (${event.className}), ventana $appWindowId, modo ${ModeSwitcher.detect()}, ZUI ${ZuiGame.sideBar(this)}")
@@ -809,6 +832,12 @@ class AutoModeService : AccessibilityService() {
                 if (e.repeatCount > 0) return legionOwned || legionChording
                 // El toque final del firmware al soltar Legion después de una combinación: no es Atrás.
                 if (legionChording) return true
+                // En Moonlight/Artemis se confirma mirando la pantalla ahora (los avisos de ventana a veces no llegan
+                // o un menú de Artemis los cambia): así Legion no hace Atrás transmitiendo.
+                if (lastPackage?.startsWith("com.limelight") == true) {
+                    val now = limelightStreaming()
+                    if (now != streaming) { streaming = now; Log.d(TAG, "transmitiendo (al apretar Legion): $now"); updatePadWatch() }
+                }
                 legionOwned = AutoRules.legionKeys(this) && !appInFront && !guide.blocksInput && !streaming
                 if (legionOwned) { legionPending = true; main.postDelayed(legionHold, 500) }
                 return legionOwned
