@@ -674,17 +674,22 @@ class AutoModeService : AccessibilityService() {
         if (dev.isExternal || dev.isVirtual) return false
         when (e.action) {
             KeyEvent.ACTION_DOWN -> if (e.repeatCount == 0) {
+                volKey = k
                 volDir = if (k == KeyEvent.KEYCODE_VOLUME_UP) AudioManager.ADJUST_LOWER else AudioManager.ADJUST_RAISE
                 adjustVolume(volDir)
                 volSteps = 0
                 main.removeCallbacks(volRepeat)
                 main.postDelayed(volRepeat, 400)
             }
-            KeyEvent.ACTION_UP -> main.removeCallbacks(volRepeat)
+            // Solo el soltar del botón que se está repitiendo: al pasar rápido de uno al otro, el soltar del primero
+            // puede llegar después de apretar el segundo, y cortaba su repetición.
+            KeyEvent.ACTION_UP -> if (k == volKey) { main.removeCallbacks(volRepeat); volKey = 0 }
         }
         return true
     }
 
+    /** El botón de volumen que se está manteniendo (0 = ninguno). */
+    private var volKey = 0
     private var volDir = 0
     private var volSteps = 0
     /**
