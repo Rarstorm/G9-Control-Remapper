@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TabletAndroid
@@ -58,6 +59,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +106,8 @@ private enum class Section { SLIDER, GAME, SYSTEM }
 private class PanelItem(
     val label: String, val icon: ImageVector, val section: Section = Section.GAME,
     val sub: String? = null, val active: Boolean = false,
+    /** Atenuado: no funciona ahora (falta Shizuku); elegirlo lleva a arreglarlo. */
+    val enabled: Boolean = true,
     val adjust: ((Int) -> Unit)? = null, val level: Float? = null, val alt: (() -> Unit)? = null,
     val set: ((Float) -> Unit)? = null, val hint: String? = null, val run: () -> Unit = {}
 )
@@ -136,6 +142,7 @@ private class PanelUi {
     var title by mutableStateOf("")
     var battery by mutableIntStateOf(-1)
     var charging by mutableStateOf(false)
+    var bypass by mutableStateOf(false)
     var status by mutableStateOf("")
     /** En un submenú (rendimiento): encabezado sin batería ni hora, y B vuelve. */
     var sub by mutableStateOf(false)
@@ -209,16 +216,19 @@ class GamePanel(private val svc: AutoModeService) {
         ui.title = appLabel(svc.foregroundApp)
         val i = svc.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         ui.battery = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: -1
-        val charging = i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, 0) == android.os.BatteryManager.BATTERY_STATUS_CHARGING
-        val bypass = ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc)
-        ui.charging = charging || bypass
-        val state = when {
-            bypass -> "Bypass"
-            charging -> tr("Cargando", "Charging")
-            else -> null
-        }
+        // Cargando: rayo en la batería. Bypass: un enchufe al lado y la batería en celeste (no carga, pero está enchufada).
+        ui.bypass = ZuiBattery.bypassNow == true && ZuiBattery.plugged(svc)
+        ui.charging = !ui.bypass && i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, 0) == android.os.BatteryManager.BATTERY_STATUS_CHARGING
         val time = android.text.format.DateFormat.getTimeFormat(svc).format(Date())
-        ui.status = listOfNotNull(ui.battery.takeIf { it >= 0 }?.let { "$it %" }, state, time).joinToString(" · ")
+        ui.status = listOfNotNull(ui.battery.takeIf { it >= 0 }?.let { "$it %" }, time).joinToString(" · ")
+    }
+
+    /** Shizuku no está listo: pedirle el permiso, o abrir su app para iniciarlo. */
+    private fun fixShizuku() {
+        hide()
+        if (Shell.state == Shell.State.NO_PERMISSION) Shell.requestPermission()
+        else Shell.launchIntent(svc)?.let { runCatching { svc.startActivity(it) } }
+            ?: toast(tr("Shizuku no está instalado.", "Shizuku isn't installed."))
     }
 
     /** Del submenú de rendimiento al panel, con Rendimiento elegido. */
@@ -417,6 +427,13 @@ class GamePanel(private val svc: AutoModeService) {
         add(PanelItem(tr("Silenciar", "Mute"), Icons.AutoMirrored.Outlined.VolumeOff, Section.SLIDER, active = vol == 0) {
             SystemLevels.toggleMute(svc); refresh()
         })
+        // Sin Shizuku: un mosaico para iniciarlo, si hay algo que lo necesita (en un juego, enchufada o elegido).
+        val ready = Shell.state == Shell.State.READY
+        val needs = tr("Necesita Shizuku", "Needs Shizuku")
+        if (!ready && Shell.launchIntent(svc) != null && (ZuiGame.inGame(svc) || ZuiBattery.plugged(svc) || Shell.wanted(svc)))
+            add(PanelItem("Shizuku", Icons.Outlined.PlayArrow,
+                sub = if (Shell.state == Shell.State.NO_PERMISSION) tr("Dar permiso", "Grant permission") else tr("Iniciar", "Start"),
+                run = ::fixShizuku))
         // El juego. La captura toma solo la ventana del juego: no hace falta esperar a que el panel desaparezca.
         add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: Legion + RB", "Also: Legion + RB")) { hide(); screenshot() })
         if (ZuiGame.inGame(svc)) {
@@ -432,14 +449,18 @@ class GamePanel(private val svc: AutoModeService) {
                         else AutoRules.setGaHidden(svc, true)
                     }
                 })
-            // Cambiar el modo necesita Shizuku: para mostrar Game Assistant si está oculto y leer su registro.
-            if (Shell.state == Shell.State.READY)
+            // Cambiar el modo necesita Shizuku: para mostrar Game Assistant si está oculto y leer su registro. Sin él,
+            // atenuado (y elegirlo lleva a Shizuku).
+            if (ready)
                 add(PanelItem(tr("Rendimiento", "Performance"), Icons.Outlined.Speed,
                     sub = ZuiGame.knownPerf(svc.foregroundApp)?.label ?: tr("Elegir", "Choose")) { showPerfMenu() })
+            else add(PanelItem(tr("Rendimiento", "Performance"), Icons.Outlined.Speed, sub = needs, enabled = false, run = ::fixShizuku))
         }
         // Bypass (con Shizuku): con la tablet enchufada, o si ya está activo para poder quitarlo.
         val bypassOn = ZuiBattery.bypassNow == true
-        if (Shell.state == Shell.State.READY && (bypassOn || ZuiBattery.plugged(svc)))
+        if (!ready && ZuiBattery.plugged(svc))
+            add(PanelItem("Bypass", Icons.Outlined.Power, sub = needs, enabled = false, run = ::fixShizuku))
+        if (ready && (bypassOn || ZuiBattery.plugged(svc)))
             add(PanelItem("Bypass", Icons.Outlined.Power, active = bypassOn, sub = when {
                 // Quién lo encendió: el automático (o el límite de carga) o el usuario.
                 bypassOn && ZuiBattery.byAuto -> tr("Automático", "Automatic")
@@ -759,11 +780,15 @@ class GamePanel(private val svc: AutoModeService) {
         }
     }
 
-    /** Imagen de toda la pantalla ahora (Android 11+; como mucho una por segundo). Null si no se pudo. */
+    /**
+     * Imagen del juego ahora, para congelarla: solo su ventana (Android 14+), así no sale el panel mientras se
+     * desvanece ni otra superposición; si no se puede, toda la pantalla. Como mucho una por segundo. Null si no se pudo.
+     */
     private suspend fun screenshotDisplay(): Bitmap? {
         if (Build.VERSION.SDK_INT < 30) return null
+        val id = focusedAppWindow().takeIf { it >= 0 } ?: svc.appWindowId
         return suspendCancellableCoroutine { c ->
-            svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, io, object : AccessibilityService.TakeScreenshotCallback {
+            val callback = object : AccessibilityService.TakeScreenshotCallback {
                 override fun onSuccess(r: AccessibilityService.ScreenshotResult) {
                     val bmp = runCatching {
                         Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace)?.let { hw -> hw.copy(Bitmap.Config.ARGB_8888, false).also { hw.recycle() } }
@@ -772,7 +797,9 @@ class GamePanel(private val svc: AutoModeService) {
                     if (c.isActive) c.resume(bmp)
                 }
                 override fun onFailure(code: Int) { if (c.isActive) c.resume(null) }
-            })
+            }
+            if (Build.VERSION.SDK_INT >= 34 && id >= 0) svc.takeScreenshotOfWindow(id, io, callback)
+            else svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, io, callback)
         }
     }
 
@@ -844,7 +871,10 @@ class GamePanel(private val svc: AutoModeService) {
             setViewTreeLifecycleOwner(o)
             setViewTreeSavedStateRegistryOwner(o)
             setContent {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                // Aparece desvaneciéndose (la animación de la ventana sola no siempre se ve al abrir).
+                val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                LaunchedEffect(Unit) { alpha.animateTo(1f, androidx.compose.animation.core.tween(160)) }
+                Box(Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value }, contentAlignment = Alignment.Center) {
                     // La tarjeta se mide con el ancho que necesite (sin el límite de la ventana) y la ventana toma
                     // ese ancho: así no tapa el juego a los lados (un gesto o un toque ahí cerraba el panel).
                     PanelCard(ui, Modifier.wrapContentWidth(unbounded = true).onSizeChanged { fitWidth(it.width) },
@@ -859,11 +889,12 @@ class GamePanel(private val svc: AutoModeService) {
                 }
             }
         }
-        // Al principio todo el ancho (con WRAP_CONTENT Android la mide con el ancho de un diálogo, ~580 dp, y Compose
-        // no pide más: con seis ítems se cortaban); en cuanto se mide la tarjeta, su ancho justo. Al centro. No toma
-        // el foco (el juego lo conserva); tocar fuera lo cierra.
+        // Desde el principio con el ancho de la tarjeta (con WRAP_CONTENT Android la mide con el ancho de un diálogo,
+        // ~580 dp, y se cortaba; con todo el ancho y achicándola después, ZUI animaba el cambio como un deslizamiento).
+        // Al centro. No toma el foco (el juego lo conserva); tocar fuera lo cierra.
+        val cardWidth = ((TILE_W * COLUMNS + GAP * (COLUMNS - 1) + CARD_PAD * 2).value * svc.resources.displayMetrics.density).toInt()
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            cardWidth, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
@@ -902,6 +933,7 @@ private val SELECTED = Color.White
 private val TILE_W = 172.dp
 private val TILE_H = 68.dp
 private val GAP = 10.dp
+private val CARD_PAD = 22.dp
 
 /**
  * El panel, como los ajustes rápidos de Android: encabezado (la app al frente, batería y hora), brillo y volumen
@@ -911,13 +943,14 @@ private val GAP = 10.dp
 private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) -> Unit, onSet: (Int, Float) -> Unit) {
     val width = TILE_W * COLUMNS + GAP * (COLUMNS - 1)
     Surface(color = PANEL_BG, shape = RoundedCornerShape(28.dp), modifier = modifier) {
-        Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp).width(width)) {
+        Column(Modifier.padding(horizontal = CARD_PAD, vertical = 20.dp).width(width)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(ui.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     modifier = Modifier.weight(1f))
                 // En un submenú solo el título: lo demás ya se vio en el panel.
                 if (!ui.sub) {
-                    if (ui.battery >= 0) { BatteryGlyph(ui.battery, ui.charging); Spacer(Modifier.width(8.dp)) }
+                    if (ui.bypass) { Icon(Icons.Outlined.Power, "Bypass", Modifier.size(18.dp), tint = TILE_ON); Spacer(Modifier.width(4.dp)) }
+                    if (ui.battery >= 0) { BatteryGlyph(ui.battery, ui.charging, ui.bypass); Spacer(Modifier.width(8.dp)) }
                     Text(ui.status, color = PANEL_MUTED, fontSize = 14.sp, maxLines = 1)
                 }
             }
@@ -950,10 +983,10 @@ private fun PanelCard(ui: PanelUi, modifier: Modifier = Modifier, onPick: (Int) 
     }
 }
 
-/** Ícono de batería como el de la barra de Android: se llena con el nivel; con un rayo si carga o está en bypass. */
+/** Ícono de batería como el de la barra de Android: se llena con el nivel; rayo si carga, celeste en bypass. */
 @Composable
-private fun BatteryGlyph(level: Int, charging: Boolean) {
-    val low = level <= 15 && !charging
+private fun BatteryGlyph(level: Int, charging: Boolean, bypass: Boolean) {
+    val low = level <= 15 && !charging && !bypass
     androidx.compose.foundation.Canvas(Modifier.size(width = 26.dp, height = 13.dp)) {
         val stroke = 1.5.dp.toPx()
         val nub = 2.5.dp.toPx()
@@ -964,7 +997,7 @@ private fun BatteryGlyph(level: Int, charging: Boolean) {
             size = androidx.compose.ui.geometry.Size(nub, size.height * 0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()))
         val pad = stroke + 1.dp.toPx()
         val inner = androidx.compose.ui.geometry.Size((body.width - 2 * pad) * level.coerceIn(0, 100) / 100f, body.height - 2 * pad)
-        drawRoundRect(if (low) Color(0xFFFF6B6B) else if (charging) TILE_ON else Color.White,
+        drawRoundRect(if (low) Color(0xFFFF6B6B) else if (charging || bypass) TILE_ON else Color.White,
             topLeft = androidx.compose.ui.geometry.Offset(pad, pad), size = inner, cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx()))
         if (charging) {
             // Rayo al centro, con borde oscuro para que se vea sobre el relleno.
@@ -1000,6 +1033,7 @@ private fun PanelTile(item: PanelItem, selected: Boolean, modifier: Modifier, on
         color = if (item.active) TILE_ON else TILE, shape = RoundedCornerShape(22.dp),
         border = if (selected) BorderStroke(2.5.dp, SELECTED) else null,
         modifier = modifier.height(TILE_H).clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick)
+            .graphicsLayer { alpha = if (item.enabled) 1f else 0.45f }
     ) {
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(item.icon, null, Modifier.size(24.dp), tint = fg)
@@ -1146,7 +1180,7 @@ private class FreezeCover(private val svc: AccessibilityService) {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         val s = android.widget.TextView(svc).apply {
-            text = tr("La imagen queda quieta un momento", "The picture freezes for a moment")
+            text = tr("Un momento…", "One moment…")
             setTextColor(0xFF8D97A5.toInt())
             textSize = 13f
         }

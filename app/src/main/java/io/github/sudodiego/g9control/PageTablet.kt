@@ -34,6 +34,9 @@ fun TabletPage(s: AppState, a: MainActivity) {
     )
 }
 
+/** Ajuste de Game Assistant: 1 = apaga el brillo automático en los juegos (y lo devuelve al salir). */
+private const val GA_NO_AUTO_BRIGHTNESS = "key_game_assistant_disable_auto_brightness"
+
 /** Estado de la batería ahora (de ACTION_BATTERY_CHANGED, sin permisos). */
 private data class BatteryNow(val level: Int, val tempC: Float, val plugged: Boolean, val charging: Boolean, val cycles: Int)
 
@@ -262,6 +265,21 @@ private fun GameAssistantSettings(s: AppState, a: MainActivity) {
             if (!ready) OutlinedButton(onClick = { runCatching { a.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) } }) {
                 Text(tr("Ocultarlo a mano (Mostrar sobre otras apps)", "Hide it manually (Display over other apps)"))
             }
+            // Game Assistant apaga el brillo automático al entrar a un juego (y lo devuelve al salir). Se cambia con el
+            // permiso de pantalla de adb (es un ajuste global).
+            val canWrite = remember { Aspect.canWrite(a) }
+            var autoInGames by remember {
+                mutableStateOf(runCatching { Settings.Global.getInt(a.contentResolver, GA_NO_AUTO_BRIGHTNESS) == 0 }.getOrDefault(false))
+            }
+            CompositionLocalProvider(LocalEditable provides canWrite) {
+                SwitchRow(
+                    tr("Brillo automático en juegos", "Auto brightness in games"), autoInGames,
+                    tr("Game Assistant lo apaga al entrar a un juego. Actívalo para que siga como esté.", "Game Assistant turns it off when a game starts. Turn this on to leave it as it is.")
+                ) { want ->
+                    if (runCatching { Settings.Global.putInt(a.contentResolver, GA_NO_AUTO_BRIGHTNESS, if (want) 0 else 1) }.isSuccess) autoInGames = want
+                }
+            }
+            if (!canWrite) Hint(tr("Necesita el permiso de pantalla (Ajustes → Permisos).", "Needs the screen permission (Settings → Permissions)."))
             OutlinedButton(onClick = { if (!ZuiGame.openSettings(a)) s.fail(tr("No se pudieron abrir los ajustes de Game Assistant.", "Couldn't open Game Assistant settings.")) }) {
                 Text(tr("Ajustes de Game Assistant", "Game Assistant settings"))
             }
