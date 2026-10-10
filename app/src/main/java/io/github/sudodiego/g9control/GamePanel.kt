@@ -415,7 +415,10 @@ class GamePanel(private val svc: AutoModeService) {
                 hint = tr("← → ajustar · A o B listo", "← → adjust · A or B done")
             ))
             add(PanelItem(tr("Brillo automático", "Auto brightness"), Icons.Outlined.BrightnessAuto, Section.SLIDER, active = auto) {
-                SystemLevels.setAutoBrightness(svc, !auto); refresh()
+                SystemLevels.setAutoBrightness(svc, !auto)
+                // En un juego: también lo que hace Game Assistant al entrar a los juegos (apagarlo o no).
+                if (ZuiGame.inGame(svc)) SystemLevels.setAutoInGames(svc, !auto)
+                refresh()
             })
         }
         val vol = SystemLevels.volume(svc)
@@ -1091,6 +1094,15 @@ private object SystemLevels {
     fun setAutoBrightness(ctx: Context, on: Boolean) = runCatching {
         Settings.System.putInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE,
             if (on) Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+    }
+
+    /**
+     * Game Assistant apaga el brillo automático al entrar a un juego si este ajuste global es 1. Con el permiso de
+     * pantalla de adb se cambia (sin él, no pasa nada: el brillo automático igual cambia, solo que en el próximo juego
+     * Game Assistant lo vuelve a apagar).
+     */
+    fun setAutoInGames(ctx: Context, on: Boolean) = runCatching {
+        Settings.Global.putInt(ctx.contentResolver, "key_game_assistant_disable_auto_brightness", if (on) 0 else 1)
     }
 
     /** Nivel más cercano al brillo actual (0..10). */
