@@ -23,8 +23,20 @@ object Prefs {
     fun theme(ctx: Context) = runCatching { AppTheme.valueOf(sp(ctx).getString("theme", null)!!) }.getOrDefault(AppTheme.SYSTEM)
     fun setTheme(ctx: Context, v: AppTheme) = sp(ctx).edit().putString("theme", v.name).apply()
 
-    fun centered(ctx: Context) = sp(ctx).getBoolean("centered", false)
-    fun setCentered(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("centered", v).apply()
+    /** Dónde va el dibujo del control (Ajustes). Antes era un sí/no "al centro": se migra la preferencia vieja. */
+    fun drawPos(ctx: Context) = runCatching { DrawPos.valueOf(sp(ctx).getString("draw_pos", null)!!) }
+        .getOrElse { if (sp(ctx).getBoolean("centered", false)) DrawPos.CENTER else DrawPos.LEFT }
+    fun setDrawPos(ctx: Context, v: DrawPos) = sp(ctx).edit().putString("draw_pos", v.name).apply()
+
+    /** Pestaña a la que volver en el próximo arranque (importar un respaldo reinicia la app): se usa una vez. */
+    fun restoreTo(ctx: Context, sec: Section, page: Page) = sp(ctx).edit()
+        .putString("restore_section", sec.name).putString("restore_page", page.name).apply()
+    fun takeRestoreTo(ctx: Context): Pair<Section, Page>? {
+        val sec = sp(ctx).getString("restore_section", null)?.let { runCatching { Section.valueOf(it) }.getOrNull() }
+        val page = sp(ctx).getString("restore_page", null)?.let { runCatching { Page.valueOf(it) }.getOrNull() }
+        sp(ctx).edit().remove("restore_section").remove("restore_page").apply()
+        return if (sec != null && page != null && page in sec.pages) sec to page else null
+    }
 
     fun openOnConnect(ctx: Context) = sp(ctx).getBoolean("open_on_connect", false)
     fun setOpenOnConnect(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("open_on_connect", v).apply()
@@ -37,6 +49,15 @@ object Prefs {
     fun skin(ctx: Context) = runCatching { ControllerSkin.valueOf(sp(ctx).getString("skin", null)!!) }
         .getOrDefault(ControllerSkin.CARBON)
     fun setSkin(ctx: Context, v: ControllerSkin) = sp(ctx).edit().putString("skin", v.name).apply()
+}
+
+/** Dónde se dibuja el control en las páginas que lo dibujan (se elige en Ajustes). */
+enum class DrawPos(private val es: String, private val en: String) {
+    LEFT("A la izquierda", "On the left"),
+    CENTER("Al centro", "Centered"),
+    RIGHT("A la derecha", "On the right");
+
+    val label get() = tr(es, en)
 }
 
 /** Cómo se presenta el control a Android en cada modo (nombre del dispositivo de entrada). */

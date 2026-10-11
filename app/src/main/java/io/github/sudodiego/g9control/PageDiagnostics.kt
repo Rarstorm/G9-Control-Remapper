@@ -57,15 +57,13 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
         second = {
             if (s.section == Section.TABLET) PermissionsPanel(s, a)
             if (s.section == Section.G9) CompositionLocalProvider(LocalEditable provides true) {
-                Panel(tr("Control G9", "G9 controller")) {
+                Panel(tr("Dibujo del control", "Controller drawing")) {
                     Text(tr("Estilo del dibujo", "Drawing style"), fontSize = 14.sp)
                     ChoiceChips(ControllerSkin.entries.map { it to it.label }, SkinState.skin) {
                         SkinState.skin = it; Prefs.setSkin(a, it)
                     }
-                    Text(tr("Dibujo del control", "Controller drawing"), fontSize = 14.sp)
-                    ChoiceChips(listOf(false to tr("A la izquierda", "On the left"), true to tr("Al centro", "Centered")), s.centered) {
-                        s.centered = it; Prefs.setCentered(a, it)
-                    }
+                    Text(tr("Posición del dibujo", "Drawing position"), fontSize = 14.sp)
+                    ChoiceChips(DrawPos.entries.map { it to it.label }, s.drawPos) { s.drawPos = it; Prefs.setDrawPos(a, it) }
                     SwitchRow(tr("Abrir la app al conectar el G9", "Open the app when the G9 is connected"), s.openOnConnect) {
                         s.openOnConnect = it; Prefs.setOpenOnConnect(a, it)
                     }

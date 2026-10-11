@@ -77,12 +77,14 @@ class MainActivity : ComponentActivity() {
         state.autoRules = AutoRules.rules(this)
         state.autoRemindReturn = AutoRules.remindReturn(this)
         state.openOnConnect = Prefs.openOnConnect(this)
-        state.centered = Prefs.centered(this)
+        state.drawPos = Prefs.drawPos(this)
         state.profiles = Profiles.load(this)
         SkinState.skin = Prefs.skin(this)
         ThemeState.theme = Prefs.theme(this)
         Lang.load(this)
         state.showSetup = !Prefs.setupDone(this)
+        // Tras importar un respaldo la app se reinicia: se vuelve a la pestaña donde estaba (Respaldo).
+        Prefs.takeRestoreTo(this)?.let { (sec, pg) -> state.section = sec; state.page = pg }
         state.status = tr("Conecta el G9 por USB en modo Android.", "Connect the G9 over USB in Android mode.")
         // Aviso dejado por la restauración de un respaldo (la app se reinicia para tomar los ajustes nuevos).
         pendingStatus?.let { state.status = it; pendingStatus = null }
@@ -122,12 +124,14 @@ class MainActivity : ComponentActivity() {
         // Con el dedo sobre un slider no se guarda: la espera empieza al soltarlo.
         watch(
             LIGHTS_QUIET_MS + LIGHTS_SAVE_MS, { listOf(s.left, s.right, s.homeToSend(), s.sliderHeld) },
-            { s.appliedLeft != null && s.lightsDirty && !s.sliderHeld },
+            { s.connected && s.lightsDirty && !s.sliderHeld },
             onChange = { s.lightsChangedAt = android.os.SystemClock.uptimeMillis() }
         ) { applyLights() }
+        // Listo para escribir = el control conectado, NO que su lectura haya salido bien: si la lectura falló,
+        // los cambios del usuario se escriben igual en vez de perderse en silencio.
         watch(700, { listOf(s.deadZones.toMap(), s.quickL, s.quickR, s.dpadLock, s.swapDpad, s.sliderHeld) },
-            { s.appliedDeadZones != null && s.sticksDirty && !s.sliderHeld }) { saveSticks() }
-        watch(500, { s.vibration }, { s.appliedVibration != null && s.vibrationDirty }) { saveVibration() }
+            { s.connected && s.sticksDirty && !s.sliderHeld }) { saveSticks() }
+        watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) }) { saveVibration() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -156,8 +160,20 @@ class MainActivity : ComponentActivity() {
         KeyBus.listener = null
         // En pausa la prueba no puede seguir (necesita la app al frente): el servicio vuelve a su trabajo.
         KeyBus.testing = false
+        // Los cambios se escriben con una pequeña demora (para juntar los pasos de un slider): si la app se va
+        // antes a segundo plano hay que escribirlos ya, o se pierden (se cierra y no se guardó nada).
+        flushSaves()
         getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputListener)
         super.onPause()
+    }
+
+    /** Escribe ya lo pendiente, sin esperar la demora del guardado automático (al salir de la app). */
+    private fun flushSaves() {
+        val st = state
+        if (!G9Usb.isOpen() || applyingProfile) return
+        if (st.lightsDirty && !st.sliderHeld) applyLights()
+        if (st.sticksDirty) saveSticks()
+        if (st.vibrationDirty) saveVibration()
     }
 
     /**
@@ -883,6 +899,8 @@ class MainActivity : ComponentActivity() {
             Backup.restore(this, text)
         }.onSuccess {
             pendingStatus = tr("Respaldo restaurado: $it.", "Backup restored: $it.")
+            // La app se reinicia para tomar los ajustes nuevos: al volver se abre en «Respaldo», donde estaba.
+            Prefs.restoreTo(this, Section.G9, Page.PROFILES)
             recreate()
         }.onFailure {
             state.fail(tr("Error: el archivo no es un respaldo de G9 Control Remapper.",
@@ -1092,7 +1110,7 @@ class AppState {
     var drift by mutableStateOf<Drift?>(null)
     /** B mantenido: cuándo empezó (uptime ms) y cuánto hay que mantenerlo; null si no se mantiene. */
     var bHold by mutableStateOf<Pair<Long, Long>?>(null)
-    var centered by mutableStateOf(false)
+    var drawPos by mutableStateOf(DrawPos.LEFT)
     /** Configuración inicial abierta (la primera vez, o desde Ajustes). */
     var showSetup by mutableStateOf(false)
     /** Cambia cuando hay que volver a cargar la lista de apps (por ejemplo, tras dar el permiso). */

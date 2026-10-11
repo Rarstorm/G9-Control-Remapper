@@ -68,7 +68,7 @@ class Palette(
     val flat: Boolean = false,
 )
 
-/** Estilos del dibujo del control: el gris original, uno simple y claro, y el verde (Rhein Green). */
+/** Estilos del dibujo del control: el gris original, uno blanco y el verde (Rhein Green). */
 enum class ControllerSkin(private val es: String, private val en: String, val palette: Palette) {
     CARBON("Gris carbón", "Charcoal", Palette(
         ledOff = Color(0xFF34313A), bodyTop = Color(0xFF55515E), bodyBottom = Color(0xFF3C3944), edge = Color(0xFF6E6979),
@@ -78,7 +78,7 @@ enum class ControllerSkin(private val es: String, private val en: String, val pa
         stickRim = Color(0xFF615C6B), stickWell = Color(0xFF0E0E11), stickCap = Color(0xFF1E1E23), stickRidge = Color(0xFF34343B),
         stickCapHi = Color(0xFF34343C), stickCapLo = Color(0xFF1B1B20),
     )),
-    SIMPLE("Simple", "Simple", Palette(
+    SIMPLE("Blanco", "White", Palette(
         ledOff = Color(0xFFD3D3DA), bodyTop = Color(0xFFECECF1), bodyBottom = Color(0xFFECECF1), edge = Color(0xFFB4B4BE),
         key = Color(0xFFFFFFFF), keyHi = Color(0xFFC6C6CF), label = Color(0xFF6A6A75),
         frame = Color(0xFFD6D6DD), screen = Color(0xFFF8F8FB), clampFill = Color(0x80FFFFFF), clampEdge = Color(0xFFB4B4BE),

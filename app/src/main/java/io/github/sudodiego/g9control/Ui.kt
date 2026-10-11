@@ -117,7 +117,7 @@ fun App(s: AppState, a: MainActivity) {
         CompositionLocalProvider(
             // Texto fuera de los paneles con el color del tema (si no, queda negro en modo oscuro).
             LocalContentColor provides MaterialTheme.colorScheme.onBackground,
-            LocalWide provides wide, LocalSliderHeld provides { s.sliderHeld = it }, LocalCentered provides s.centered,
+            LocalWide provides wide, LocalSliderHeld provides { s.sliderHeld = it }, LocalDrawPos provides s.drawPos,
             LocalRippleConfiguration provides focusRipple
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -135,7 +135,7 @@ fun App(s: AppState, a: MainActivity) {
     }
 }
 
-/** Pestañas horizontales, como en una consola: LB/RB a los lados para cambiar. */
+/** Pestañas horizontales, como en una consola: se cambian con LB/RB (la barra de abajo lo recuerda). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TabBar(s: AppState, a: MainActivity) {
@@ -145,13 +145,8 @@ private fun TabBar(s: AppState, a: MainActivity) {
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PadBadge("LT")
-            Spacer(Modifier.width(6.dp))
             SectionSwitch(s)
-            Spacer(Modifier.width(6.dp))
-            PadBadge("RT")
             Spacer(Modifier.width(14.dp))
-            PadBadge("LB")
             // Si las pestañas no caben, la elegida se desplaza a la vista.
             val tabScroll = rememberScrollState()
             val tabX = remember { mutableStateMapOf<Page, Pair<Int, Int>>() }
@@ -203,7 +198,6 @@ private fun TabBar(s: AppState, a: MainActivity) {
                     }
                 }
             }
-            PadBadge("RB")
             // Conexión del G9: solo en su sección (tocarla vuelve a leer el control).
             if (s.section == Section.G9) {
                 Spacer(Modifier.width(12.dp))
@@ -298,10 +292,10 @@ private fun HintBar(s: AppState) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         // Estado de guardado de la página (siempre en el mismo lugar).
         val save: (@Composable () -> Unit)? = when (s.page) {
-            Page.LIGHTS -> { { SaveStatus(s.lightsDirty, s.appliedLeft != null && s.connected, s.lightsChangedAt,
+            Page.LIGHTS -> { { SaveStatus(s.lightsDirty, s.connected, s.lightsChangedAt,
                 MainActivity.LIGHTS_SAVE_MS, held = s.sliderHeld, quietMs = MainActivity.LIGHTS_QUIET_MS, modifier = Modifier) } }
-            Page.STICKS -> { { SaveStatus(s.sticksDirty, s.appliedDeadZones != null && s.connected, modifier = Modifier) } }
-            Page.VIBRATION -> { { SaveStatus(s.vibrationDirty, s.appliedVibration != null && s.connected, modifier = Modifier) } }
+            Page.STICKS -> { { SaveStatus(s.sticksDirty, s.connected, modifier = Modifier) } }
+            Page.VIBRATION -> { { SaveStatus(s.vibrationDirty, s.connected, modifier = Modifier) } }
             else -> null
         }
         if (save != null) { save(); Spacer(Modifier.width(20.dp)) }
@@ -452,12 +446,12 @@ fun Panel(
     }
 }
 
-/** Diseño elegido en Ajustes: dibujo del control al centro o en columna. */
-val LocalCentered = androidx.compose.runtime.compositionLocalOf { false }
+/** Diseño elegido en Ajustes: dónde va el dibujo del control (a la izquierda, al centro o a la derecha). */
+val LocalDrawPos = androidx.compose.runtime.compositionLocalOf { DrawPos.LEFT }
 
 /**
- * Página con el dibujo del control: en columnas (dibujo a la izquierda, [side] a la derecha) o, con
- * "dibujo al centro", el dibujo arriba y centrado y [side] debajo en dos columnas.
+ * Página con el dibujo del control: en columnas (el dibujo a un lado y [side] al otro) o, con "al centro", el
+ * dibujo arriba y centrado y [side] debajo en dos columnas. El lado se elige en Ajustes y vale para todas las páginas.
  */
 @Composable
 fun DrawingPane(
@@ -466,10 +460,13 @@ fun DrawingPane(
     // Mismo peso en todas las páginas: el dibujo tiene el mismo tamaño y lugar en Inicio, Luces, Controles y Traseros.
     val drawingWeight = 1.4f
     val wide = LocalWide.current
-    if (wide && !LocalCentered.current) {
+    val right = LocalDrawPos.current == DrawPos.RIGHT
+    if (wide && LocalDrawPos.current != DrawPos.CENTER) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            // A la derecha: primero lo demás y el dibujo después (espejo de la izquierda).
+            if (right) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), content = side)
             Column(Modifier.weight(drawingWeight), verticalArrangement = Arrangement.spacedBy(16.dp), content = drawing)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), content = side)
+            if (!right) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), content = side)
         }
     } else {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
