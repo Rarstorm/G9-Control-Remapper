@@ -34,6 +34,26 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                         "Four steps to get G9 Control Remapper ready. Steps marked green are already done."),
                     fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(12.dp))
+                // Aviso legal y de privacidad: visible antes de pedir cualquier permiso.
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(tr("Antes de empezar", "Before you start"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text(
+                            tr("G9 Control Remapper es una app gratuita y de código abierto (licencia GPL-3), hecha por la comunidad. No tiene relación con Lenovo, Legion ni GameSir. No se conecta a internet ni recopila datos.\n\n" +
+                                "Para funcionar necesita permisos que activas TÚ mismo desde los ajustes de Android (accesibilidad y, opcional, Shizuku). Los activas bajo tu responsabilidad y puedes quitarlos cuando quieras.\n\n" +
+                                "La accesibilidad le permite ver qué app está en pantalla y los botones del control, y tomar capturas: no lee tus textos ni lo que escribes.",
+                                "G9 Control Remapper is a free, open-source app (GPL-3 licence), made by the community. It is not affiliated with Lenovo, Legion or GameSir. It doesn't connect to the internet or collect data.\n\n" +
+                                    "To work it needs permissions you turn on YOURSELF in Android's settings (accessibility and, optionally, Shizuku). You enable them at your own responsibility and can remove them anytime.\n\n" +
+                                    "Accessibility lets it see which app is on screen and the controller's buttons, and take screenshots: it doesn't read your text or what you type."),
+                            fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()),
@@ -56,7 +76,7 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                         if (!s.connected && s.padMode == PadMode.ANDROID) Button(onClick = { a.readAll() }) { Text(tr("Conectar", "Connect")) }
                     }
                     Step(
-                        3, s.autoServiceOn, tr("Cambio automático (opcional)", "Automatic switching (optional)"),
+                        3, s.autoServiceOn, tr("Servicio de accesibilidad", "Accessibility service"),
                         tr("Para que el control cambie solo a X-Input o DS5 al abrir un juego, para la guía de Vista + Menú y para " +
                             "el panel de juego (L3 + R3), activa el servicio de accesibilidad de G9 Control Remapper. Ve qué app está en " +
                             "pantalla y los botones del control, y saca capturas del juego cuando se lo pides. Android avisará que " +
@@ -68,8 +88,13 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                                 "it can read the screen: it needs that to know which window is the game and capture only that; the app " +
                                 "doesn't read its text, doesn't see what you type and doesn't connect to the internet.")
                     ) {
-                        if (!s.autoServiceOn) OutlinedButton(onClick = { AutoRules.openServiceSettings(a) }) {
-                            Text(tr("Abrir accesibilidad", "Open accessibility"))
+                        if (!s.autoServiceOn) {
+                            Hint(tr("Si al activarlo Android dice «Ajuste restringido», primero abre «Ajustes de la app» → ⋮ → «Permitir ajustes restringidos», y después actívalo aquí.",
+                                "If Android says “Restricted setting” when you turn it on, first open “App settings” → ⋮ → “Allow restricted settings”, then turn it on here."))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Abrir accesibilidad", "Open accessibility")) }
+                                OutlinedButton(onClick = { AutoRules.openAppInfo(a) }) { Text(tr("Ajustes de la app", "App settings")) }
+                            }
                         }
                     }
                     Step(

@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.content.IntentFilter
 import android.hardware.input.InputManager
 import android.os.Handler
@@ -234,6 +235,15 @@ object AutoRules {
 
     fun openServiceSettings(ctx: Context) {
         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Abre los Ajustes de Android de esta app (para «Permitir ajustes restringidos»). */
+    fun openAppInfo(ctx: Context) {
+        ctx.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", ctx.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }
 
