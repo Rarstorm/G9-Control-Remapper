@@ -96,6 +96,7 @@ private val NAV = listOf(
     NavItem(Page.VIBRATION, "Vibración", "Vibration", Icons.Outlined.Vibration, Icons.Filled.Vibration),
     NavItem(Page.TEST, "Botones", "Buttons", Icons.Outlined.RadioButtonChecked, Icons.Filled.RadioButtonChecked),
     NavItem(Page.BACK, "Traseros", "Paddles", Icons.Outlined.FlipToBack, Icons.Filled.FlipToBack),
+    NavItem(Page.GESTURES, "Gestos", "Gestures", Icons.Outlined.TouchApp, Icons.Filled.TouchApp),
     NavItem(Page.PROFILES, "Perfiles", "Profiles", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
     // Las dos.
     NavItem(Page.DIAGNOSTICS, "Ajustes", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
@@ -351,6 +352,7 @@ private fun PageHost(s: AppState, a: MainActivity, modifier: Modifier) {
                         Page.AUTO -> AutoPage(s, a)
                         Page.TEST -> ControlsPage(s, a)
                         Page.BACK -> BackPage(s, a)
+                        Page.GESTURES -> GesturesPage(s, a)
                         Page.TABLET_HOME -> TabletHomePage(s, a)
                         Page.BATTERY -> BatteryPage(s, a)
                         Page.SCREEN -> ScreenPage(s, a)

@@ -275,6 +275,9 @@ class AutoModeService : AccessibilityService() {
     @Volatile var appWindowId = -1
         private set
 
+    /** Motor de gestos: botones con gestos configurados (tocar / mantener / doble toque). */
+    private val gestures = GestureEngine(main)
+
     /**
      * Pantalla apagada: la guía se quita (no tiene sentido en la pantalla de bloqueo). Al desbloquear,
      * si sigue pendiente volver a Android, aparece el aviso pequeño de arriba.
@@ -720,6 +723,8 @@ class AutoModeService : AccessibilityService() {
         if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
+        // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app).
+        if (!appInFront && gestures.onKey(this, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -784,6 +789,25 @@ class AutoModeService : AccessibilityService() {
 
     private fun adjustVolume(dir: Int) = getSystemService(AudioManager::class.java)
         .adjustSuggestedStreamVolume(dir, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
+
+    /** Ejecuta la acción de un gesto. */
+    private fun runGestureAction(a: GestureAction) {
+        when (a) {
+            GestureAction.NONE -> {}
+            GestureAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
+            GestureAction.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
+            GestureAction.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+            GestureAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+            GestureAction.VOL_UP -> adjustVolume(AudioManager.ADJUST_RAISE)
+            GestureAction.VOL_DOWN -> adjustVolume(AudioManager.ADJUST_LOWER)
+            GestureAction.PLAY_PAUSE -> {
+                val am = getSystemService(AudioManager::class.java)
+                am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+                am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+            }
+            GestureAction.SCREENSHOT -> if (this::panel.isInitialized) panel.capture()
+        }
+    }
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
     private var legionOwned = false
