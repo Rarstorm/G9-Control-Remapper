@@ -84,7 +84,7 @@ object Gestures {
     /** Lo que vale para una app: lo general, pisado por lo propio de la app. */
     fun rulesFor(ctx: Context, pkg: String?): Map<Int, GestureRule> {
         val m = rules(ctx).toMutableMap()
-        if (!pkg.isNullOrEmpty()) appRules(ctx, pkg).forEach { m[it.key] = it }
+        if (!pkg.isNullOrEmpty()) appRules(ctx, pkg).forEach { (k, v) -> m[k] = v }
         return m
     }
 
