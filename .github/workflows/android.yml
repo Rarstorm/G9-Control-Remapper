@@ -23,9 +23,33 @@ jobs:
         # v4: su default es 'platform-tools' (v3 pedía el paquete legacy 'tools', removido por Google -> sdkmanager fallaba).
         uses: android-actions/setup-android@v4
 
+      - name: Clave de firma
+        # La clave de firma va en los secretos del repositorio (el repo es público, así que no puede estar
+        # en el código). Con una clave FIJA cada versión se instala ENCIMA de la anterior: no hay que
+        # desinstalar y no se pierden los ajustes de la app. Si falta el secreto, el build se corta aquí en
+        # vez de salir firmado con una clave distinta cada vez.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "Falta el secreto KEYSTORE_BASE64"; exit 1; fi
+          mkdir -p keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore/g9control-release.jks
+          printf 'storeFile=../keystore/g9control-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=JKS\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+
       - name: Build release APK
-        # Sin keystore.properties -> firma debug (instalable). Release igualmente con R8.
+        # Con keystore.properties -> firma de release (la de siempre). Release igualmente con R8.
         run: chmod +x gradlew && ./gradlew assembleRelease
+
+      - name: Huella de la firma
+        # Deja en el registro la huella del certificado, para comprobar que es la clave de siempre.
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          if [ -n "$BT" ] && [ -x "$BT/apksigner" ]; then "$BT/apksigner" verify --print-certs "$APK"; else echo "sin apksigner"; fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

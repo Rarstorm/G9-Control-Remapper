@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.sudodiego.g9control"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.3.0"
+        versionCode = 7
+        versionName = "1.3.1"
     }
 
     // Firma de las versiones publicadas: keystore.properties (no va a git) apunta a la clave.
@@ -28,6 +28,8 @@ android {
             storePassword = keyProps.getProperty("storePassword")
             keyAlias = keyProps.getProperty("keyAlias")
             keyPassword = keyProps.getProperty("keyPassword")
+            // Tipo de almacén si viene en keystore.properties (JKS por defecto, como la clave del proyecto).
+            keyProps.getProperty("storeType")?.let { storeType = it }
         }
     }
 
