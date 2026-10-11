@@ -96,3 +96,37 @@ Diagnóstico contra el código (la tablet no estaba en red: `adb devices` vacío
 - [x] **Fusión (1ª parte)**: los traseros ya se configuran **dentro de la página de gestos** (chips L4/R4/L5/R5 + «Preparar firmas»); el resumen por app los incluye («L4 → Panel de juego»). La página «Traseros» sigue para lo que es del mando (qué botón copia cada uno y su macro).
 - [x] **1.3.8 (versionCode 14)** compilada e **instalada encima** en la Y700 (datos intactos, accesibilidad y Shizuku siguen).
 - [ ] **Probar en la tablet**: grabar firmas y asignarle a un trasero una acción distinta en una app.
+
+## 2026-10-11 (9ª parte — RONDA 5: los 4 puntos del registro → 1.3.9)
+Los 4 puntos de `2026-10-11-sesion-registro-modificaciones.md`, en una sola pasada. Commit **`855751c`**, **1.3.9 (versionCode 15)**, compilada en local, instalada encima y **verificada en pantalla** (capturas + `uiautomator`).
+
+### Punto 1 — Traseros: huecos + «Borrar todos»
+- [x] Fuera los `FlowRow`: cada fila **llena el ancho** con chips de igual peso (LT LB RB RT / A B X Y / L3 R3 Vista Menú / Home + cruceta / Sin asignar + Macro + sticks izq./der.). `TargetChip` y `StickDirChip` aceptan `modifier`; los sticks se estiran con `fillMaxWidth()`.
+- [x] Botón **«Borrar todos»** (`MainActivity.clearAllBackKeys()`): recorre los 4 traseros, escribe `MacroGcm.clear` si tenían macro + `Gcm.clearBackKey` y **relee** cada uno para confirmar; actualiza `appliedBackKeys` y avisa en el estado.
+
+### Punto 2 — El panel se llama «Ajustes rápidos» en TODA la app
+- [x] `GamePanel.header()` ya no pone el nombre de la app al frente: pone **«Ajustes rápidos»** (y `sub = false`).
+- [x] Pestaña `Ui.kt`: «Juego» → **«Ajustes rápidos»**.
+- [x] `PageDiagnostics` y `PageTabletHome`: «Panel de juego» → «Ajustes rápidos» (y «Mantener: panel de juego» → «Mantener: ajustes rápidos»).
+- [x] El mosaico que abre los ajustes de Android: **«Ajustes rápidos de Android»** (subtítulo «Android»).
+
+### Punto 3 — Página Gestos
+- [x] Bloque de detalle: **«Botones mapeados: "app"»** (el nombre del alcance elegido entre comillas).
+- [x] Selector «Aplica a» **solo con el puntito ●** y el nombre (los resúmenes largos estorbaban).
+- [x] **BUG de los traseros**: `runPaddle()` solo ejecutaba `rule.tap`; ahora llama a `GestureEngine.onPress(...)` con la pulsación ya resuelta → **«Un toque» y «Doble toque» funcionan** en los traseros.
+- [x] **«Mantener» en un trasero no se puede** (el mando manda una firma de ~25 ms; no hay forma de distinguir cuánto lo mantienes): la página lo avisa con un texto cuando el botón elegido es un trasero.
+- [x] «Un toque» / «Doble toque» / «Mantener», en ese orden, tanto en los tres gestos como en los botones de tiempos (y el slider que se despliega es el que corresponde).
+- [x] Los 3 textos (i) seguidos → **un solo (i) desplegable «Cómo funciona»**.
+- [x] Acciones nuevas: **«Abrir una app»** (`GestureAction.OPEN_APP` + `GestureRule.pkg`, selector de app; se abre con `Shell.amStart` = Shizuku `am start` — sin Shizuku intenta `ACTION_MAIN` normal), **«Abrir el cajón de apps»** (`APP_DRAWER`, deslizamiento hacia arriba) y **«Página siguiente / anterior»** (`PAGE_NEXT` / `PAGE_PREV`, deslizamiento horizontal). Investigué: **no existe acción de accesibilidad** para esto; el deslizamiento se hace con `dispatchGesture` y por eso funciona en el launcher.
+- [x] `GestureAction.PANEL` se muestra como **«Ajustes rápidos»** en los resúmenes.
+
+### Punto 4 — Copy del botón de firmas
+- [x] «Preparar firmas en el mando» → **«Grabar los traseros en el mando»**; nota nueva en llano: «Toca ese botón una sola vez: se graba en el mando qué botón es cada trasero. Después, cada trasero puede hacer una cosa distinta en cada app.»
+
+### Verificación
+- [x] `./gradlew :app:assembleRelease --offline` → **BUILD SUCCESSFUL** (antes, un error de compilación: un `invoke` del motor sin el paquete; corregido).
+- [x] `adb install -r` → **Success**; `versionCode=15`, `versionName=1.3.9`, `firstInstallTime=2026-10-11 00:42:25` **intacto**.
+- [x] App lanzada por adb: **sin crash**; accesibilidad y `shizuku_server` activos.
+- [x] En pantalla: pestaña «Ajustes rápidos», Traseros con filas llenas + «Borrar todos», «Botones mapeados: "Todas las apps"», resumen con «Ajustes rápidos», tiempos 200/330/500 ms en el orden nuevo.
+- [ ] **Probar en la tablet con el mando conectado** (hoy salía «Sin conexión»): traseros (Un toque / Doble toque), «Borrar todos», «Abrir una app» (con y sin Shizuku), cajón y páginas del launcher.
+- [ ] **Fusión visual** pendiente de la ronda pasada: una sola página «Botones». 
