@@ -36,11 +36,15 @@ fun ProfilesPage(s: AppState, a: MainActivity) {
         }
     ) {
         if (!known) Hint(tr("Conecta el control en modo Android.", "Connect the controller in Android mode."))
-        // Respaldo en un archivo: sirve para no perder los perfiles al desinstalar o cambiar de tablet.
+        // Respaldo en un archivo: sirve para no perder nada al desinstalar (cada build firma distinto, así que
+        // para instalar uno nuevo hay que desinstalar el anterior) o al cambiar de tablet.
+        Text(tr("El respaldo guarda TODO: los perfiles, la configuración que estás usando ahora y los ajustes de la app (gestos, apps con modo automático, tema, idioma…). Antes de desinstalar, exporta; al volver a instalar, importa y queda como estaba.",
+            "The backup saves EVERYTHING: your profiles, the settings you're using right now and the app settings (gestures, per-app modes, theme, language…). Export before uninstalling; import after reinstalling and it's all back."),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         CompositionLocalProvider(LocalEditable provides true) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { a.exportProfiles() }, enabled = s.profiles.isNotEmpty()) { Text(tr("Exportar respaldo", "Export backup")) }
-                OutlinedButton(onClick = { a.importProfiles() }) { Text(tr("Importar respaldo", "Import backup")) }
+                OutlinedButton(onClick = { a.exportBackup() }) { Text(tr("Exportar respaldo", "Export backup")) }
+                OutlinedButton(onClick = { a.importBackup() }) { Text(tr("Importar respaldo", "Import backup")) }
             }
         }
     }

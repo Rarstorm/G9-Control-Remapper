@@ -93,7 +93,8 @@ object Profiles {
     private fun lightJson(l: Light) = JSONArray(listOf(l.id, l.hue, l.sat, l.lum, l.effect, l.speed, l.brightness))
     private fun light(a: JSONArray) = Light(a.getInt(0), a.getInt(1), a.getInt(2), a.getInt(3), a.getInt(4), a.getInt(5), a.getInt(6))
 
-    private fun toJson(p: Profile) = JSONObject().apply {
+    /** Perfil → JSON (también lo usa [Backup] para el respaldo completo). */
+    fun toJson(p: Profile) = JSONObject().apply {
         put("id", p.id)
         put("name", p.name)
         put("left", lightJson(p.left))
@@ -121,7 +122,8 @@ object Profiles {
         )))
     }
 
-    private fun fromJson(o: JSONObject): Profile {
+    /** JSON → perfil (también lo usa [Backup] al importar un respaldo completo). */
+    fun fromJson(o: JSONObject): Profile {
         val dz = o.getJSONObject("dz")
         val v = o.getJSONArray("vib")
         return Profile(

@@ -32,6 +32,11 @@ class MainActivity : ComponentActivity() {
         const val LIGHTS_SAVE_MS = 2000L
         /** Pausa sin cambios antes de empezar la cuenta (para tocar + / − varias veces seguidas). */
         const val LIGHTS_QUIET_MS = 600L
+        /**
+         * Mensaje que se muestra al abrir la app. Lo usa la restauración de un respaldo: la app se reinicia
+         * (recreate) para tomar todos los ajustes, y el aviso no se perdería en el camino.
+         */
+        @Volatile var pendingStatus: String? = null
     }
 
     val state = AppState()
@@ -65,6 +70,8 @@ class MainActivity : ComponentActivity() {
         Lang.load(this)
         state.showSetup = !Prefs.setupDone(this)
         state.status = tr("Conecta el G9 por USB en modo Android.", "Connect the G9 over USB in Android mode.")
+        // Aviso dejado por la restauración de un respaldo (la app se reinicia para tomar los ajustes nuevos).
+        pendingStatus?.let { state.status = it; pendingStatus = null }
         setContent {
             G9Theme {
                 // Íconos de la barra de estado y de navegación acordes al tema elegido (no solo al del sistema).
@@ -815,35 +822,43 @@ class MainActivity : ComponentActivity() {
         else state.fail(tr("El control no confirmó la distribución.", "The controller didn't confirm the layout."))
     }
 
-    /** Exportar: el sistema pregunta dónde guardar el archivo (por defecto en Descargas). */
+    /**
+     * Exportar: el respaldo COMPLETO (perfiles + la sesión que se está usando + todos los ajustes de la
+     * app). El sistema pregunta dónde guardar el archivo (por defecto en Descargas).
+     */
     private val exportLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri == null) return@registerForActivityResult
         runCatching {
-            contentResolver.openOutputStream(uri)!!.use { it.write(Profiles.exportJson(state.profiles).toByteArray()) }
-        }.onSuccess { state.status = tr("Respaldo guardado (${state.profiles.size} perfiles).", "Backup saved (${state.profiles.size} profiles).") }
+            contentResolver.openOutputStream(uri)!!.use { it.write(Backup.build(this, state).toByteArray()) }
+        }.onSuccess { state.status = tr("Respaldo guardado: ${state.profiles.size} perfiles y todos los ajustes.",
+            "Backup saved: ${state.profiles.size} profiles and all the settings.") }
             .onFailure { state.fail(tr("Error al guardar el respaldo: ${it.message}", "Error saving the backup: ${it.message}")) }
     }
 
-    /** Importar: se agregan los perfiles del archivo; los de igual nombre se reemplazan. */
+    /**
+     * Importar: restaura los ajustes de la app y suma los perfiles del archivo (los de igual nombre se
+     * reemplazan), incluida la sesión que venía dentro. Al terminar la app se reinicia para tomar todo.
+     */
     private val importLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@registerForActivityResult
         runCatching {
             val text = contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
-            val got = Profiles.importJson(text)
-            val names = got.map { it.name }.toSet()
-            var id = System.currentTimeMillis()
-            saveProfiles(state.profiles.filter { it.name !in names } + got.map { it.copy(id = id++) })
-            got.size
-        }.onSuccess { state.status = if (it == 1) tr("Se importó 1 perfil.", "Imported 1 profile.") else tr("Se importaron $it perfiles.", "Imported $it profiles.") }
-            .onFailure { state.fail(tr("Error: el archivo no es un respaldo de G9 Control Remapper.", "Error: the file isn't a G9 Control Remapper backup.")) }
+            Backup.restore(this, text)
+        }.onSuccess {
+            pendingStatus = tr("Respaldo restaurado: $it.", "Backup restored: $it.")
+            recreate()
+        }.onFailure {
+            state.fail(tr("Error: el archivo no es un respaldo de G9 Control Remapper.",
+                "Error: the file isn't a G9 Control Remapper backup."))
+        }
     }
 
-    fun exportProfiles() = exportLauncher.launch(tr("G9Control-perfiles", "G9Control-profiles") + "-${java.time.LocalDate.now()}.json")
-    fun importProfiles() = importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+    fun exportBackup() = exportLauncher.launch(Backup.fileName())
+    fun importBackup() = importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
 
     fun saveProfiles(list: List<Profile>) {
         state.profiles = list
