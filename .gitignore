@@ -15,3 +15,6 @@ keystore.properties
 *.jpg
 Manual_Legion_G9_LGC900.md
 CLAUDE.md
+
+# APKs y zips descargados de las corridas del CI (se quedan en la carpeta, no van al repositorio)
+build-out/
