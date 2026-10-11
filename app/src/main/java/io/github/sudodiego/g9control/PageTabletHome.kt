@@ -69,7 +69,7 @@ private fun QuickPanel(a: MainActivity) {
     var wide by remember { mutableStateOf(Aspect.is169(a)) }
     LaunchedEffect(ready) { if (ready) ZuiBattery.readBypass()?.let { bypass = it } }
     CompositionLocalProvider(LocalEditable provides true) {
-        Panel(tr("Rápido", "Quick")) {
+        Panel(tr("Accesos rápidos", "Quick access")) {
             CompositionLocalProvider(LocalEditable provides ready) {
                 SwitchRow("Bypass", bypass, tr("Con el cargador, la batería no carga ni se calienta.", "With the charger, the battery doesn't charge or heat up.")) { want ->
                     if (ready) scope.launch { if (ZuiBattery.setBypass(want)) bypass = want }
@@ -97,20 +97,25 @@ private fun QuickPanel(a: MainActivity) {
 private fun ControllersPanel(s: AppState) {
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(2000); tick++ } }
+    // El nombre y los identificadores reales que reporta Android (antes se mostraba «Legion G9» genérico).
     val pads = remember(tick) {
         InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }
             .filter { it.isExternal && (it.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD }
-            .map { it.name }.distinct()
+            .distinctBy { it.name }
     }
-    Panel(tr("Controles", "Controllers")) {
+    Panel(tr("Controles conectados", "Connected controllers")) {
         if (pads.isEmpty()) Text(tr("No hay controles conectados.", "No controllers connected."), fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        pads.forEach { name ->
-            val g9 = name.contains("G9", true) || name.contains("x-box 360", true)
+        pads.forEach { pad ->
+            val g9 = pad.name.contains("G9", true) || pad.name.contains("x-box 360", true)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (g9) "Legion G9" else name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    if (g9) Text(s.padMode?.label?.let { tr("Modo $it", "$it mode") } ?: "", fontSize = 13.sp,
+                    Text(pad.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    val sub = buildList {
+                        if (g9) s.padMode?.label?.let { add(tr("Modo $it", "$it mode")) }
+                        add("VID 0x%04X · PID 0x%04X".format(pad.vendorId, pad.productId))
+                    }
+                    Text(sub.joinToString(" · "), fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (g9) TextButton(onClick = { s.goTo(Section.G9) }) { Text(tr("Configurar", "Set up")) }
@@ -122,7 +127,7 @@ private fun ControllersPanel(s: AppState) {
 /** Atajos dentro de los juegos: cuáles hay con el G9 y cuáles con cualquier control. */
 @Composable
 private fun ShortcutsHelp() {
-    Panel(tr("Atajos en los juegos", "In-game shortcuts")) {
+    Panel(tr("Atajos del mando", "Controller shortcuts")) {
         // El botón guía es el del centro de cualquier control (Legion en el G9, Xbox, PS, Home).
         HelpRow(tr("Panel de juego", "Game panel"), tr("Mantener el botón guía, o tocar L3 + R3", "Hold the guide button, or tap L3 + R3"))
         HelpRow(tr("Captura", "Screenshot"), tr("Botón guía + RB, o mantener L3 + R3 · En el G9 en DS5, también M dos veces",

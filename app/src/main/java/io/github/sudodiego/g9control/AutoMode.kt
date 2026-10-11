@@ -902,6 +902,12 @@ class AutoModeService : AccessibilityService() {
             main.removeCallbacks(legionHold)
             return false
         }
+        // Home con gesto: si le asignaste uno (en «Todas las apps» o en la app que está al frente), el gesto
+        // manda y Home deja de ser Atrás/panel. Sin gesto, sigue igual que siempre.
+        if (!appInFront && !guide.blocksInput && Gestures.rulesFor(this, lastPackage)[KeyEvent.KEYCODE_BUTTON_MODE]?.any == true) {
+            Log.d(TAG, "Home tiene gesto: lo dejo pasar al motor de gestos")
+            return false
+        }
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (e.repeatCount > 0) return legionOwned || legionChording

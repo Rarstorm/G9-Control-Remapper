@@ -25,7 +25,10 @@ data class GestureRule(val key: Int, val tap: GestureAction, val long: GestureAc
     val any get() = tap != GestureAction.NONE || long != GestureAction.NONE || dbl != GestureAction.NONE
 }
 
-/** Botón del dibujo → keyCode de Android que llega al servicio. Home no está: es el botón de la guía (Atrás / panel). */
+/**
+ * Botón del dibujo → keyCode de Android que llega al servicio. Home está también: sin gesto asignado el
+ * botón de la guía sigue siendo Atrás / panel (lo lleva el servicio), pero con gesto manda el gesto.
+ */
 val PAD_KEYCODE: Map<PadKey, Int> = mapOf(
     PadKey.A to KeyEvent.KEYCODE_BUTTON_A,
     PadKey.B to KeyEvent.KEYCODE_BUTTON_B,
@@ -39,6 +42,7 @@ val PAD_KEYCODE: Map<PadKey, Int> = mapOf(
     PadKey.R3 to KeyEvent.KEYCODE_BUTTON_THUMBR,
     PadKey.VIEW to KeyEvent.KEYCODE_BUTTON_SELECT,
     PadKey.MENU to KeyEvent.KEYCODE_BUTTON_START,
+    PadKey.HOME to KeyEvent.KEYCODE_BUTTON_MODE,
     PadKey.UP to KeyEvent.KEYCODE_DPAD_UP,
     PadKey.DOWN to KeyEvent.KEYCODE_DPAD_DOWN,
     PadKey.LEFT to KeyEvent.KEYCODE_DPAD_LEFT,

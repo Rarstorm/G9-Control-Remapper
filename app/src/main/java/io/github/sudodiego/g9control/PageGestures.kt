@@ -26,8 +26,9 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     var scope by remember { mutableStateOf<String?>(null) }                            // null = todas las apps
     var apps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }  // paquete a nombre
     var rev by remember { mutableStateOf(0) }                                          // se sube al guardar
-    var sel by remember { mutableStateOf(PadKey.B) }
-    val key = PAD_KEYCODE[sel] ?: KeyEvent.KEYCODE_BUTTON_B
+    // Sin botón preseleccionado: antes abría con B ya elegido y confundía (comentario del debug 10-10).
+    var sel by remember { mutableStateOf<PadKey?>(null) }
+    val key = sel?.let { PAD_KEYCODE[it] } ?: 0   // 0 = todavía no se tocó ningún botón
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
@@ -42,13 +43,14 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     }
 
     val withRules = remember(rev) { Gestures.apps(a) }
-    val globRule = remember(rev, key) { Gestures.rules(a)[key] }
-    val appRule = remember(rev, key, scope) { scope?.let { Gestures.appRules(a, it)[key] } }
+    val globRule = remember(rev, key) { if (key == 0) null else Gestures.rules(a)[key] }
+    val appRule = remember(rev, key, scope) { if (key == 0 || scope == null) null else Gestures.appRules(a, scope!!)[key] }
     val shown = appRule ?: globRule ?: GestureRule(key, GestureAction.NONE, GestureAction.NONE, GestureAction.NONE)
-    val inherited = scope != null && appRule == null
+    val inherited = scope != null && appRule == null && globRule != null
     val scopeLabel = scope?.let { p -> apps.firstOrNull { it.first == p }?.second ?: p } ?: tr("Todas las apps", "All apps")
 
     fun write(r: GestureRule) {
+        if (key == 0) return   // sin botón elegido no se escribe nada
         val p = scope
         if (p == null) Gestures.setRule(a, r) else Gestures.setAppRule(a, p, r)
         rev++
@@ -83,11 +85,13 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     }
                 }
                 ControllerKeyPicker(
-                    lit = setOf(sel), tags = backTags, enabled = true,
+                    lit = setOfNotNull(sel), tags = backTags, enabled = true,
                     modifier = Modifier.fillMaxWidth(), lights = s
                 ) { k ->
                     if (k in PAD_KEYCODE) sel = k
-                    else s.status = tr("El botón de la guía no se puede usar para gestos.", "The guide button can't be used for gestures.")
+                    // Home ya se puede usar (si tiene gesto, el servicio le deja pasar): lo que no se puede
+                    // son los botones que no llegan a Android (M, sticks).
+                    else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
                 }
                 Text(tr("Botón con gestos", "Gesture button"), fontWeight = FontWeight.SemiBold)
                 Hint(
@@ -103,12 +107,17 @@ fun GesturesPage(s: AppState, a: MainActivity) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Botón", "Button"), Modifier.width(120.dp), fontWeight = FontWeight.SemiBold)
-                    Text(sel.name, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(sel?.name ?: tr("Ningún botón", "No button"), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     if (inherited) {
                         Spacer(Modifier.width(10.dp))
                         Text(tr("(hereda de Todas)", "(inherits from All)"), fontSize = 12.sp)
                     }
                 }
+                // Sin botón elegido no hay nada que configurar (y no se escribe nada por accidente).
+                if (key == 0) {
+                    Hint(tr("Toca un botón del dibujo para ver y cambiar sus gestos.",
+                        "Tap a button on the drawing to see and change its gestures."))
+                } else {
                 GestureRow(tr("Tocar", "Tap"), shown.tap) { write(shown.copy(tap = it)) }
                 GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
                 GestureRow(tr("Doble toque", "Double-tap"), shown.dbl) { write(shown.copy(dbl = it)) }
@@ -131,6 +140,15 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     tr("Para borrar: «Nada» en los tres. Tocar espera ~0,3 s (por si viene el doble); mantener entra a ~0,45 s.",
                         "To clear: “Nothing” on all three. A tap waits ~0.3 s (in case a double comes); long-press triggers at ~0.45 s.")
                 )
+                }
+                // Tiempos de los gestos: antes solo se podían cambiar por dentro (g_tap_max, g_long, g_double).
+                var tapMs by remember(rev) { mutableIntStateOf(Gestures.tapMax(a)) }
+                var longMs by remember(rev) { mutableIntStateOf(Gestures.longMs(a)) }
+                var doubleMs by remember(rev) { mutableIntStateOf(Gestures.doubleMs(a)) }
+                Text(tr("Tiempos", "Timings"), fontWeight = FontWeight.SemiBold)
+                SliderRow(tr("Tocar: hasta", "Tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
+                SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
+                SliderRow(tr("Doble toque: dentro de", "Double-tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
             }
         }
     )

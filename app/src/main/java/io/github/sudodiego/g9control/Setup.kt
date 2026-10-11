@@ -29,12 +29,18 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
         Surface(shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.92f)) {
             Column(Modifier.padding(28.dp)) {
                 Text(tr("Configuración inicial", "Quick setup"), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                // El aviso y los pasos van en el MISMO scroll: antes el aviso legal estaba fijo y al
+                // desplazarse los pasos se comía media pantalla.
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 Text(
                     tr("Cuatro pasos para dejar G9 Control Remapper listo. Los que se marcan en verde ya están hechos.",
                         "Four steps to get G9 Control Remapper ready. Steps marked green are already done."),
                     fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(12.dp))
                 // Aviso legal y de privacidad: visible antes de pedir cualquier permiso.
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -54,11 +60,6 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
                     Step(
                         1, s.padMode != null, tr("Conecta el control", "Connect the controller"),
                         tr("Coloca la tablet en el G9. Debe estar en modo Android (indicador azul oscuro). Si está en X-Input (verde) " +
@@ -88,9 +89,11 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                                 "it can read the screen: it needs that to know which window is the game and capture only that; the app " +
                                 "doesn't read its text, doesn't see what you type and doesn't connect to the internet.")
                     ) {
+                        // El candado de «ajustes restringidos» se avisa siempre: quien instala el APK a mano
+                        // (fuera de una tienda) lo va a necesitar para poder activar la accesibilidad.
+                        Hint(tr("Si al activarlo Android dice «Ajuste restringido», primero abre «Ajustes de la app» → ⋮ → «Permitir ajustes restringidos», y después actívalo aquí.",
+                            "If Android says “Restricted setting” when you turn it on, first open “App settings” → ⋮ → “Allow restricted settings”, then turn it on here."))
                         if (!s.autoServiceOn) {
-                            Hint(tr("Si al activarlo Android dice «Ajuste restringido», primero abre «Ajustes de la app» → ⋮ → «Permitir ajustes restringidos», y después actívalo aquí.",
-                                "If Android says “Restricted setting” when you turn it on, first open “App settings” → ⋮ → “Allow restricted settings”, then turn it on here."))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Abrir accesibilidad", "Open accessibility")) }
                                 OutlinedButton(onClick = { AutoRules.openAppInfo(a) }) { Text(tr("Ajustes de la app", "App settings")) }

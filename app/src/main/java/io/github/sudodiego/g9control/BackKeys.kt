@@ -125,6 +125,21 @@ fun BackPage(s: AppState, a: MainActivity) {
                     }
                 }
             }
+            // Aprender del mando: sin tocar la pantalla, aprietas el botón en el control y queda como destino
+            // del trasero elegido. Como el trasero manda el mismo evento que el botón que copia, lo que se
+            // aprende es el botón físico que aprietas (apretar el trasero apuntaría al que ya copia).
+            if (s.learnBack == sel) {
+                Text(
+                    tr("Aprieta ahora en el mando el botón que quieres que copie ${sel.label}…",
+                        "Now press on the controller the button you want ${sel.label} to copy…"),
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = { s.learnBack = null }) { Text(tr("Cancelar", "Cancel")) }
+            } else {
+                OutlinedButton(onClick = { s.learnBack = sel }, enabled = editable) {
+                    Text(tr("Aprender del mando", "Learn from controller"))
+                }
+            }
             when {
                 !s.connected ->
                     Hint(tr("Conecta el control en modo Android para cambiarlos.", "Connect the controller in Android mode to change them."))

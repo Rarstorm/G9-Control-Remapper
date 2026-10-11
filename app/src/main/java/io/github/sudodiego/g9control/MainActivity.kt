@@ -221,6 +221,22 @@ class MainActivity : ComponentActivity() {
             }
             KeyEvent.ACTION_UP -> s.pressedKeys.remove(e.keyCode)
         }
+        // «Aprender del mando» (página Traseros): el próximo botón que aprietes pasa a ser lo que copia el
+        // trasero elegido. Se consume el evento para que ese botón no haga además lo suyo en la app.
+        if (s.learnBack != null && s.page != Page.BACK) s.learnBack = null
+        val learn = s.learnBack
+        if (learn != null) {
+            if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
+                val dst = padKeyOf(e.keyCode)?.let { MACRO_KEY_BYTE[it] }
+                s.learnBack = null
+                if (dst != null) {
+                    setBackKey(learn, dst)
+                    s.status = tr("${learn.label}: ahora copia ${backTargetName(dst)}", "${learn.label}: now copies ${backTargetName(dst)}")
+                } else s.fail(tr("Ese botón no se puede asignar a un trasero.", "That button can't be assigned to a paddle."))
+            }
+            markTested()
+            return true
+        }
         // Vista + Menú: la misma barra que la guía (HoldTracker).
         val vm = e.keyCode == KeyEvent.KEYCODE_BUTTON_START || e.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
         if (vm && e.repeatCount == 0 && (e.action == KeyEvent.ACTION_DOWN || e.action == KeyEvent.ACTION_UP)) {
@@ -998,6 +1014,12 @@ class AppState {
     var appliedBackKeys by mutableStateOf<Map<Int, Int>?>(null)
     /** A↔B y X↔Y intercambiados (null = sin leer). */
     var abSwapped by mutableStateOf<Boolean?>(null)
+    /**
+     * Trasero que está esperando que aprietes un botón del mando (null = no se está aprendiendo). El
+     * firmware no distingue un trasero del botón que copia: lo que se aprende es el botón físico, así
+     * que sirve para elegir el destino sin tocar la pantalla.
+     */
+    var learnBack by mutableStateOf<BackKey?>(null)
     /** Macros guardadas en el control, por trasero (id 1–4). */
     val macros = mutableStateMapOf<Int, Macro>()
     /** Editor de macro abierto (null = cerrado) y lo que se está editando. */
