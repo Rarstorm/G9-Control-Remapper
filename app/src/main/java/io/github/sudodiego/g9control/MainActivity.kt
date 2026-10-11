@@ -843,6 +843,37 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * Graba en los cuatro traseros la firma que identifica a cada uno (una macro cortísima de Vista/Menú, de
+     * 5-10 ms). Con eso el servicio sabe qué trasero se apretó y puede darle una acción distinta en cada app.
+     * Se hace una vez; después, cada reinstalación del control no la borra.
+     */
+    fun writeSignatures() = launchIo {
+        val s = state
+        val res = withContext(Dispatchers.IO) {
+            PADDLE_SIGNATURES.map { sig ->
+                val m = signatureMacro(sig)
+                // Los ajustes van PRIMERO: escribirlos después de los pasos los borra.
+                G9Usb.transact(MacroGcm.writeSettings(sig.back.id, m))
+                G9Usb.transact(MacroGcm.writeSteps(sig.back.id, m.steps))
+                Triple(
+                    sig,
+                    MacroGcm.parseSteps(G9Usb.transact(MacroGcm.read(sig.back.id))),
+                    G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u(),
+                )
+            }
+        }
+        var bad = 0
+        res.forEach { (sig, steps, mapping) ->
+            val ok = steps != null && steps.size == sig.codes.size && steps.map { it.key } == signatureMacro(sig).steps.map { it.key }
+            if (ok) s.macros[sig.back.id] = signatureMacro(sig).copy(steps = steps!!) else bad++
+            if (mapping != null) s.backKeys[sig.back.id] = mapping
+        }
+        s.appliedBackKeys = s.backKeys.toMap()
+        if (bad == 0) s.status = tr("Firmas grabadas en los 4 traseros.", "Signatures written to the 4 paddles.")
+        else s.fail(tr("$bad firma(s) no se pudieron confirmar.", "$bad signature(s) couldn't be confirmed."))
+    }
+
+    /**
      * Valores de fábrica: la acción "restaurar" de zonas muertas, luces y vibración; borrar macros y
      * dejar los traseros sin asignar; cruceta y gatillo rápido desactivados. Después se relee todo.
      * Son ~20 escrituras: solo a pedido, con confirmación.

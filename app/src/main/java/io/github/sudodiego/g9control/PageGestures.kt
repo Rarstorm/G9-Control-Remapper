@@ -28,7 +28,9 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     var rev by remember { mutableStateOf(0) }                                          // se sube al guardar
     // Sin botón preseleccionado: antes abría con B ya elegido y confundía (comentario del debug 10-10).
     var sel by remember { mutableStateOf<PadKey?>(null) }
-    val key = sel?.let { PAD_KEYCODE[it] } ?: 0   // 0 = todavía no se tocó ningún botón
+    // Los traseros se configuran aquí mismo: su «botón» es un código interno y sus reglas se guardan por app.
+    var selPaddle by remember { mutableStateOf<BackKey?>(null) }
+    val key = selPaddle?.let { PADDLE_KEYCODE[it] } ?: sel?.let { PAD_KEYCODE[it] } ?: 0   // 0 = todavía no se tocó nada
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
@@ -45,7 +47,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     // «Aprender del mando»: el botón que se apretó en el control queda elegido aquí y se borra el aviso.
     LaunchedEffect(s.learnedPad) {
         s.learnedPad?.let { pk ->
-            if (pk in PAD_KEYCODE) sel = pk
+            if (pk in PAD_KEYCODE) { selPaddle = null; sel = pk }
             s.learnedPad = null
         }
     }
@@ -102,7 +104,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     lit = setOfNotNull(sel), tags = backTags, enabled = true,
                     modifier = Modifier.fillMaxWidth(), lights = s
                 ) { k ->
-                    if (k in PAD_KEYCODE) sel = k
+                    if (k in PAD_KEYCODE) { selPaddle = null; sel = k }
                     // Home ya se puede usar (si tiene gesto, el servicio le deja pasar): lo que no se puede
                     // son los botones que no llegan a Android (M, sticks).
                     else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
@@ -114,9 +116,28 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                 } else {
                     OutlinedButton(onClick = { s.learnGesture = true }) { Text(tr("Aprender del mando", "Learn from controller")) }
                 }
+                // Traseros: se configuran aquí mismo, con el mismo «Aplica a». El control los reconoce por su
+                // firma (una macro cortísima que se graba una vez), así que pueden hacer algo distinto por app.
+                Text(tr("Traseros", "Back paddles"), fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BackKey.entries.forEach { k ->
+                        FilterChip(
+                            selected = selPaddle == k,
+                            onClick = { selPaddle = k; sel = null },
+                            label = { Text(k.label) }
+                        )
+                    }
+                }
+                OutlinedButton(onClick = { a.writeSignatures() }, enabled = s.connected && !s.busy) {
+                    Text(tr("Preparar firmas en el mando", "Write signatures to the controller"))
+                }
                 Hint(
-                    tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando». Para los traseros: primero asígnalos en «Traseros» al botón que elijas aquí.",
-                        "Tap a button on the drawing, or press it on the controller with “Learn from controller”. For the back paddles: first assign them in “Paddles” to the button you pick here.")
+                    tr("Las firmas se graban una vez: con ellas el control dice qué trasero apretaste. Elige un trasero arriba y asígnale qué hace (por app).",
+                        "Signatures are written once: with them the controller says which paddle you pressed. Pick a paddle above and set what it does (per app).")
+                )
+                Hint(
+                    tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando».",
+                        "Tap a button on the drawing, or press it on the controller with “Learn from controller”.")
                 )
             }
         },
@@ -127,7 +148,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Botón", "Button"), Modifier.width(120.dp), fontWeight = FontWeight.SemiBold)
-                    Text(sel?.name ?: tr("Ningún botón", "No button"), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(selPaddle?.label ?: sel?.name ?: tr("Ningún botón", "No button"), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     if (inherited) {
                         Spacer(Modifier.width(10.dp))
                         Text(tr("(hereda de Todas)", "(inherits from All)"), fontSize = 12.sp)
@@ -135,8 +156,8 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                 }
                 // Sin botón elegido no hay nada que configurar (y no se escribe nada por accidente).
                 if (key == 0) {
-                    Hint(tr("Toca un botón del dibujo para ver y cambiar sus gestos.",
-                        "Tap a button on the drawing to see and change its gestures."))
+                    Hint(tr("Toca un botón del dibujo (o elige un trasero) para ver y cambiar sus gestos.",
+                        "Tap a button on the drawing (or pick a back paddle) to see and change its gestures."))
                 } else {
                 GestureRow(tr("Tocar", "Tap"), shown.tap) { write(shown.copy(tap = it)) }
                 GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }

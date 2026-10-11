@@ -68,9 +68,13 @@ fun gestureActionName(a: GestureAction, kc: Int): String =
     if (a == GestureAction.KEY) (if (Lang.en) "key " else "tecla ") + gestureKeyName(kc).ifEmpty { "?" }
     else if (Lang.en) a.en else a.es
 
+/** Nombre del botón para los resúmenes: los del dibujo y los traseros (que usan un código interno). */
+fun gestureKeyLabel(k: Int): String =
+    KEYCODE_PAD[k]?.name ?: PADDLE_KEYCODE.entries.firstOrNull { it.value == k }?.key?.label ?: "?"
+
 /**
  * Resumen de lo que tiene un conjunto de reglas (una app, o «Todas las apps»), para enseñarlo sin tener que
- * ir botón por botón: «LT → Atrás, tecla A · Home → Panel de juego».
+ * ir botón por botón: «LT → Atrás, tecla A · L4 → Panel de juego».
  */
 fun gestureSummary(rules: Map<Int, GestureRule>): String = rules.entries
     .filter { it.value.any }
@@ -80,7 +84,7 @@ fun gestureSummary(rules: Map<Int, GestureRule>): String = rules.entries
             r.long.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc) },
             r.dbl.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc) },
         )
-        (KEYCODE_PAD[k]?.name ?: "?") + " → " + parts.joinToString(", ")
+        gestureKeyLabel(k) + " → " + parts.joinToString(", ")
     }
 
 /** Gestos de un botón del control: toque, mantener y doble toque. */

@@ -87,3 +87,12 @@ Diagnóstico contra el código (la tablet no estaba en red: `adb devices` vacío
 - [x] **Sliders de tiempos plegables** (pedido del 11-10 tarde): los tres sliders ocupaban mucho; ahora hay **3 botones en una línea** (Tocar / Mantener / Doble, cada uno con su valor) y al tocar uno aparece **solo su slider debajo**.
 - [x] **1.3.7 (versionCode 13)** compilada en local e **instalada encima** en la Y700 (datos intactos, accesibilidad y Shizuku siguen).
 - [ ] **Falta de la ronda**: fusión Traseros + Gestos en una página con «Aplica a», y el **detector de firmas** de los traseros.
+
+## 2026-10-11 (8ª parte — FIRMAS de los traseros + traseros por app → 1.3.8)
+- [x] **`Signatures.kt` (nuevo)**: cada trasero lleva una **firma** = macro cortísima única (Vista/Menú, 10 ms por paso y 5 ms entre pasos → ~25 ms), imposible de repetir a mano. Ninguna firma es el principio de otra (L4 = Vista→Menú, R4 = Menú→Vista, L5 = Vista→Vista→Menú, R5 = Menú→Menú→Vista).
+- [x] **Escritura**: `MainActivity.writeSignatures()` graba las 4 firmas en el mando (ajustes PRIMERO, luego los pasos, y relee para confirmar). Botón **«Preparar firmas en el mando»** en la página de gestos.
+- [x] **Detector** (`SignatureDetector`): enganchado en `handleKey` tras `legionKey`. Mientras dura la ventana (80 ms) retiene Vista/Menú; si la secuencia se completa dispara el trasero y **se come** los botones; si no, los reenvía con Shizuku (`input keyevent`) para que un Vista/Menú normal no se pierda. Solo vigila si hay reglas de trasero configuradas (en general o en la app al frente).
+- [x] **Traseros POR APP**: cada trasero tiene un código interno (`PADDLE_KEYCODE`, negativo) y entra en el mismo motor de gestos, así que se le asigna qué hace **en cada app** con el «Aplica a». `runPaddle()` resuelve la regla de la app al frente.
+- [x] **Fusión (1ª parte)**: los traseros ya se configuran **dentro de la página de gestos** (chips L4/R4/L5/R5 + «Preparar firmas»); el resumen por app los incluye («L4 → Panel de juego»). La página «Traseros» sigue para lo que es del mando (qué botón copia cada uno y su macro).
+- [x] **1.3.8 (versionCode 14)** compilada e **instalada encima** en la Y700 (datos intactos, accesibilidad y Shizuku siguen).
+- [ ] **Probar en la tablet**: grabar firmas y asignarle a un trasero una acción distinta en una app.

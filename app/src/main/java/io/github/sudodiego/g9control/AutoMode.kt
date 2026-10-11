@@ -285,6 +285,17 @@ class AutoModeService : AccessibilityService() {
     private val gestures = GestureEngine(main)
 
     /**
+     * Detector de las firmas de los traseros (Vista/Menú en 5 ms): reconoce la secuencia que lleva grabada cada
+     * trasero y la convierte en «se apretó L4/R4/L5/R5». Si la secuencia no se completa, devuelve los botones
+     * con Shizuku para que un Vista/Menú normal no se pierda.
+     */
+    private val signatures = SignatureDetector(
+        main,
+        resend = { code -> scope.launch { Shell.run(Shell.keyEvent(code)) } },
+        onPaddle = { back -> runPaddle(back) },
+    )
+
+    /**
      * Pantalla apagada: la guía se quita (no tiene sentido en la pantalla de bloqueo). Al desbloquear,
      * si sigue pendiente volver a Android, aparece el aviso pequeño de arriba.
      */
@@ -729,6 +740,15 @@ class AutoModeService : AccessibilityService() {
         if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
+        // Firmas de los traseros: la secuencia corta con la que el control dice qué trasero se apretó. Solo se
+        // vigila si algún trasero tiene reglas (en «Todas las apps» o en la app al frente), para no retrasar un
+        // Vista/Menú normal cuando no se usan firmas.
+        if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES) {
+            val rules = Gestures.rulesFor(this, lastPackage)
+            if (rules.keys.any { it in PADDLE_KEYCODE.values } &&
+                signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)
+            ) return true
+        }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
         if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc -> runGestureAction(act, kc) }) return true
@@ -823,6 +843,19 @@ class AutoModeService : AccessibilityService() {
                 }
             }
         }
+    }
+
+    /**
+     * Un trasero reconocido por su firma. Se resuelve igual que un botón: sus reglas se guardan por app con el
+     * código interno del trasero ([PADDLE_KEYCODE]). Sin regla para la app al frente no hace nada (los botones
+     * de la firma ya se consumieron).
+     */
+    private fun runPaddle(back: BackKey) {
+        val code = PADDLE_KEYCODE[back] ?: return
+        val rule = Gestures.rulesFor(this, lastPackage)[code] ?: return
+        if (rule.tap == GestureAction.NONE) return
+        Log.d(TAG, "firma de ${back.label} en ${lastPackage ?: "?"}: ${rule.tap.name}")
+        runGestureAction(rule.tap, rule.kc)
     }
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
