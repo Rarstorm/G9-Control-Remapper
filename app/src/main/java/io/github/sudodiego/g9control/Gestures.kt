@@ -17,7 +17,9 @@ enum class GestureAction(val es: String, val en: String) {
     VOL_DOWN("Bajar volumen", "Volume down"),
     SCREENSHOT("Captura", "Screenshot"),
     /** Tecla de teclado inyectada con Shizuku: el mando no envía teclas, las manda la app. La tecla va en [GestureRule.kc]. */
-    KEY("Tecla del teclado", "Keyboard key");
+    KEY("Tecla del teclado", "Keyboard key"),
+    /** Abre el panel de juego (el mismo de mantener el botón guía o L3 + R3). */
+    PANEL("Panel de juego", "Game panel");
 
     companion object { fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE }
 }
@@ -60,6 +62,26 @@ val GESTURE_KEYS: List<GestureKey> =
 /** Nombre de la tecla elegida (vacío si todavía no se eligió ninguna). */
 fun gestureKeyName(kc: Int): String =
     GESTURE_KEYS.firstOrNull { it.kc == kc }?.let { if (Lang.en) it.en else it.es } ?: ""
+
+/** Nombre corto de una acción de gesto, para los resúmenes. */
+fun gestureActionName(a: GestureAction, kc: Int): String =
+    if (a == GestureAction.KEY) (if (Lang.en) "key " else "tecla ") + gestureKeyName(kc).ifEmpty { "?" }
+    else if (Lang.en) a.en else a.es
+
+/**
+ * Resumen de lo que tiene un conjunto de reglas (una app, o «Todas las apps»), para enseñarlo sin tener que
+ * ir botón por botón: «LT → Atrás, tecla A · Home → Panel de juego».
+ */
+fun gestureSummary(rules: Map<Int, GestureRule>): String = rules.entries
+    .filter { it.value.any }
+    .joinToString(" · ") { (k, r) ->
+        val parts = listOfNotNull(
+            r.tap.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc) },
+            r.long.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc) },
+            r.dbl.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc) },
+        )
+        (KEYCODE_PAD[k]?.name ?: "?") + " → " + parts.joinToString(", ")
+    }
 
 /** Gestos de un botón del control: toque, mantener y doble toque. */
 data class GestureRule(

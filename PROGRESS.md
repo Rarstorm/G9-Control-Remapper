@@ -79,3 +79,11 @@ Diagnóstico contra el código (la tablet no estaba en red: `adb devices` vacío
 - [x] **Mientras se aprende, el servicio no remapea** (`syncBus()` → `KeyBus.testing`), porque un botón con reglas se consumiría antes de llegar a la app (mismo puente que usa la prueba de botones).
 - [x] **1.3.6 (versionCode 12)** compilada en local (`build-out/app-release-1.3.6-local.apk`, `BUILD SUCCESSFUL in 31s`), firmada con la clave del proyecto (huella `A9:DE:A6:…:E0:49`); strings nuevos verificados en el `classes.dex`.
 - [ ] **Probar en la tablet** el botón «Aprender del mando» de Gestos.
+
+## 2026-10-11 (7ª parte — indicador por app, panel de juego como gesto, sliders plegables → 1.3.7)
+- [x] **«Aprender del mando» en Gestos: PROBADO** por Roberto.
+- [x] **Indicador de lo que tiene cada app (punto 4 de la ronda)**: `gestureSummary()` resume botones y qué hace cada uno («LT → Atrás, tecla A · Home → Panel de juego»). Se enseña **en el selector de apps** (Todas las apps + cada una con «●») y en un bloque **«Lo que tiene esta app»** dentro de la página, sin abrir botón por botón.
+- [x] **«Panel de juego» como acción de gesto** (punto 1 de la ronda): `GestureAction.PANEL` → `panel.show()`. Ya se puede asignar a cualquier botón, no solo al guía o L3+R3.
+- [x] **Sliders de tiempos plegables** (pedido del 11-10 tarde): los tres sliders ocupaban mucho; ahora hay **3 botones en una línea** (Tocar / Mantener / Doble, cada uno con su valor) y al tocar uno aparece **solo su slider debajo**.
+- [x] **1.3.7 (versionCode 13)** compilada en local e **instalada encima** en la Y700 (datos intactos, accesibilidad y Shizuku siguen).
+- [ ] **Falta de la ronda**: fusión Traseros + Gestos en una página con «Aplica a», y el **detector de firmas** de los traseros.

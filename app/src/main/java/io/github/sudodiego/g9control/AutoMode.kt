@@ -813,6 +813,8 @@ class AutoModeService : AccessibilityService() {
                 am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
             }
             GestureAction.SCREENSHOT -> if (this::panel.isInitialized) panel.capture()
+            // Panel de juego: el mismo que se abre manteniendo el botón guía o L3 + R3.
+            GestureAction.PANEL -> if (this::panel.isInitialized) panel.show()
             // Tecla de teclado: el mando no las envía, así que la inyecta Shizuku (`input keyevent`).
             GestureAction.KEY -> if (kc != 0) scope.launch {
                 if (Shell.run(Shell.keyEvent(kc)) == null) {

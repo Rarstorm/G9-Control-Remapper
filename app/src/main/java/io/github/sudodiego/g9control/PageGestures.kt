@@ -51,6 +51,9 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     }
 
     val withRules = remember(rev) { Gestures.apps(a) }
+    // Lo que tiene cada app, para el selector: «● Chrome — LT → Atrás · A → tecla Espacio».
+    val summaries = remember(rev) { Gestures.apps(a).associateWith { p -> gestureSummary(Gestures.appRules(a, p)) } }
+    val allSummary = remember(rev) { gestureSummary(Gestures.rules(a)) }
     val globRule = remember(rev, key) { if (key == 0) null else Gestures.rules(a)[key] }
     val appRule = remember(rev, key, scope) { if (key == 0 || scope == null) null else Gestures.appRules(a, scope!!)[key] }
     val shown = appRule ?: globRule ?: GestureRule(key, GestureAction.NONE, GestureAction.NONE, GestureAction.NONE)
@@ -82,10 +85,13 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                             Icon(Icons.Filled.ArrowDropDown, null)
                         }
                         DropdownMenu(pick, { pick = false }) {
-                            DropdownMenuItem(text = { Text(tr("Todas las apps", "All apps")) }, onClick = { pick = false; scope = null })
+                            DropdownMenuItem(
+                                text = { Text(tr("Todas las apps", "All apps") + if (allSummary.isEmpty()) "" else " — $allSummary", maxLines = 4) },
+                                onClick = { pick = false; scope = null }
+                            )
                             apps.sortedByDescending { it.first in withRules }.forEach { (p, l) ->
                                 DropdownMenuItem(
-                                    text = { Text((if (p in withRules) "● " else "") + l) },
+                                    text = { Text(((if (p in withRules) "● " else "") + l + (summaries[p]?.let { " — $it" } ?: "")), maxLines = 4) },
                                     onClick = { pick = false; scope = p }
                                 )
                             }
@@ -169,14 +175,35 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         "To clear: “Nothing” on all three. A tap waits ~0.3 s (in case a double comes); long-press triggers at ~0.45 s.")
                 )
                 }
+
+                // Qué tiene la app elegida (o «Todas las apps»), sin ir botón por botón: los botones y qué hace cada uno.
+                val summary = gestureSummary(scopeRules)
+                if (summary.isNotEmpty()) {
+                    Text(
+                        if (scope == null) tr("Lo que tiene Todas las apps", "What All apps has")
+                        else tr("Lo que tiene esta app", "What this app has"),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(summary, fontSize = 13.sp)
+                }
                 // Tiempos de los gestos: antes solo se podían cambiar por dentro (g_tap_max, g_long, g_double).
+                // Los tres sliders a la vez ocupaban mucho: se elige el tiempo con un botón y debajo sale solo
+                // el slider del elegido (0 = tocar, 1 = mantener, 2 = doble).
                 var tapMs by remember(rev) { mutableIntStateOf(Gestures.tapMax(a)) }
                 var longMs by remember(rev) { mutableIntStateOf(Gestures.longMs(a)) }
                 var doubleMs by remember(rev) { mutableIntStateOf(Gestures.doubleMs(a)) }
+                var openTimer by remember { mutableStateOf<Int?>(null) }
                 Text(tr("Tiempos", "Timings"), fontWeight = FontWeight.SemiBold)
-                SliderRow(tr("Tocar: hasta", "Tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
-                SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
-                SliderRow(tr("Doble toque: dentro de", "Double-tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TimerButton(tr("Tocar", "Tap"), "$tapMs ms", openTimer == 0, Modifier.weight(1f)) { openTimer = if (openTimer == 0) null else 0 }
+                    TimerButton(tr("Mantener", "Long"), "$longMs ms", openTimer == 1, Modifier.weight(1f)) { openTimer = if (openTimer == 1) null else 1 }
+                    TimerButton(tr("Doble", "Double"), "$doubleMs ms", openTimer == 2, Modifier.weight(1f)) { openTimer = if (openTimer == 2) null else 2 }
+                }
+                when (openTimer) {
+                    0 -> SliderRow(tr("Tocar: hasta", "Tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
+                    1 -> SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
+                    2 -> SliderRow(tr("Doble toque: dentro de", "Double-tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
+                }
             }
         }
     )
@@ -202,6 +229,20 @@ private fun GestureRow(label: String, cur: GestureAction, onPick: (GestureAction
             }
         }
     }
+}
+
+/** Un tiempo de gesto (Tocar / Mantener / Doble): al tocarlo aparece su slider debajo del todo el bloque. */
+@Composable
+private fun TimerButton(label: String, value: String, open: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val content: @Composable () -> Unit = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 13.sp, maxLines = 1)
+            Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+    val padding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+    if (open) Button(onClick = onClick, modifier = modifier, contentPadding = padding) { content() }
+    else OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = padding) { content() }
 }
 
 /** Elige la tecla de teclado que se inyecta cuando el gesto es «Tecla del teclado». */
