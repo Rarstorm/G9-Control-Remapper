@@ -724,7 +724,7 @@ class AutoModeService : AccessibilityService() {
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app).
-        if (!appInFront && gestures.onKey(this, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
+        if (!appInFront && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
