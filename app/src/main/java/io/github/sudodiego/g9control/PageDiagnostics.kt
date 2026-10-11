@@ -308,8 +308,8 @@ private fun PermissionsPanel(s: AppState, a: MainActivity) {
             tr("Cambio automático por juego, panel de juego, capturas, botón guía, volumen invertido, bypass automático y el monitor.",
                 "Automatic switching per game, game panel, screenshots, guide button, swapped volume, automatic bypass and the monitor.")
         ) {
-            Hint(tr("Busca «TBF Companion» en la lista y actívalo. Si sale «Ajuste restringido»: Ajustes → Apps → TBF Companion → ⋮ → Permitir ajustes restringidos.",
-                "Find “TBF Companion” in the list and turn it on. If “Restricted setting” appears: Settings → Apps → TBF Companion → ⋮ → Allow restricted settings."))
+            Hint(tr("Busca «G9 Control Remapper» en la lista y actívalo. Si sale «Ajuste restringido»: Ajustes → Apps → G9 Control Remapper → ⋮ → Permitir ajustes restringidos.",
+                "Find “G9 Control Remapper” in the list and turn it on. If “Restricted setting” appears: Settings → Apps → G9 Control Remapper → ⋮ → Allow restricted settings."))
             Button(onClick = { AutoRules.openServiceSettings(a) }) { Text(tr("Abrir accesibilidad", "Open accessibility")) }
         }
         PermRow(
@@ -320,7 +320,7 @@ private fun PermissionsPanel(s: AppState, a: MainActivity) {
         ) {
             val launch = remember { Shell.launchIntent(a) }
             when {
-                shizuku == Shell.State.NO_PERMISSION -> Button(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a TBF Companion", "Grant permission to TBF Companion")) }
+                shizuku == Shell.State.NO_PERMISSION -> Button(onClick = { Shell.requestPermission() }) { Text(tr("Dar permiso a G9 Control Remapper", "Grant permission to G9 Control Remapper")) }
                 launch != null -> Button(onClick = { runCatching { a.startActivity(launch) } }) { Text(tr("Abrir Shizuku", "Open Shizuku")) }
                 else -> Hint(tr("Shizuku no está instalado (shizuku.rikka.app).", "Shizuku isn't installed (shizuku.rikka.app)."))
             }

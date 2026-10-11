@@ -1064,8 +1064,8 @@ class AutoModeService : AccessibilityService() {
         val d = G9Usb.findDevice(this) ?: return
         if (!G9Usb.hasPermission(this, d)) {
             Toast.makeText(
-                this, tr("TBF Companion: falta el permiso USB. Abre la app una vez con el control conectado.",
-                    "TBF Companion: USB permission missing. Open the app once with the controller connected."),
+                this, tr("G9 Control Remapper: falta el permiso USB. Abre la app una vez con el control conectado.",
+                    "G9 Control Remapper: USB permission missing. Open the app once with the controller connected."),
                 Toast.LENGTH_LONG
             ).show()
             return

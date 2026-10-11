@@ -149,7 +149,7 @@ fun ShizukuWarning(a: MainActivity) {
     if (!on || st == Shell.State.READY || !Shell.wanted(a)) return
     val launch = remember { Shell.launchIntent(a) } ?: return
     if (st == Shell.State.NO_PERMISSION)
-        WarningStrip(tr("TBF Companion no tiene permiso de Shizuku.", "TBF Companion has no Shizuku permission."),
+        WarningStrip(tr("G9 Control Remapper no tiene permiso de Shizuku.", "G9 Control Remapper has no Shizuku permission."),
             tr("Dar permiso", "Grant"), { Shell.requestPermission() }, onDismiss = { on = false; AutoRules.setWarnShizuku(a, false) })
     else
         WarningStrip(tr("Shizuku no está iniciado: lo que lo necesita (bypass, ocultar Game Assistant, apagar la tablet con el monitor) no funciona.",

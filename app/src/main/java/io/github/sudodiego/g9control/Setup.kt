@@ -30,8 +30,8 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
             Column(Modifier.padding(28.dp)) {
                 Text(tr("Configuración inicial", "Quick setup"), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    tr("Cuatro pasos para dejar TBF Companion listo. Los que se marcan en verde ya están hechos.",
-                        "Four steps to get TBF Companion ready. Steps marked green are already done."),
+                    tr("Cuatro pasos para dejar G9 Control Remapper listo. Los que se marcan en verde ya están hechos.",
+                        "Four steps to get G9 Control Remapper ready. Steps marked green are already done."),
                     fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(16.dp))
@@ -48,9 +48,9 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                     )
                     Step(
                         2, s.connected, tr("Permite el acceso USB", "Allow USB access"),
-                        tr("Cuando Android pregunte si TBF Companion puede acceder al control, marca «Usar siempre» (o «Abrir siempre») " +
+                        tr("Cuando Android pregunte si G9 Control Remapper puede acceder al control, marca «Usar siempre» (o «Abrir siempre») " +
                             "y acepta. Así la app y el cambio automático funcionan sin volver a preguntar.",
-                            "When Android asks whether TBF Companion can access the controller, check “Always” (or “Always open”) " +
+                            "When Android asks whether G9 Control Remapper can access the controller, check “Always” (or “Always open”) " +
                                 "and accept. That way the app and automatic switching work without asking again.")
                     ) {
                         if (!s.connected && s.padMode == PadMode.ANDROID) Button(onClick = { a.readAll() }) { Text(tr("Conectar", "Connect")) }
@@ -58,12 +58,12 @@ fun SetupDialog(s: AppState, a: MainActivity, onClose: () -> Unit) {
                     Step(
                         3, s.autoServiceOn, tr("Cambio automático (opcional)", "Automatic switching (optional)"),
                         tr("Para que el control cambie solo a X-Input o DS5 al abrir un juego, para la guía de Vista + Menú y para " +
-                            "el panel de juego (L3 + R3), activa el servicio de accesibilidad de TBF Companion. Ve qué app está en " +
+                            "el panel de juego (L3 + R3), activa el servicio de accesibilidad de G9 Control Remapper. Ve qué app está en " +
                             "pantalla y los botones del control, y saca capturas del juego cuando se lo pides. Android avisará que " +
                             "puede leer la pantalla: lo pide para saber cuál es la ventana del juego y capturarla sola; la app no " +
                             "lee sus textos, no ve lo que escribes y no se conecta a internet.",
                             "To switch the controller to X-Input or DS5 automatically when you open a game, for the View + Menu " +
-                                "guide and for the game panel (L3 + R3), turn on TBF Companion's accessibility service. It sees which app is " +
+                                "guide and for the game panel (L3 + R3), turn on G9 Control Remapper's accessibility service. It sees which app is " +
                                 "on screen and the controller's buttons, and takes game screenshots when you ask. Android will warn that " +
                                 "it can read the screen: it needs that to know which window is the game and capture only that; the app " +
                                 "doesn't read its text, doesn't see what you type and doesn't connect to the internet.")
