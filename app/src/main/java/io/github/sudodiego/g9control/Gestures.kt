@@ -15,14 +15,60 @@ enum class GestureAction(val es: String, val en: String) {
     PLAY_PAUSE("Reproducir / Pausa", "Play / Pause"),
     VOL_UP("Subir volumen", "Volume up"),
     VOL_DOWN("Bajar volumen", "Volume down"),
-    SCREENSHOT("Captura", "Screenshot");
+    SCREENSHOT("Captura", "Screenshot"),
+    /** Tecla de teclado inyectada con Shizuku: el mando no envía teclas, las manda la app. La tecla va en [GestureRule.kc]. */
+    KEY("Tecla del teclado", "Keyboard key");
 
     companion object { fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE }
 }
 
+/** Una tecla de teclado asignable a un gesto. `group` es el encabezado con el que sale en el menú. */
+data class GestureKey(val kc: Int, val es: String, val en: String, val group: Int)
+
+/** Encabezados de los grupos de teclas (mismo índice que `GestureKey.group`). */
+val GESTURE_KEY_GROUPS: List<Pair<String, String>> = listOf(
+    "Atajos" to "Shortcuts",
+    "Flechas" to "Arrows",
+    "Letras" to "Letters",
+    "Números" to "Numbers",
+    "Función" to "Function",
+)
+
+/** Teclas de teclado que se pueden asignar a un gesto (códigos de Android). */
+val GESTURE_KEYS: List<GestureKey> =
+    listOf(
+        GestureKey(KeyEvent.KEYCODE_SPACE, "Espacio", "Space", 0),
+        GestureKey(KeyEvent.KEYCODE_ENTER, "Intro", "Enter", 0),
+        GestureKey(KeyEvent.KEYCODE_ESCAPE, "Escape", "Escape", 0),
+        GestureKey(KeyEvent.KEYCODE_TAB, "Tabulador", "Tab", 0),
+        GestureKey(KeyEvent.KEYCODE_DEL, "Retroceso", "Backspace", 0),
+        GestureKey(KeyEvent.KEYCODE_FORWARD_DEL, "Suprimir", "Delete", 0),
+        GestureKey(KeyEvent.KEYCODE_SHIFT_LEFT, "Mayúsculas", "Shift", 0),
+        GestureKey(KeyEvent.KEYCODE_CTRL_LEFT, "Control", "Ctrl", 0),
+        GestureKey(KeyEvent.KEYCODE_ALT_LEFT, "Alt", "Alt", 0),
+    ) +
+    listOf(
+        GestureKey(KeyEvent.KEYCODE_DPAD_UP, "Arriba", "Up", 1),
+        GestureKey(KeyEvent.KEYCODE_DPAD_DOWN, "Abajo", "Down", 1),
+        GestureKey(KeyEvent.KEYCODE_DPAD_LEFT, "Izquierda", "Left", 1),
+        GestureKey(KeyEvent.KEYCODE_DPAD_RIGHT, "Derecha", "Right", 1),
+    ) +
+    ('A'..'Z').map { GestureKey(KeyEvent.KEYCODE_A + (it - 'A'), it.toString(), it.toString(), 2) } +
+    (0..9).map { GestureKey(KeyEvent.KEYCODE_0 + it, it.toString(), it.toString(), 3) } +
+    (1..12).map { GestureKey(KeyEvent.KEYCODE_F1 + it - 1, "F$it", "F$it", 4) }
+
+/** Nombre de la tecla elegida (vacío si todavía no se eligió ninguna). */
+fun gestureKeyName(kc: Int): String =
+    GESTURE_KEYS.firstOrNull { it.kc == kc }?.let { if (Lang.en) it.en else it.es } ?: ""
+
 /** Gestos de un botón del control: toque, mantener y doble toque. */
-data class GestureRule(val key: Int, val tap: GestureAction, val long: GestureAction, val dbl: GestureAction) {
+data class GestureRule(
+    val key: Int, val tap: GestureAction, val long: GestureAction, val dbl: GestureAction,
+    /** Tecla de Android que se inyecta cuando el gesto es [GestureAction.KEY] (0 = sin elegir). */
+    val kc: Int = 0,
+) {
     val any get() = tap != GestureAction.NONE || long != GestureAction.NONE || dbl != GestureAction.NONE
+    val anyKey get() = tap == GestureAction.KEY || long == GestureAction.KEY || dbl == GestureAction.KEY
 }
 
 /**
@@ -62,13 +108,17 @@ object Gestures {
 
     private fun parse(set: Set<String>?): Map<Int, GestureRule> = set.orEmpty().mapNotNull { line ->
         val p = line.split('|')
-        if (p.size != 4) null else p[0].toIntOrNull()?.let {
-            it to GestureRule(it, GestureAction.of(p[1]), GestureAction.of(p[2]), GestureAction.of(p[3]))
+        // 4 campos = respaldo viejo (sin tecla); 5 = con la tecla elegida para «Tecla del teclado».
+        if (p.size < 4) null else p[0].toIntOrNull()?.let {
+            it to GestureRule(
+                it, GestureAction.of(p[1]), GestureAction.of(p[2]), GestureAction.of(p[3]),
+                p.getOrNull(4)?.toIntOrNull() ?: 0
+            )
         }
     }.toMap()
 
     private fun enc(m: Collection<GestureRule>) =
-        m.map { "${it.key}|${it.tap.name}|${it.long.name}|${it.dbl.name}" }.toSet()
+        m.map { "${it.key}|${it.tap.name}|${it.long.name}|${it.dbl.name}|${it.kc}" }.toSet()
 
     /** Toque = hasta tapMax ms; mantener = a partir de longMs; doble = dos toques dentro de doubleMs. */
     fun tapMax(ctx: Context) = sp(ctx).getInt("g_tap_max", 220)
@@ -126,28 +176,28 @@ object Gestures {
 class GestureEngine(private val handler: Handler) {
     private var longFired = false
     private var curRule: GestureRule? = null
-    private var curFire: ((GestureAction) -> Unit)? = null
+    private var curFire: ((GestureAction, Int) -> Unit)? = null
     private var pendingKey = 0
     private var pendingAt = 0L
     private var pendingRule: GestureRule? = null
-    private var pendingFire: ((GestureAction) -> Unit)? = null
+    private var pendingFire: ((GestureAction, Int) -> Unit)? = null
     private var swallowUp = false
 
     private val longRunnable = Runnable {
         longFired = true
         val r = curRule
-        if (r != null && r.long != GestureAction.NONE) curFire?.invoke(r.long)
+        if (r != null && r.long != GestureAction.NONE) curFire?.invoke(r.long, r.kc)
     }
 
     private val tapRunnable = Runnable {
         val r = pendingRule
         val f = pendingFire
         pendingKey = 0; pendingRule = null; pendingFire = null
-        if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap)
+        if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc)
     }
 
     /** @return true si el evento es nuestro (se consumió y no llega a las apps). */
-    fun onKey(ctx: Context, pkg: String?, keyCode: Int, down: Boolean, repeatCount: Int, fire: (GestureAction) -> Unit): Boolean {
+    fun onKey(ctx: Context, pkg: String?, keyCode: Int, down: Boolean, repeatCount: Int, fire: (GestureAction, Int) -> Unit): Boolean {
         val rules = Gestures.rulesFor(ctx, pkg)
         // Al apretar otro botón, el toque que esperaba su doble se resuelve ya.
         if (down && pendingKey != 0 && pendingKey != keyCode) {
@@ -155,7 +205,7 @@ class GestureEngine(private val handler: Handler) {
             val r = pendingRule
             val f = pendingFire
             pendingKey = 0; pendingRule = null; pendingFire = null
-            if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap)
+            if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc)
         }
         val rule = rules[keyCode]
         if (rule == null || !rule.any) return false
@@ -167,7 +217,7 @@ class GestureEngine(private val handler: Handler) {
             if (pendingKey == keyCode && now - pendingAt <= Gestures.doubleMs(ctx)) {
                 handler.removeCallbacks(tapRunnable)
                 pendingKey = 0; pendingRule = null; pendingFire = null
-                if (rule.dbl != GestureAction.NONE) fire(rule.dbl)
+                if (rule.dbl != GestureAction.NONE) fire(rule.dbl, rule.kc)
                 swallowUp = true
                 return true
             }
@@ -186,7 +236,7 @@ class GestureEngine(private val handler: Handler) {
             pendingRule = rule; pendingFire = fire
             handler.postDelayed(tapRunnable, Gestures.doubleMs(ctx).toLong())
         } else if (rule.tap != GestureAction.NONE) {
-            fire(rule.tap)
+            fire(rule.tap, rule.kc)
         }
         return true
     }

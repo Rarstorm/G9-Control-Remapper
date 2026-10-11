@@ -19,7 +19,7 @@
 - [x] **UI del debug 10-10** (commit f7fcbb8): Traseros editable con aviso + «Reintentar lectura» + chips de TODOS los botones; prueba de botones sin remapeo (Home llega tal cual, `KeyBus.testing`); el brillo sin permiso ya no desaparece (mosaico apagado que lo explica y lleva a «Modificar ajustes del sistema»). **Pendiente: build de CI y prueba en la tablet.**
 - [x] **Respaldo COMPLETO** (`Backup.kt`, 11-10-2026): exportar/importar TODO en un archivo — perfiles + la sesión que se está usando (como perfil) + los ajustes de la app (gestos generales y por app, apps con modo automático, tema, idioma, dev tools…). Los ajustes se guardan tal cual (nombre de archivo → clave → [tipo, valor]), así el respaldo sirve entre versiones; se importan los respaldos viejos (v1, solo perfiles). Al importar: escribe los ajustes, suma/reemplaza perfiles y reinicia la app. **Necesario porque cada build del CI firma con clave nueva → para instalar hay que desinstalar y se pierden los datos de la app.**
 - [x] `versionCode` 6 / `versionName` 1.3.0 (11-10-2026) para distinguir este build del F5 (1.2.0) instalado.
-- [ ] Build de CI con estos cambios + instalar en la Y700 (desinstalar antes el F5: firma distinta) → probar respaldo (exportar, desinstalar, instalar, importar) y los arreglos de UI.
+- [x] 1.3.3 y 1.3.4 **instaladas encima** en la Y700 con la firma propia (ya NO hay que desinstalar nada) — la **1.3.3 la probó Roberto** (importar deja 1 perfil, «Aplicar»/«Guardar como perfil» activos, sobrevive al cierre completo de la app). La **1.3.4** (badges fuera, «Dibujo del control», «Blanco», tres posiciones, vibración que se guarda) queda **pendiente de probar en la tablet**.
 - [ ] F6: stick→mouse con curva; botón→tecla/botón de mouse vía Shizuku; abrir app.
 - [ ] F7 (pendiente): Shizuku inalámbrico (brillo sin cable), acción «input keyevent» (teclado), **abrir una app asignada** (selector de app por gesto) y **abrir el cajón de apps**.
 
@@ -49,3 +49,26 @@ Diagnóstico contra el código (la tablet no estaba en red: `adb devices` vacío
 - [ ] **Probar la 1.3.4 en la tablet** (los 5 puntos de arriba).
 - [ ] **Pregunta abierta**: el panel de juego (mantener Home) — ¿asignable a cualquier botón? Hoy es el botón guía o L3+R3 y las acciones de Gestos no incluyen «panel de juego».
 - [ ] F6 (stick→mouse, botones/rueda de mouse) y F7 (Shizuku inalámbrico, «input keyevent», abrir una app, cajón de apps): sin empezar.
+
+## Ronda 4 (pedidos del 11-10 por la tarde, para la próxima sesión)
+- [ ] **Panel de juego asignable a cualquier botón** (hoy: botón guía o L3+R3) → hace falta una acción nueva en el motor de gestos.
+- [ ] **«Aprender del mando» también en Gestos** (elegir el botón apretándolo en el mando, como en Traseros: `s.learnBack` + `dispatchKeyEvent`).
+- [ ] **Indicador de mapeo por app**: en el selector de apps de Gestos, además del «●» actual, listar **qué botones** tienen reglas en esa app.
+- [ ] **Diseño acordado para los traseros (11-10)**: darle a cada trasero una **FIRMA** = macro cortísima y única (p. ej. Vista→Menú en <60 ms; el firmware admite 11 pasos con tiempos de 5 ms y modo «completa al tocar»). El servicio **reconoce la firma y se la come** → sabe qué trasero se apretó y decide **por app** qué hacer. La firma va escrita en el mando (global); **el por-app vive en la app** → «traseros por aplicación» dentro de las reglas del firmware. Las teclas de teclado NO las envía el mando (`BackKeys.kt:22`): hay que inyectarlas con Shizuku. **Orden: (1) `input keyevent` con Shizuku, (2) detector de firmas en el servicio, (3) UI fusionada.**
+- [ ] **FUSIÓN Traseros + Gestos** (rediseño de una página con selector «Aplica a»): el trasero→botón es **global del mando** (firmware, `setBackKey`) y «Aprender del mando» solo en «Todas las apps»; lo que se guarda **por app** es lo que ese botón HACE (motor de gestos por paquete).
+- [x] **Verificado**: el interruptor que Roberto recordaba es «Juego» → «Panel de juego» → **«Botón guía»** (`AutoRules.legionKeys`). **No hace falta apagarlo** para darle un gesto a Home: `AutoMode.kt:907` deja pasar el evento al motor de gestos antes de mirar el switch. Falta confirmarlo en la tablet.
+- Spec completa: nota `2026-10-11-ronda4-traseros-gestos.md` del vault.
+
+## 2026-10-11 (4ª parte — Shizuku y el permiso de pantalla en la tablet)
+- [x] **Permiso de pantalla DADO** a la app: `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS` → verificado `granted=true`. Habilita la **pantalla 16:9**, el **slider de brillo** del panel de juego y la parte del **bypass inteligente**. **Este permiso SÍ sobrevive a los reinicios** (a diferencia de Shizuku). La app lo muestra «Activo» tras redibujar la página (lo lee al componer: cambiar de pestaña y volver, o reabrir la app).
+- [x] **Shizuku corriendo otra vez** (`shizuku_server`, uid shell; 3 apps autorizadas). Ojo: en Android 11+ **sin root no arranca sola y hay que repetir el arranque tras CADA reinicio**, y el método desde la computadora que documenta Shizuku vale solo para **Android 10 o menor** (por eso no existe el `start.sh` aquí): se arranca desde la app con **«Iniciar por depuración inalámbrica»** (el emparejamiento es una sola vez).
+- [x] **Permiso de Shizuku para nuestra app: DADO** por Roberto en el momento (la fila «Shizuku» de Ajustes → Permisos decía **«Activo»**; era la otra fila, «Permiso de pantalla», la que faltaba y ya se dio arriba). Al empezar la próxima sesión: comprobar que las dos filas dicen «Activo».
+
+## 2026-10-11 (5ª parte — Ronda 4, punto 1: teclas de teclado con Shizuku → 1.3.5)
+- [x] **Acción nueva `GestureAction.KEY` («Tecla del teclado»)**: inyecta una tecla con `input keyevent` por Shizuku (el mando NO envía teclas de teclado: `BackKeys.kt:22`). En `Shell.kt`: `keyEvent(code)` + patrón `KEY_EVENT` en `allowed()`.
+- [x] **La tecla vive en la regla** (`GestureRule.kc`), una sola por botón para los tres gestos. El formato guardado pasa de 4 a 5 campos (`key|tap|long|dbl|kc`) y el parseo **tolera los respaldos viejos de 4** (kc = 0), así que un respaldo anterior se importa igual.
+- [x] **Motor de gestos**: `fire` ahora recibe `(GestureAction, kc)`; `runGestureAction(a, kc)` manda la tecla en coroutine y avisa con `panel.message(...)` si Shizuku no está listo.
+- [x] **UI de «Gestos»**: selector de tecla (grupos Atajos / Flechas / Letras / Números / F1–F12) que aparece solo cuando algún gesto es «Tecla del teclado», más el aviso de que necesita Shizuku iniciado.
+- [x] **1.3.5 (versionCode 11) compilada en local**: `build-out/app-release-1.3.5-local.apk`, `BUILD SUCCESSFUL in 43s`, firmada con la clave del proyecto (huella `A9:DE:A6:…:E0:49` verificada). Strings nuevos presentes en el `classes.dex` del APK.
+- [ ] **Instalar en la Y700 y probar** (pendiente del GO).
+- [ ] Ronda 4 puntos 2 y 3 (detector de firmas, UI fusionada Traseros+Gestos) — sin empezar.

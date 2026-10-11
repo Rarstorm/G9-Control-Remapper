@@ -122,6 +122,20 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                 GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
                 GestureRow(tr("Doble toque", "Double-tap"), shown.dbl) { write(shown.copy(dbl = it)) }
 
+                // La tecla solo aparece si algún gesto la usa: el mando NO envía teclas de teclado,
+                // las inyecta la app con Shizuku (`input keyevent`).
+                if (shown.anyKey) {
+                    KeyPicker(shown.kc) { write(shown.copy(kc = it)) }
+                    if (Shell.state != Shell.State.READY) Hint(
+                        tr("Ojo: para enviar la tecla hace falta Shizuku iniciado (Ajustes → Permisos).",
+                            "Note: sending the key needs Shizuku running (Settings → Permissions).")
+                    )
+                    else Hint(
+                        tr("La tecla la envía G9 Control: el control no manda teclas de teclado. Tarda unas décimas de segundo.",
+                            "G9 Control sends the key: the controller doesn't send keyboard keys. It takes a few tenths of a second.")
+                    )
+                }
+
                 if (scope != null) {
                     Hint(
                         tr("Aquí, «Nada» en los tres hace que el botón funcione normal en esta app (llega al juego).",
@@ -170,6 +184,37 @@ private fun GestureRow(label: String, cur: GestureAction, onPick: (GestureAction
                         text = { Text(if (Lang.en) act.en else act.es) },
                         onClick = { open = false; onPick(act) }
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Elige la tecla de teclado que se inyecta cuando el gesto es «Tecla del teclado». */
+@Composable
+private fun KeyPicker(cur: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(tr("Tecla", "Key"), Modifier.width(120.dp), fontWeight = FontWeight.SemiBold)
+        Box {
+            OutlinedButton(onClick = { open = true }) {
+                Text(gestureKeyName(cur).ifEmpty { tr("Elegir tecla…", "Choose key…") })
+                Icon(Icons.Filled.ArrowDropDown, null)
+            }
+            DropdownMenu(open, { open = false }) {
+                GESTURE_KEYS.groupBy { it.group }.forEach { (g, keys) ->
+                    val head = GESTURE_KEY_GROUPS.getOrNull(g)
+                    if (head != null) Text(
+                        if (Lang.en) head.second else head.first,
+                        Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
+                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                    )
+                    keys.forEach { k ->
+                        DropdownMenuItem(
+                            text = { Text(if (Lang.en) k.en else k.es) },
+                            onClick = { open = false; onPick(k.kc) }
+                        )
+                    }
                 }
             }
         }

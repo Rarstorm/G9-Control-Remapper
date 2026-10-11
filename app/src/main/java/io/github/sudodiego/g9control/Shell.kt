@@ -45,6 +45,10 @@ object Shell {
     // Atrás mantenido (Dolphin sale del juego así; un Atrás normal abre su menú). Un servicio de accesibilidad solo
     // puede tocar Atrás, no mantenerlo.
     const val BACK_LONG = "input keyevent --longpress 4"
+    // Destino «Tecla del teclado» de un gesto: el mando NO envía teclas de teclado (BackKeys), así que las inyecta
+    // el shell de Shizuku con `input keyevent <código>`. El código lo elige el usuario en «Gestos».
+    fun keyEvent(code: Int) = "input keyevent $code"
+    private val KEY_EVENT = Regex("input keyevent (--longpress )?\\d{1,3}")
     // FPS del juego para el monitor de rendimiento: las capas de SurfaceFlinger y los tiempos de los últimos 127
     // cuadros de una (el contador global, `service call SurfaceFlinger 1013`, no se le permite al shell).
     const val SF_LIST = "dumpsys SurfaceFlinger --list"
@@ -63,7 +67,8 @@ object Shell {
     private val SCREEN = Regex("power [02]|light -1")
 
     private fun allowed(cmd: String) =
-        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
+        cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) ||
+            KEY_EVENT.matches(cmd) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */

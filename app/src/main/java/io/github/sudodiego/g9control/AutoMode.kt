@@ -731,7 +731,7 @@ class AutoModeService : AccessibilityService() {
         if (legionKey(event)) return true
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
-        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
+        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc -> runGestureAction(act, kc) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -797,8 +797,8 @@ class AutoModeService : AccessibilityService() {
     private fun adjustVolume(dir: Int) = getSystemService(AudioManager::class.java)
         .adjustSuggestedStreamVolume(dir, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
 
-    /** Ejecuta la acción de un gesto. */
-    private fun runGestureAction(a: GestureAction) {
+    /** Ejecuta la acción de un gesto. `kc` es la tecla elegida cuando la acción es [GestureAction.KEY]. */
+    private fun runGestureAction(a: GestureAction, kc: Int = 0) {
         when (a) {
             GestureAction.NONE -> {}
             GestureAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
@@ -813,6 +813,13 @@ class AutoModeService : AccessibilityService() {
                 am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
             }
             GestureAction.SCREENSHOT -> if (this::panel.isInitialized) panel.capture()
+            // Tecla de teclado: el mando no las envía, así que la inyecta Shizuku (`input keyevent`).
+            GestureAction.KEY -> if (kc != 0) scope.launch {
+                if (Shell.run(Shell.keyEvent(kc)) == null) {
+                    Log.w(TAG, "no se pudo enviar la tecla $kc")
+                    panel.message(tr("Enviar teclas necesita Shizuku iniciado.", "Sending keys needs Shizuku running."))
+                }
+            }
         }
     }
 
