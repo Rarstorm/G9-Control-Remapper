@@ -14,4 +14,5 @@
 - [x] Renombre COMPLETO a "G9 Control Remapper": `app_name` + `auto_service_label` + los 16 textos hardcodeados en 7 archivos. Commits 4929821 y c5a333b. Verificado en el APK (0 "TBF Companion").
 - [x] Asistente de configuración (commit 127eb54, build verde run 38099124670): aviso legal/privacidad al inicio (GPL-3, sin relación con Lenovo/GameSir, sin internet, permisos bajo responsabilidad) + la accesibilidad pasa a paso propio (ya no "opcional") con guía del candado y botón a Ajustes de la app (`AutoRules.openAppInfo`).
 - [ ] Distribución: GitHub Releases → Obtainium / F-Droid (abierta primero). Pendiente: **keystore propio** (hoy firma debug, cambia por build).
-- [ ] F4: primera función real (gestos tap / largo / doble en los traseros).
+- [x] F4 **motor de gestos** (commit 659e667, build verde run 38099742419): página «Gestos» — por cada botón del control se define qué hace al **tocar / mantener / doble toque**: Atrás, Inicio, Recientes, Notificaciones, Reproducir/Pausa, subir/bajar volumen, Captura. Nuevos `Gestures.kt` (modelo + `GestureEngine`) y `PageGestures.kt`; enganchado en `AutoModeService.handleKey` (tras la guía/panel, y solo si la app no está al frente). Los traseros entran aquí por el botón que mandan (se eligen en «Traseros»). **Pendiente: probar en la tablet.**
+- [ ] F5: stick→mouse, perfiles por app, teclado/mouse vía Shizuku.
