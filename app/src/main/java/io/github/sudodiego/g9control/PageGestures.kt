@@ -42,6 +42,14 @@ fun GesturesPage(s: AppState, a: MainActivity) {
         }
     }
 
+    // «Aprender del mando»: el botón que se apretó en el control queda elegido aquí y se borra el aviso.
+    LaunchedEffect(s.learnedPad) {
+        s.learnedPad?.let { pk ->
+            if (pk in PAD_KEYCODE) sel = pk
+            s.learnedPad = null
+        }
+    }
+
     val withRules = remember(rev) { Gestures.apps(a) }
     val globRule = remember(rev, key) { if (key == 0) null else Gestures.rules(a)[key] }
     val appRule = remember(rev, key, scope) { if (key == 0 || scope == null) null else Gestures.appRules(a, scope!!)[key] }
@@ -94,9 +102,15 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
                 }
                 Text(tr("Botón con gestos", "Gesture button"), fontWeight = FontWeight.SemiBold)
+                if (s.learnGesture) {
+                    Text(tr("Aprieta ahora un botón en el mando…", "Now press a button on the controller…"), fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = { s.learnGesture = false }) { Text(tr("Cancelar", "Cancel")) }
+                } else {
+                    OutlinedButton(onClick = { s.learnGesture = true }) { Text(tr("Aprender del mando", "Learn from controller")) }
+                }
                 Hint(
-                    tr("Toca un botón del dibujo. Para los traseros: primero asígnalos en «Traseros» al botón que elijas aquí.",
-                        "Tap a button on the drawing. For the back paddles: first assign them in “Paddles” to the button you pick here.")
+                    tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando». Para los traseros: primero asígnalos en «Traseros» al botón que elijas aquí.",
+                        "Tap a button on the drawing, or press it on the controller with “Learn from controller”. For the back paddles: first assign them in “Paddles” to the button you pick here.")
                 )
             }
         },

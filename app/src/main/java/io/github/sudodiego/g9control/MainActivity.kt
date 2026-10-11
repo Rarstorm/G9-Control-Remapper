@@ -152,13 +152,15 @@ class MainActivity : ComponentActivity() {
         if (G9Usb.isOpen() && !state.configKnown) readAll() else autoConnect(ask = true)
         KeyBus.listener = { e -> if (state.testMode) addOtherKey(e, viaService = true) }
         // Si la prueba quedó abierta (o su aviso al servicio se perdió en pausa), se vuelve a sincronizar.
-        KeyBus.testing = state.testMode
+        state.syncBus()
     }
 
     override fun onPause() {
         resumed = false
         KeyBus.listener = null
-        // En pausa la prueba no puede seguir (necesita la app al frente): el servicio vuelve a su trabajo.
+        // En pausa la prueba (o el «aprender del mando») no puede seguir (necesitan la app al frente):
+        // el servicio vuelve a su trabajo.
+        state.learnGesture = false
         KeyBus.testing = false
         // Los cambios se escriben con una pequeña demora (para juntar los pasos de un slider): si la app se va
         // antes a segundo plano hay que escribirlos ya, o se pierden (se cierra y no se guardó nada).
@@ -266,6 +268,19 @@ class MainActivity : ComponentActivity() {
                     setBackKey(learn, dst)
                     s.status = tr("${learn.label}: ahora copia ${backTargetName(dst)}", "${learn.label}: now copies ${backTargetName(dst)}")
                 } else s.fail(tr("Ese botón no se puede asignar a un trasero.", "That button can't be assigned to a paddle."))
+            }
+            markTested()
+            return true
+        }
+        // «Aprender del mando» (página Gestos): el próximo botón que aprietes queda elegido como el botón con
+        // gestos. Se consume para que no haga además lo suyo. Al cambiar de página se cancela (como en Traseros).
+        if (s.learnGesture && s.page != Page.GESTURES) s.learnGesture = false
+        if (s.learnGesture) {
+            if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
+                val pk = padKeyOf(e.keyCode)
+                s.learnGesture = false
+                if (pk != null && pk in PAD_KEYCODE) s.learnedPad = pk
+                else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
             }
             markTested()
             return true
@@ -1023,8 +1038,24 @@ class AppState {
         set(v) {
             if (testModeState == v) return
             testModeState = v
-            KeyBus.testing = v
+            syncBus()
         }
+    /**
+     * «Aprender del mando» en la página Gestos: aprietas un botón del control y queda elegido. Mientras está
+     * activo también se suspende al servicio, o el botón con reglas se consumiría antes de llegar a la app.
+     */
+    private var learnGestureState by mutableStateOf(false)
+    var learnGesture: Boolean
+        get() = learnGestureState
+        set(v) {
+            if (learnGestureState == v) return
+            learnGestureState = v
+            syncBus()
+        }
+    /** Botón aprendido en el mando: lo toma la página de Gestos y lo borra (se usa una vez). */
+    var learnedPad by mutableStateOf<PadKey?>(null)
+    /** El servicio no remapea nada mientras se prueba un botón o se aprende uno del mando. */
+    fun syncBus() { KeyBus.testing = testModeState || learnGestureState }
     /** Los botones del control se usan para probar o grabar, no para navegar. */
     val capturing get() = testMode || macroRecording
     /** El dedo está sobre algún slider. */

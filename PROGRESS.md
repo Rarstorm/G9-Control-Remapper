@@ -72,3 +72,10 @@ Diagnóstico contra el código (la tablet no estaba en red: `adb devices` vacío
 - [x] **1.3.5 (versionCode 11) compilada en local**: `build-out/app-release-1.3.5-local.apk`, `BUILD SUCCESSFUL in 43s`, firmada con la clave del proyecto (huella `A9:DE:A6:…:E0:49` verificada). Strings nuevos presentes en el `classes.dex` del APK.
 - [ ] **Instalar en la Y700 y probar** (pendiente del GO).
 - [ ] Ronda 4 puntos 2 y 3 (detector de firmas, UI fusionada Traseros+Gestos) — sin empezar.
+
+## 2026-10-11 (6ª parte — «Aprender del mando» en Gestos → 1.3.6)
+- [x] **1.3.5 INSTALADA y PROBADA por Roberto** en la Y700 (`firstInstallTime` 00:42:25 intacto): la tecla de teclado funciona («funcionó muy bien»), probada apretando el botón con gesto dentro de un campo de texto.
+- [x] **«Aprender del mando» también en Gestos** (punto 3 de la ronda): botón en la página Gestos; el próximo botón que aprietes en el control queda elegido como «botón con gestos» (`AppState.learnGesture` + `learnedPad`), resuelto en `MainActivity.dispatchKeyEvent` con `padKeyOf` y **consumiendo** el evento. Se cancela al cambiar de página y en `onPause`.
+- [x] **Mientras se aprende, el servicio no remapea** (`syncBus()` → `KeyBus.testing`), porque un botón con reglas se consumiría antes de llegar a la app (mismo puente que usa la prueba de botones).
+- [x] **1.3.6 (versionCode 12)** compilada en local (`build-out/app-release-1.3.6-local.apk`, `BUILD SUCCESSFUL in 31s`), firmada con la clave del proyecto (huella `A9:DE:A6:…:E0:49`); strings nuevos verificados en el `classes.dex`.
+- [ ] **Probar en la tablet** el botón «Aprender del mando» de Gestos.
