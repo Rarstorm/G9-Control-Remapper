@@ -33,6 +33,12 @@ import kotlinx.coroutines.launch
  */
 object KeyBus {
     @Volatile var listener: ((KeyEvent) -> Unit)? = null
+
+    /**
+     * Prueba de botones en curso (la app está al frente). Mientras dura, el servicio no remapea nada:
+     * los botones tienen que llegar tal cual a la prueba.
+     */
+    @Volatile var testing = false
 }
 
 /** Modo que quiere cada app. */
@@ -723,8 +729,9 @@ class AutoModeService : AccessibilityService() {
         if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
-        // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app).
-        if (!appInFront && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
+        // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
+        // durante la prueba de botones: el botón probado tiene que llegar tal cual.
+        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { runGestureAction(it) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -886,6 +893,15 @@ class AutoModeService : AccessibilityService() {
 
     private fun legionKey(e: KeyEvent): Boolean {
         if (e.keyCode != KeyEvent.KEYCODE_BUTTON_MODE) return false
+        // Prueba de botones: Home tiene que llegar a la app tal cual. Si el servicio se lo queda, se
+        // convierte en Atrás/panel antes de que la prueba lo registre (appInFront puede estar desactualizado
+        // justo cuando se abre la app). Sale por aquí el bajar y el soltar.
+        if (KeyBus.testing) {
+            legionOwned = false
+            legionPending = false
+            main.removeCallbacks(legionHold)
+            return false
+        }
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (e.repeatCount > 0) return legionOwned || legionChording

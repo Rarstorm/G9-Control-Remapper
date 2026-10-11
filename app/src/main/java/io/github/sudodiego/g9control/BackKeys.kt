@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,12 +55,26 @@ val MACRO_KEY_BYTE = mapOf(
 @Composable
 fun BackPage(s: AppState, a: MainActivity) {
     if (s.editingMacro != null) { MacroEditor(s, a); return }
-    val editable = s.connected && s.appliedBackKeys != null
+    // Editable con el control conectado en modo Android, aunque no se haya podido leer qué tiene cada
+    // trasero: cada cambio se escribe y se comprueba releyendo, y si falla lo dice. Antes la página
+    // quedaba deshabilitada y en silencio cuando la lectura fallaba (appliedBackKeys == null).
+    val editable = s.connected
+    /** Ya se leyó lo que tiene cada trasero. Sin lectura, la página avisa y no marca ningún chip. */
+    val known = s.appliedBackKeys != null
     var sel by rememberSaveable { mutableStateOf(BackKey.L4) }
-    val cur = s.backKeys[sel.id] ?: 0
+    val cur = if (known) s.backKeys[sel.id] ?: 0 else 0
+    // Todos los botones del control como chips (LT/LB/RB/RT van en su propia fila, sobre el dibujo).
+    val chipButtons = listOf(
+        0xB4 to "A", 0xB5 to "B", 0xB7 to "X", 0xB8 to "Y",
+        0xC0 to "L3", 0xC1 to "R3",
+        0xBC to tr("Vista", "View"), 0xBD to tr("Menú", "Menu"), 0xC2 to "Home",
+        0xB0 to tr("Cruceta ↑", "D-pad ↑"), 0xB1 to tr("Cruceta ↓", "D-pad ↓"),
+        0xB2 to tr("Cruceta ←", "D-pad ←"), 0xB3 to tr("Cruceta →", "D-pad →"),
+    )
     val padOf = MACRO_KEY_BYTE.entries.associate { (k, v) -> v to k }
     // Lee el valor actual (no "cur"): el dibujo puede llamar a una versión guardada de esta función.
-    fun pick(byte: Int) { if (byte != (s.backKeys[sel.id] ?: 0)) a.setBackKey(sel, byte) }
+    // Sin lectura previa no hay valor con el que comparar, así que se escribe siempre.
+    fun pick(byte: Int) { if (!known || byte != (s.backKeys[sel.id] ?: 0)) a.setBackKey(sel, byte) }
     val c = MaterialTheme.colorScheme
 
     val drawing: @Composable ColumnScope.() -> Unit = {
@@ -72,13 +87,18 @@ fun BackPage(s: AppState, a: MainActivity) {
             Text(tr("${sel.label}: toca el botón que copia", "${sel.label}: tap the button it copies"), fontWeight = FontWeight.SemiBold)
             // Gatillos y bumpers en su propia fila, separados del dibujo.
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                for (t in listOf(0xBE to "LT", 0xBA to "LB")) TargetChip(t.second, cur == t.first, editable) { pick(t.first) }
+                for (t in listOf(0xBE to "LT", 0xBA to "LB")) TargetChip(t.second, known && cur == t.first, editable) { pick(t.first) }
                 Spacer(Modifier.weight(1f))
-                for (t in listOf(0xBB to "RB", 0xBF to "RT")) TargetChip(t.second, cur == t.first, editable) { pick(t.first) }
+                for (t in listOf(0xBB to "RB", 0xBF to "RT")) TargetChip(t.second, known && cur == t.first, editable) { pick(t.first) }
+            }
+            // Todos los botones, como chips: antes solo estaban LT/LB/RB/RT y el resto únicamente se podía
+            // tocar en el dibujo.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                chipButtons.forEach { (b, label) -> TargetChip(label, known && cur == b, editable) { pick(b) } }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TargetChip(tr("Sin asignar", "Unassigned"), cur == 0, editable) { pick(0) }
-                TargetChip(if (cur == BACK_MACRO) tr("Editar macro", "Edit macro") else "Macro", cur == BACK_MACRO, editable) { a.openMacroEditor(sel) }
+                TargetChip(tr("Sin asignar", "Unassigned"), known && cur == 0, editable) { pick(0) }
+                TargetChip(if (cur == BACK_MACRO) tr("Editar macro", "Edit macro") else "Macro", known && cur == BACK_MACRO, editable) { a.openMacroEditor(sel) }
                 StickDirChip(tr("Stick izq.", "Left stick"), 0xEF, cur, editable, ::pick)
                 StickDirChip(tr("Stick der.", "Right stick"), 0xF7, cur, editable, ::pick)
             }
@@ -89,7 +109,7 @@ fun BackPage(s: AppState, a: MainActivity) {
             // Los cuatro traseros, con lo que tiene cada uno. L4/R4 arriba, L5/R5 abajo, como en el control.
             BackKey.entries.forEach { k ->
                 val on = k == sel
-                val v = s.backKeys[k.id] ?: 0
+                val v = if (known) s.backKeys[k.id] ?: 0 else 0
                 Surface(
                     onClick = { sel = k }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                     color = if (on) c.primaryContainer else c.surfaceContainerHigh,
@@ -98,14 +118,27 @@ fun BackPage(s: AppState, a: MainActivity) {
                     Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(k.label, Modifier.width(56.dp), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            backTargetName(v), Modifier.weight(1f), fontSize = 16.sp,
+                            if (known) backTargetName(v) else tr("Sin leer", "Not read"), Modifier.weight(1f), fontSize = 16.sp,
                             color = if (on) c.onPrimaryContainer else c.onSurfaceVariant
                         )
                         if (v == BACK_MACRO) Icon(Icons.Outlined.Edit, null, tint = c.onSurfaceVariant)
                     }
                 }
             }
-            if (!s.connected) Hint(tr("Conecta el control en modo Android para cambiarlos.", "Connect the controller in Android mode to change them."))
+            when {
+                !s.connected ->
+                    Hint(tr("Conecta el control en modo Android para cambiarlos.", "Connect the controller in Android mode to change them."))
+                // Lectura fallida (por ejemplo, el permiso USB que se pierde al reinstalar): antes la página
+                // quedaba deshabilitada sin decir nada.
+                !known -> {
+                    Hint(
+                        tr("No pude leer qué tiene cada trasero (suele ser el permiso USB o una lectura sin respuesta). Puedes asignarlos igual: cada cambio se escribe y se comprueba al momento.",
+                            "Couldn't read what each paddle has right now (usually the USB permission or a read with no answer). You can still assign them: every change is written and checked right away."),
+                        Icons.Outlined.WarningAmber
+                    )
+                    TextButton(onClick = { a.readAll() }, enabled = !s.busy) { Text(tr("Reintentar lectura", "Retry read")) }
+                }
+            }
         }
     }
     DrawingPane(drawing = drawing, side = keys)

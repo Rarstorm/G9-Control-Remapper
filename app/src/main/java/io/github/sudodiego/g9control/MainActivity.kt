@@ -123,11 +123,15 @@ class MainActivity : ComponentActivity() {
         refreshDevice()
         autoConnect(ask = true)
         KeyBus.listener = { e -> if (state.testMode) addOtherKey(e, viaService = true) }
+        // Si la prueba quedó abierta (o su aviso al servicio se perdió en pausa), se vuelve a sincronizar.
+        KeyBus.testing = state.testMode
     }
 
     override fun onPause() {
         resumed = false
         KeyBus.listener = null
+        // En pausa la prueba no puede seguir (necesita la app al frente): el servicio vuelve a su trabajo.
+        KeyBus.testing = false
         getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputListener)
         super.onPause()
     }
@@ -943,7 +947,18 @@ class AppState {
     /** Último cambio en las luces (uptime): la barra de "Guardando en 2 s" cuenta desde aquí. */
     var lightsChangedAt by mutableStateOf(0L)
     /** Prueba de botones en curso (se entra a propósito con "Probar botones"). */
-    var testMode by mutableStateOf(false)
+    private var testModeState by mutableStateOf(false)
+    /**
+     * Al entrar o salir de la prueba se avisa al servicio ([KeyBus.testing]): mientras tanto no remapea
+     * nada, así la prueba ve lo que manda cada botón de verdad.
+     */
+    var testMode: Boolean
+        get() = testModeState
+        set(v) {
+            if (testModeState == v) return
+            testModeState = v
+            KeyBus.testing = v
+        }
     /** Los botones del control se usan para probar o grabar, no para navegar. */
     val capturing get() = testMode || macroRecording
     /** El dedo está sobre algún slider. */

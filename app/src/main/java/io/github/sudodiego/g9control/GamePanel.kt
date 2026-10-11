@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.media.AudioManager
 import android.provider.Settings
 import android.graphics.Bitmap
@@ -238,6 +239,25 @@ class GamePanel(private val svc: AutoModeService) {
             ?: toast(tr("Shizuku no está instalado.", "Shizuku isn't installed."))
     }
 
+    /**
+     * Sin el permiso para escribir los ajustes del sistema el brillo no se puede cambiar. Antes la barra
+     * desaparecía del panel y no se decía nada: ahora hay un mosaico apagado que lo explica y lleva a la
+     * pantalla donde se concede («Modificar ajustes del sistema»). También sirve el permiso de pantalla de
+     * adb (WRITE_SECURE_SETTINGS).
+     */
+    private fun fixBrightness() {
+        hide()
+        toast(tr("El brillo necesita «Modificar ajustes del sistema» para G9 Control.", "Brightness needs “Modify system settings” for G9 Control."))
+        afterHide {
+            runCatching {
+                svc.startActivity(
+                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${svc.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure { toast(tr("No pude abrir los ajustes del sistema.", "Couldn't open system settings.")) }
+        }
+    }
+
     /** Del submenú (rendimiento, frecuencia) al panel, con su mosaico elegido. */
     private fun backToMain() {
         inPerfMenu = false
@@ -460,6 +480,14 @@ class GamePanel(private val svc: AutoModeService) {
                         else tr("Game Assistant lo apagará en los juegos", "Game Assistant will turn it off in games"))
                 refresh()
             })
+        } else {
+            // Sin el permiso de ajustes, el brillo desaparecía del panel y en silencio. Ahora sale un mosaico
+            // apagado que lo dice y, al elegirlo, explica cómo darlo (el volumen sí aparece: no lo necesita).
+            add(PanelItem(
+                tr("Brillo · sin permiso", "Brightness · no permission"), Icons.Outlined.BrightnessMedium, PanelRow.SYSTEM,
+                sub = tr("Modificar ajustes del sistema", "Modify system settings"),
+                enabled = false, run = ::fixBrightness
+            ))
         }
         val vol = SystemLevels.volume(svc)
         add(PanelItem(
