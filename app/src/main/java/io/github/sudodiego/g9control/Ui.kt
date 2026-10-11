@@ -87,7 +87,7 @@ private val NAV = listOf(
     NavItem(Page.TABLET_HOME, "Inicio", "Home", Icons.Outlined.Home, Icons.Filled.Home),
     NavItem(Page.BATTERY, "Batería", "Battery", Icons.Outlined.BatteryChargingFull, Icons.Filled.BatteryChargingFull),
     NavItem(Page.SCREEN, "Pantalla", "Screen", Icons.Outlined.Monitor, Icons.Filled.Monitor),
-    NavItem(Page.GAMEPANEL, "Juego", "In game", Icons.Outlined.SportsEsports, Icons.Filled.SportsEsports),
+    NavItem(Page.GAMEPANEL, "Ajustes rápidos", "Quick settings", Icons.Outlined.SportsEsports, Icons.Filled.SportsEsports),
     // G9.
     NavItem(Page.HOME, "Inicio", "Home", Icons.Outlined.Home, Icons.Filled.Home),
     NavItem(Page.AUTO, "Modos", "Modes", Icons.Outlined.Apps, Icons.Filled.Apps),

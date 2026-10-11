@@ -129,7 +129,7 @@ private fun ControllersPanel(s: AppState) {
 private fun ShortcutsHelp() {
     Panel(tr("Atajos del mando", "Controller shortcuts")) {
         // El botón guía es el del centro de cualquier control (Legion en el G9, Xbox, PS, Home).
-        HelpRow(tr("Panel de juego", "Game panel"), tr("Mantener el botón guía, o tocar L3 + R3", "Hold the guide button, or tap L3 + R3"))
+        HelpRow(tr("Ajustes rápidos", "Quick settings"), tr("Mantener el botón guía, o tocar L3 + R3", "Hold the guide button, or tap L3 + R3"))
         HelpRow(tr("Captura", "Screenshot"), tr("Botón guía + RB, o mantener L3 + R3 · En el G9 en DS5, también M dos veces",
             "Guide button + RB, or hold L3 + R3 · On the G9 in DS5, also M twice"))
         HelpRow(tr("Atrás", "Back"), tr("Tocar el botón guía · Mantener Atrás: guía + LB", "Tap the guide button · Hold Back: guide + LB"))

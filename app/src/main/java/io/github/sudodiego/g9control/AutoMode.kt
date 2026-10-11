@@ -26,6 +26,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
 
 /**
  * Puente entre el servicio de accesibilidad (que ve teclas del sistema, como encendido o volumen) y
@@ -751,7 +753,7 @@ class AutoModeService : AccessibilityService() {
         }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
-        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc -> runGestureAction(act, kc) }) return true
+        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg -> runGestureAction(act, kc, pkg) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -817,8 +819,11 @@ class AutoModeService : AccessibilityService() {
     private fun adjustVolume(dir: Int) = getSystemService(AudioManager::class.java)
         .adjustSuggestedStreamVolume(dir, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
 
-    /** Ejecuta la acción de un gesto. `kc` es la tecla elegida cuando la acción es [GestureAction.KEY]. */
-    private fun runGestureAction(a: GestureAction, kc: Int = 0) {
+    /**
+     * Ejecuta la acción de un gesto. `kc` es la tecla elegida cuando la acción es [GestureAction.KEY] y
+     * `pkg` la app cuando es [GestureAction.OPEN_APP].
+     */
+    private fun runGestureAction(a: GestureAction, kc: Int = 0, pkg: String = "") {
         when (a) {
             GestureAction.NONE -> {}
             GestureAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
@@ -833,8 +838,18 @@ class AutoModeService : AccessibilityService() {
                 am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
             }
             GestureAction.SCREENSHOT -> if (this::panel.isInitialized) panel.capture()
-            // Panel de juego: el mismo que se abre manteniendo el botón guía o L3 + R3.
+            // Ajustes rápidos: el mismo panel que se abre manteniendo el botón guía o L3 + R3.
             GestureAction.PANEL -> if (this::panel.isInitialized) panel.show()
+            // Abrir una app: con Shizuku se abre por el shell (siempre puede); sin él se prueba el camino
+            // normal, que Android solo deja si el sistema lo permite estando en segundo plano.
+            GestureAction.OPEN_APP -> openApp(pkg)
+            // Cajón de apps: el launcher lo abre con un deslizamiento hacia arriba (Android no tiene una
+            // acción de accesibilidad para eso).
+            GestureAction.APP_DRAWER -> swipe(0.5f, 0.72f, 0.5f, 0.30f)
+            // Páginas del launcher: tampoco hay acción; el launcher cambia de página con un deslizamiento
+            // horizontal, así que se hace ese deslizamiento.
+            GestureAction.PAGE_NEXT -> swipe(0.86f, 0.5f, 0.12f, 0.5f)
+            GestureAction.PAGE_PREV -> swipe(0.14f, 0.5f, 0.88f, 0.5f)
             // Tecla de teclado: el mando no las envía, así que la inyecta Shizuku (`input keyevent`).
             GestureAction.KEY -> if (kc != 0) scope.launch {
                 if (Shell.run(Shell.keyEvent(kc)) == null) {
@@ -852,10 +867,53 @@ class AutoModeService : AccessibilityService() {
      */
     private fun runPaddle(back: BackKey) {
         val code = PADDLE_KEYCODE[back] ?: return
-        val rule = Gestures.rulesFor(this, lastPackage)[code] ?: return
-        if (rule.tap == GestureAction.NONE) return
-        Log.d(TAG, "firma de ${back.label} en ${lastPackage ?: "?"}: ${rule.tap.name}")
-        runGestureAction(rule.tap, rule.kc)
+        Log.d(TAG, "firma de ${back.label} en ${lastPackage ?: "?"}")
+        // Entra al mismo motor de gestos que los demás botones: así «Un toque» y «Doble toque» funcionan
+        // igual que en un botón normal (antes solo corría el toque). El mando manda una firma corta
+        // (~25 ms), así que no hay forma de saber cuánto la mantuviste: el «Mantener» de un trasero no se
+        // distingue (se avisa en la página de gestos).
+        gestures.onPress(this, lastPackage, code) { act, kc, pkg -> runGestureAction(act, kc, pkg) }
+    }
+
+    /** Abre una app asignada a un gesto. Sin Shizuku se prueba el camino normal y, si falla, se avisa. */
+    private fun openApp(pkg: String) {
+        if (pkg.isEmpty()) {
+            if (this::panel.isInitialized) panel.message(tr("Elige la app en «Gestos».", "Choose the app in “Gestures”."))
+            return
+        }
+        val intent = packageManager.getLaunchIntentForPackage(pkg) ?: run {
+            if (this::panel.isInitialized) panel.message(tr("No encuentro esa app.", "I can't find that app."))
+            return
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val component = intent.component
+        if (Shell.state == Shell.State.READY && component != null) {
+            scope.launch { if (Shell.run(Shell.amStart(component.flattenToShortString())) == null) openAppDirect(intent) }
+            return
+        }
+        openAppDirect(intent)
+    }
+
+    private fun openAppDirect(intent: Intent) {
+        runCatching { startActivity(intent) }.onFailure {
+            Log.w(TAG, "no se pudo abrir la app", it)
+            if (this::panel.isInitialized) panel.message(
+                tr("El sistema no dejó abrir la app (con Shizuku iniciado sí se abre).",
+                    "The system didn't let the app open (with Shizuku running it does).")
+            )
+        }
+    }
+
+    /** Deslizamiento de un dedo por la pantalla, en tanto por uno (0..1): el cajón de apps y las páginas. */
+    private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 260) {
+        val m = resources.displayMetrics
+        val path = Path().apply {
+            moveTo(x1 * m.widthPixels, y1 * m.heightPixels)
+            lineTo(x2 * m.widthPixels, y2 * m.heightPixels)
+        }
+        val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
+        if (!dispatchGesture(g, null, null) && this::panel.isInitialized)
+            panel.message(tr("No se pudo deslizar la pantalla.", "Couldn't swipe the screen."))
     }
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */

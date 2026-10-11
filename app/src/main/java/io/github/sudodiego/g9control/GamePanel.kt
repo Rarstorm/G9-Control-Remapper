@@ -216,10 +216,13 @@ class GamePanel(private val svc: AutoModeService) {
         runCatching { svc.packageManager.getApplicationLabel(svc.packageManager.getApplicationInfo(it, 0)).toString() }.getOrNull()
     } ?: "G9 Control Remapper"
 
-    /** Encabezado del panel: la app al frente, la batería (ícono con su nivel), "Bypass" o "Cargando" y la hora. */
+    /**
+     * Encabezado del panel: el nombre del panel (antes salía la app al frente, que no tenía que ver con el
+     * panel), la batería (ícono con su nivel), "Bypass" o "Cargando" y la hora.
+     */
     private fun header() {
         ui.sub = false
-        ui.title = appLabel(svc.foregroundApp)
+        ui.title = tr("Ajustes rápidos", "Quick settings")
         ui.mode = ModeSwitcher.detect()?.label
         val i = svc.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         ui.battery = i?.let { it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: -1
@@ -588,7 +591,7 @@ class GamePanel(private val svc: AutoModeService) {
         })
         add(PanelItem(tr("Inicio", "Home"), Icons.Outlined.Home, PanelRow.SYSTEM, sub = "Android") { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) })
         add(PanelItem(tr("Recientes", "Recents"), Icons.Outlined.Layers, PanelRow.SYSTEM, sub = tr("Apps abiertas", "Open apps")) { hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) })
-        add(PanelItem(tr("Ajustes rápidos", "Quick settings"), Icons.Outlined.ToggleOn, PanelRow.SYSTEM, sub = "Android") {
+        add(PanelItem(tr("Ajustes rápidos de Android", "Android quick settings"), Icons.Outlined.ToggleOn, PanelRow.SYSTEM, sub = "Android") {
             hide(); svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
         })
         val mode = ModeSwitcher.detect()

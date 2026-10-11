@@ -1,10 +1,12 @@
 package io.github.sudodiego.g9control
 
 import android.content.Intent
-import android.view.KeyEvent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,8 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Página "Gestos": un botón del control (por ejemplo, el que manda un botón trasero) hace algo
- * distinto según se toque, se mantenga o se toque dos veces.
+ * Página «Gestos»: qué hace cada botón del control —al tocarlo, con doble toque o manteniéndolo— y qué
+ * hace cada trasero. Todo se resuelve por app con el selector «Aplica a».
  */
 @Composable
 fun GesturesPage(s: AppState, a: MainActivity) {
@@ -53,9 +55,9 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     }
 
     val withRules = remember(rev) { Gestures.apps(a) }
-    // Lo que tiene cada app, para el selector: «● Chrome — LT → Atrás · A → tecla Espacio».
-    val summaries = remember(rev) { Gestures.apps(a).associateWith { p -> gestureSummary(Gestures.appRules(a, p)) } }
-    val allSummary = remember(rev) { gestureSummary(Gestures.rules(a)) }
+    // Para el resumen: el paquete de «Abrir una app» se enseña con el nombre de la app.
+    val names = remember(apps) { apps.toMap() }
+    val labels: (String) -> String? = remember(names) { { p -> names[p] } }
     val globRule = remember(rev, key) { if (key == 0) null else Gestures.rules(a)[key] }
     val appRule = remember(rev, key, scope) { if (key == 0 || scope == null) null else Gestures.appRules(a, scope!!)[key] }
     val shown = appRule ?: globRule ?: GestureRule(key, GestureAction.NONE, GestureAction.NONE, GestureAction.NONE)
@@ -87,13 +89,14 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                             Icon(Icons.Filled.ArrowDropDown, null)
                         }
                         DropdownMenu(pick, { pick = false }) {
+                            // Solo el punto: qué tiene cada app se ve en «Botones mapeados», aquí estorbaba.
                             DropdownMenuItem(
-                                text = { Text(tr("Todas las apps", "All apps") + if (allSummary.isEmpty()) "" else " — $allSummary", maxLines = 4) },
+                                text = { Text(tr("Todas las apps", "All apps")) },
                                 onClick = { pick = false; scope = null }
                             )
                             apps.sortedByDescending { it.first in withRules }.forEach { (p, l) ->
                                 DropdownMenuItem(
-                                    text = { Text(((if (p in withRules) "● " else "") + l + (summaries[p]?.let { " — $it" } ?: "")), maxLines = 4) },
+                                    text = { Text((if (p in withRules) "● " else "") + l) },
                                     onClick = { pick = false; scope = p }
                                 )
                             }
@@ -129,11 +132,11 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     }
                 }
                 OutlinedButton(onClick = { a.writeSignatures() }, enabled = s.connected && !s.busy) {
-                    Text(tr("Preparar firmas en el mando", "Write signatures to the controller"))
+                    Text(tr("Grabar los traseros en el mando", "Write the paddles to the controller"))
                 }
                 Hint(
-                    tr("Las firmas se graban una vez: con ellas el control dice qué trasero apretaste. Elige un trasero arriba y asígnale qué hace (por app).",
-                        "Signatures are written once: with them the controller says which paddle you pressed. Pick a paddle above and set what it does (per app).")
+                    tr("Toca ese botón una sola vez: se graba en el mando qué botón es cada trasero. Después, cada trasero puede hacer una cosa distinta en cada app.",
+                        "Tap that button once: it writes into the controller which button each paddle is. After that, each paddle can do a different thing in each app.")
                 )
                 Hint(
                     tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando».",
@@ -159,9 +162,16 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     Hint(tr("Toca un botón del dibujo (o elige un trasero) para ver y cambiar sus gestos.",
                         "Tap a button on the drawing (or pick a back paddle) to see and change its gestures."))
                 } else {
-                GestureRow(tr("Tocar", "Tap"), shown.tap) { write(shown.copy(tap = it)) }
+                // El orden es el de uso: un toque, dos toques y, por último, mantener.
+                GestureRow(tr("Un toque", "One tap"), shown.tap) { write(shown.copy(tap = it)) }
+                GestureRow(tr("Doble toque", "Double tap"), shown.dbl) { write(shown.copy(dbl = it)) }
                 GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
-                GestureRow(tr("Doble toque", "Double-tap"), shown.dbl) { write(shown.copy(dbl = it)) }
+
+                // Un trasero manda un toque cortísimo: no hay forma de saber cuánto lo mantuviste.
+                if (selPaddle != null) Hint(
+                    tr("Un trasero manda un toque muy corto: distingue «Un toque» y «Doble toque», pero no «Mantener».",
+                        "A paddle sends a very short press: it can tell “One tap” and “Double tap” apart, but not “Long-press”.")
+                )
 
                 // La tecla solo aparece si algún gesto la usa: el mando NO envía teclas de teclado,
                 // las inyecta la app con Shizuku (`input keyevent`).
@@ -171,59 +181,89 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         tr("Ojo: para enviar la tecla hace falta Shizuku iniciado (Ajustes → Permisos).",
                             "Note: sending the key needs Shizuku running (Settings → Permissions).")
                     )
-                    else Hint(
-                        tr("La tecla la envía G9 Control: el control no manda teclas de teclado. Tarda unas décimas de segundo.",
-                            "G9 Control sends the key: the controller doesn't send keyboard keys. It takes a few tenths of a second.")
-                    )
                 }
 
-                if (scope != null) {
-                    Hint(
-                        tr("Aquí, «Nada» en los tres hace que el botón funcione normal en esta app (llega al juego).",
-                            "Here, “Nothing” on all three makes the button work normally in this app (it reaches the game).")
-                    )
-                    if (appRule != null) OutlinedButton(onClick = { Gestures.clearApp(a, scope!!); rev++ }) {
-                        Text(tr("Quitar lo propio de esta app", "Remove this app's settings"))
+                // La app solo aparece si algún gesto es «Abrir una app».
+                if (shown.anyOpenApp) {
+                    var pickApp by remember { mutableStateOf(false) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(tr("App", "App"), Modifier.width(120.dp), fontWeight = FontWeight.SemiBold)
+                        Box {
+                            OutlinedButton(onClick = { pickApp = true }) {
+                                Text(shown.pkg.takeIf { it.isNotEmpty() }?.let { labels(it) } ?: tr("Elegir app…", "Choose app…"))
+                                Icon(Icons.Filled.ArrowDropDown, null)
+                            }
+                            DropdownMenu(pickApp, { pickApp = false }) {
+                                apps.forEach { (p, l) ->
+                                    DropdownMenuItem(text = { Text(l) }, onClick = { pickApp = false; write(shown.copy(pkg = p)) })
+                                }
+                            }
+                        }
                     }
+                }
+
+                if (scope != null && appRule != null) OutlinedButton(onClick = { Gestures.clearApp(a, scope!!); rev++ }) {
+                    Text(tr("Quitar lo propio de esta app", "Remove this app's settings"))
                 }
                 val others = scopeRules.keys.filter { it != key }
                 if (others.isNotEmpty()) Hint(
-                    tr("Otros botones con gestos aquí: " + others.joinToString { KEYCODE_PAD[it]?.name ?: "?" },
-                        "Other buttons with gestures here: " + others.joinToString { KEYCODE_PAD[it]?.name ?: "?" })
+                    tr("Otros botones con gestos aquí: " + others.joinToString { gestureKeyLabel(it) },
+                        "Other buttons with gestures here: " + others.joinToString { gestureKeyLabel(it) })
                 )
-                Hint(
-                    tr("Para borrar: «Nada» en los tres. Tocar espera ~0,3 s (por si viene el doble); mantener entra a ~0,45 s.",
-                        "To clear: “Nothing” on all three. A tap waits ~0.3 s (in case a double comes); long-press triggers at ~0.45 s.")
-                )
+                // Un solo (i) con toda la explicación: antes eran tres textos seguidos y ocupaban media página.
+                var info by remember { mutableStateOf(false) }
+                Row(Modifier.clickable { info = !info }, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr("Cómo funciona", "How it works"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(if (info) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (info) {
+                    Hint(
+                        tr("Para borrar un gesto: «Nada» en los tres. Un toque espera ~0,3 s (por si viene el doble); mantener entra a ~0,45 s.",
+                            "To clear a gesture: “Nothing” on all three. A tap waits ~0.3 s (in case a double comes); long-press triggers at ~0.45 s.")
+                    )
+                    Hint(
+                        tr("La tecla del teclado la envía G9 Control (el mando no manda teclas): tarda unas décimas de segundo y necesita Shizuku.",
+                            "G9 Control sends the keyboard key (the controller doesn't send keys): it takes a few tenths of a second and needs Shizuku.")
+                    )
+                    if (scope != null) Hint(
+                        tr("Aquí, «Nada» en los tres hace que el botón funcione normal en esta app (llega al juego).",
+                            "Here, “Nothing” on all three makes the button work normally in this app (it reaches the game).")
+                    )
+                    Hint(
+                        tr("«Abrir el cajón de apps» y «Página siguiente / anterior» deslizan la pantalla: funcionan en el launcher.",
+                            "“Open the app drawer” and “Next / previous page” swipe the screen: they work on the launcher.")
+                    )
+                }
                 }
 
                 // Qué tiene la app elegida (o «Todas las apps»), sin ir botón por botón: los botones y qué hace cada uno.
-                val summary = gestureSummary(scopeRules)
+                val summary = gestureSummary(scopeRules, labels)
                 if (summary.isNotEmpty()) {
                     Text(
-                        if (scope == null) tr("Lo que tiene Todas las apps", "What All apps has")
-                        else tr("Lo que tiene esta app", "What this app has"),
+                        tr("Botones mapeados: ", "Mapped buttons: ") + "\"$scopeLabel\"",
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(summary, fontSize = 13.sp)
                 }
                 // Tiempos de los gestos: antes solo se podían cambiar por dentro (g_tap_max, g_long, g_double).
                 // Los tres sliders a la vez ocupaban mucho: se elige el tiempo con un botón y debajo sale solo
-                // el slider del elegido (0 = tocar, 1 = mantener, 2 = doble).
+                // el slider del elegido (0 = un toque, 1 = doble toque, 2 = mantener).
                 var tapMs by remember(rev) { mutableIntStateOf(Gestures.tapMax(a)) }
                 var longMs by remember(rev) { mutableIntStateOf(Gestures.longMs(a)) }
                 var doubleMs by remember(rev) { mutableIntStateOf(Gestures.doubleMs(a)) }
                 var openTimer by remember { mutableStateOf<Int?>(null) }
                 Text(tr("Tiempos", "Timings"), fontWeight = FontWeight.SemiBold)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TimerButton(tr("Tocar", "Tap"), "$tapMs ms", openTimer == 0, Modifier.weight(1f)) { openTimer = if (openTimer == 0) null else 0 }
-                    TimerButton(tr("Mantener", "Long"), "$longMs ms", openTimer == 1, Modifier.weight(1f)) { openTimer = if (openTimer == 1) null else 1 }
-                    TimerButton(tr("Doble", "Double"), "$doubleMs ms", openTimer == 2, Modifier.weight(1f)) { openTimer = if (openTimer == 2) null else 2 }
+                    TimerButton(tr("Un toque", "One tap"), "$tapMs ms", openTimer == 0, Modifier.weight(1f)) { openTimer = if (openTimer == 0) null else 0 }
+                    TimerButton(tr("Doble toque", "Double tap"), "$doubleMs ms", openTimer == 1, Modifier.weight(1f)) { openTimer = if (openTimer == 1) null else 1 }
+                    TimerButton(tr("Mantener", "Long"), "$longMs ms", openTimer == 2, Modifier.weight(1f)) { openTimer = if (openTimer == 2) null else 2 }
                 }
                 when (openTimer) {
-                    0 -> SliderRow(tr("Tocar: hasta", "Tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
-                    1 -> SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
-                    2 -> SliderRow(tr("Doble toque: dentro de", "Double-tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
+                    0 -> SliderRow(tr("Un toque: hasta", "One tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
+                    1 -> SliderRow(tr("Doble toque: dentro de", "Double tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
+                    2 -> SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
                 }
             }
         }

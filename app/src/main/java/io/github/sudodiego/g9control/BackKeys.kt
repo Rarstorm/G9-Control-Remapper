@@ -63,14 +63,6 @@ fun BackPage(s: AppState, a: MainActivity) {
     val known = s.appliedBackKeys != null
     var sel by rememberSaveable { mutableStateOf(BackKey.L4) }
     val cur = if (known) s.backKeys[sel.id] ?: 0 else 0
-    // Todos los botones del control como chips (LT/LB/RB/RT van en su propia fila, sobre el dibujo).
-    val chipButtons = listOf(
-        0xB4 to "A", 0xB5 to "B", 0xB7 to "X", 0xB8 to "Y",
-        0xC0 to "L3", 0xC1 to "R3",
-        0xBC to tr("Vista", "View"), 0xBD to tr("Menú", "Menu"), 0xC2 to "Home",
-        0xB0 to tr("Cruceta ↑", "D-pad ↑"), 0xB1 to tr("Cruceta ↓", "D-pad ↓"),
-        0xB2 to tr("Cruceta ←", "D-pad ←"), 0xB3 to tr("Cruceta →", "D-pad →"),
-    )
     val padOf = MACRO_KEY_BYTE.entries.associate { (k, v) -> v to k }
     // Lee el valor actual (no "cur"): el dibujo puede llamar a una versión guardada de esta función.
     // Sin lectura previa no hay valor con el que comparar, así que se escribe siempre.
@@ -85,22 +77,39 @@ fun BackPage(s: AppState, a: MainActivity) {
                 lit = setOfNotNull(padOf[cur]), tags = tags, enabled = editable, modifier = Modifier.fillMaxWidth(), lights = s
             ) { k -> MACRO_KEY_BYTE[k]?.let(::pick) }
             Text(tr("${sel.label}: toca el botón que copia", "${sel.label}: tap the button it copies"), fontWeight = FontWeight.SemiBold)
-            // Gatillos y bumpers en su propia fila, separados del dibujo.
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                for (t in listOf(0xBE to "LT", 0xBA to "LB")) TargetChip(t.second, known && cur == t.first, editable) { pick(t.first) }
-                Spacer(Modifier.weight(1f))
-                for (t in listOf(0xBB to "RB", 0xBF to "RT")) TargetChip(t.second, known && cur == t.first, editable) { pick(t.first) }
+            // Gatillos y bumpers arriba, sobre el dibujo.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TargetChip("LT", known && cur == 0xBE, editable, Modifier.weight(1f)) { pick(0xBE) }
+                TargetChip("LB", known && cur == 0xBA, editable, Modifier.weight(1f)) { pick(0xBA) }
+                TargetChip("RB", known && cur == 0xBB, editable, Modifier.weight(1f)) { pick(0xBB) }
+                TargetChip("RT", known && cur == 0xBF, editable, Modifier.weight(1f)) { pick(0xBF) }
             }
-            // Todos los botones, como chips: antes solo estaban LT/LB/RB/RT y el resto únicamente se podía
-            // tocar en el dibujo.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                chipButtons.forEach { (b, label) -> TargetChip(label, known && cur == b, editable) { pick(b) } }
+            // Todos los botones, en filas que llenan el ancho: antes cada fila dejaba el hueco del final
+            // (y entre LB y RB, que iban con un separador en medio).
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TargetChip("A", known && cur == 0xB4, editable, Modifier.weight(1f)) { pick(0xB4) }
+                TargetChip("B", known && cur == 0xB5, editable, Modifier.weight(1f)) { pick(0xB5) }
+                TargetChip("X", known && cur == 0xB7, editable, Modifier.weight(1f)) { pick(0xB7) }
+                TargetChip("Y", known && cur == 0xB8, editable, Modifier.weight(1f)) { pick(0xB8) }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TargetChip(tr("Sin asignar", "Unassigned"), known && cur == 0, editable) { pick(0) }
-                TargetChip(if (cur == BACK_MACRO) tr("Editar macro", "Edit macro") else "Macro", known && cur == BACK_MACRO, editable) { a.openMacroEditor(sel) }
-                StickDirChip(tr("Stick izq.", "Left stick"), 0xEF, cur, editable, ::pick)
-                StickDirChip(tr("Stick der.", "Right stick"), 0xF7, cur, editable, ::pick)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TargetChip("L3", known && cur == 0xC0, editable, Modifier.weight(1f)) { pick(0xC0) }
+                TargetChip("R3", known && cur == 0xC1, editable, Modifier.weight(1f)) { pick(0xC1) }
+                TargetChip(tr("Vista", "View"), known && cur == 0xBC, editable, Modifier.weight(1f)) { pick(0xBC) }
+                TargetChip(tr("Menú", "Menu"), known && cur == 0xBD, editable, Modifier.weight(1f)) { pick(0xBD) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TargetChip("Home", known && cur == 0xC2, editable, Modifier.weight(1f)) { pick(0xC2) }
+                TargetChip(tr("Cruceta ↑", "D-pad ↑"), known && cur == 0xB0, editable, Modifier.weight(1f)) { pick(0xB0) }
+                TargetChip(tr("Cruceta ↓", "D-pad ↓"), known && cur == 0xB1, editable, Modifier.weight(1f)) { pick(0xB1) }
+                TargetChip(tr("Cruceta ←", "D-pad ←"), known && cur == 0xB2, editable, Modifier.weight(1f)) { pick(0xB2) }
+                TargetChip(tr("Cruceta →", "D-pad →"), known && cur == 0xB3, editable, Modifier.weight(1f)) { pick(0xB3) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TargetChip(tr("Sin asignar", "Unassigned"), known && cur == 0, editable, Modifier.weight(1f)) { pick(0) }
+                TargetChip(if (cur == BACK_MACRO) tr("Editar macro", "Edit macro") else "Macro", known && cur == BACK_MACRO, editable, Modifier.weight(1f)) { a.openMacroEditor(sel) }
+                StickDirChip(tr("Stick izq.", "Left stick"), 0xEF, cur, editable, ::pick, Modifier.weight(1f))
+                StickDirChip(tr("Stick der.", "Right stick"), 0xF7, cur, editable, ::pick, Modifier.weight(1f))
             }
         }
     }
@@ -140,6 +149,10 @@ fun BackPage(s: AppState, a: MainActivity) {
                     Text(tr("Aprender del mando", "Learn from controller"))
                 }
             }
+            // Borrar todos: deja los cuatro traseros sin asignar (ni botón, ni macro, ni lo que se les grabó).
+            OutlinedButton(onClick = { a.clearAllBackKeys() }, enabled = editable && !s.busy) {
+                Text(tr("Borrar todos", "Clear all"))
+            }
             when {
                 !s.connected ->
                     Hint(tr("Conecta el control en modo Android para cambiarlos.", "Connect the controller in Android mode to change them."))
@@ -160,10 +173,11 @@ fun BackPage(s: AppState, a: MainActivity) {
 }
 
 @Composable
-private fun TargetChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun TargetChip(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     FilterChip(
-        selected = selected, onClick = onClick, enabled = enabled, label = { Text(label) },
-        modifier = Modifier.padding(horizontal = 2.dp),
+        selected = selected, onClick = onClick, enabled = enabled,
+        label = { Text(label, fontSize = 13.sp, maxLines = 1) },
+        modifier = modifier.padding(horizontal = 2.dp),
         // Fondo sólido: LT/LB/RB/RT van encima del dibujo.
         colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface)
     )
@@ -171,12 +185,15 @@ private fun TargetChip(label: String, selected: Boolean, enabled: Boolean, onCli
 
 /** Dirección de un stick: chip con menú de las 8 direcciones. */
 @Composable
-internal fun StickDirChip(name: String, first: Int, cur: Int, enabled: Boolean, onPick: (Int) -> Unit) {
+internal fun StickDirChip(
+    name: String, first: Int, cur: Int, enabled: Boolean, onPick: (Int) -> Unit, modifier: Modifier = Modifier
+) {
     var open by remember { mutableStateOf(false) }
     val dirs = listOf("←", "↖", "↑", "↗", "→", "↘", "↓", "↙")
     val i = cur - first
-    Box {
+    Box(modifier) {
         FilterChip(
+            modifier = Modifier.fillMaxWidth(),
             selected = i in dirs.indices, onClick = { open = true }, enabled = enabled,
             label = { Text(if (i in dirs.indices) "$name ${dirs[i]}" else name) },
             trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }

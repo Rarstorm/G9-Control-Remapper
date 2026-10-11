@@ -766,6 +766,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * «Borrar todos»: deja los cuatro traseros sin asignar (ni botón, ni macro, ni lo grabado). Se escribe y se
+     * relee cada uno para confirmarlo, como al asignarlos de uno en uno.
+     */
+    fun clearAllBackKeys() = launchIo {
+        val s = state
+        var ok = true
+        BackKey.entries.forEach { k ->
+            val back = withContext(Dispatchers.IO) {
+                if (s.backKeys[k.id] == BACK_MACRO) G9Usb.transact(MacroGcm.clear(k.id))
+                G9Usb.transact(Gcm.clearBackKey(k.id))
+                G9Usb.transact(Gcm.readBackKey(k.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
+            }
+            if (back == null) ok = false
+            else {
+                s.backKeys[k.id] = back
+                s.macros.remove(k.id)
+                if (back != 0) ok = false
+            }
+        }
+        s.appliedBackKeys = s.backKeys.toMap()
+        if (ok) s.status = tr("Traseros: los cuatro sin asignar.", "Paddles: all four unassigned.")
+        else s.fail(tr("No pude dejar todos los traseros sin asignar.", "Couldn't leave all the paddles unassigned."))
+    }
+
     // ---- Macros de los traseros ----
 
     fun openMacroEditor(k: BackKey) {

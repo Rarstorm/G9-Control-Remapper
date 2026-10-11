@@ -255,10 +255,10 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
     var perfPos by remember { mutableStateOf(AutoRules.perfPos(a)) }
     var perfFull by remember { mutableStateOf(AutoRules.perfFull(a)) }
     CompositionLocalProvider(LocalEditable provides true) {
-        Panel(tr("Panel de juego", "Game panel"), tr("Un menú para usar en cualquier app sin soltar el control, con cualquier control.",
+        Panel(tr("Ajustes rápidos", "Quick settings"), tr("Un menú para usar en cualquier app sin soltar el control, con cualquier control.",
             "A menu to use in any app without letting go of the controller, with any controller.")) {
             SwitchRow(tr("Botón guía", "Guide button"), guide,
-                tr("El del centro del control (Legion en el G9, Xbox, PS u Home). Tocar: Atrás. Mantener: panel de juego. Con RB: captura. Con LB: mantener Atrás (con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) pasa al PC.",
+                tr("El del centro del control (Legion en el G9, Xbox, PS u Home). Tocar: Atrás. Mantener: ajustes rápidos. Con RB: captura. Con LB: mantener Atrás (con Shizuku). Transmitiendo desde el PC (Artemis, Moonlight…) pasa al PC.",
                     "The one in the middle of the controller (Legion on the G9, Xbox, PS or Home). Tap: Back. Hold: game panel. With RB: screenshot. With LB: hold Back (with Shizuku). While streaming from a PC (Artemis, Moonlight…) it goes to the PC.")) {
                 guide = it; AutoRules.setLegionKeys(a, it)
             }
