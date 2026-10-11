@@ -35,7 +35,11 @@ fun ProfilesPage(s: AppState, a: MainActivity) {
             }
         }
     ) {
-        if (!known) Hint(tr("Conecta el control en modo Android.", "Connect the controller in Android mode."))
+        if (!known) {
+            Hint(tr("Conecta el control en modo Android.", "Connect the controller in Android mode."))
+            // Puede quedar así al volver de X-Input/DS5 (Android le quita el permiso USB): reintento a mano.
+            OutlinedButton(onClick = { a.readAll() }, enabled = !s.busy) { Text(tr("Reconectar", "Reconnect")) }
+        }
         // Respaldo en un archivo: sirve para no perder nada al desinstalar (cada build firma distinto, así que
         // para instalar uno nuevo hay que desinstalar el anterior) o al cambiar de tablet.
         Text(tr("El respaldo guarda TODO: los perfiles, la configuración que estás usando ahora y los ajustes de la app (gestos, apps con modo automático, tema, idioma…). Antes de desinstalar, exporta; al volver a instalar, importa y queda como estaba.",

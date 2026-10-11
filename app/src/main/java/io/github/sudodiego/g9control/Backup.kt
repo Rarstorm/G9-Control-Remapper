@@ -44,8 +44,9 @@ object Backup {
             .put("date", stamp())
             .put("prefs", dumpPrefs(ctx))
             .put("profiles", JSONArray().apply { s.profiles.forEach { put(Profiles.toJson(it)) } })
-        // La configuración que se usa ahora mismo, como un perfil más (solo si se leyó del control: si no,
-        // serían los valores por defecto de la app y no lo que el control tiene puesto).
+        // La configuración que se usa ahora mismo, guardada aparte y solo como referencia: al importar NO se
+        // agrega como perfil (entran únicamente los perfiles del archivo). Solo si se leyó del control: si
+        // no, serían los valores por defecto de la app y no lo que el control tiene puesto.
         if (s.configKnown) o.put("current", Profiles.toJson(Profile.fromState(0L, sessionName(), s)))
         return o.toString(2)
     }
@@ -76,9 +77,10 @@ object Backup {
     // ---- Importar ----
 
     /**
-     * Restaura un respaldo: primero los ajustes de la app, después los perfiles del archivo (los de igual
-     * nombre se reemplazan) y por último la sesión que se estaba usando (entra como perfil, para aplicarla
-     * a un toque). Los ajustes que ya estaban y no vienen en el respaldo se quedan como están.
+     * Restaura un respaldo: primero los ajustes de la app y después los perfiles del archivo (los de igual
+     * nombre se reemplazan; los demás se suman). Los ajustes que ya estaban y no vienen en el respaldo se
+     * quedan como están. Solo entra lo que trae el archivo: la sesión que iba dentro (clave "current", que se
+     * guarda como referencia) NO se agrega como perfil.
      * Devuelve un resumen para mostrar. Lanza si el archivo no es un respaldo.
      */
     fun restore(ctx: Context, text: String): String {
@@ -95,18 +97,11 @@ object Backup {
             val i = list.indexOfFirst { it.name == p.name }
             if (i >= 0) list[i] = p.copy(id = list[i].id) else { list.add(p.copy(id = id++)); added++ }
         }
-        // La sesión que estaba en uso: entra como perfil, con su nombre (si no estaba ya).
-        val session = o.optJSONObject("current")?.let { c -> runCatching { Profiles.fromJson(c) }.getOrNull() }
-            ?.takeIf { p -> list.none { it.name == p.name } }
-            ?.also { list.add(it.copy(id = id++)) }
         Profiles.save(ctx, list)
-        val nuevos = added + (if (session != null) 1 else 0)
         val resumen = tr("${list.size} perfiles · ${file.size - added} actualizados",
             "${list.size} profiles · ${file.size - added} updated")
-        return if (nuevos > 0) "$resumen · $nuevos " + tr(
-            if (nuevos == 1) "nuevo (con la sesión del respaldo)" else "nuevos (con la sesión del respaldo)",
-            if (nuevos == 1) "new (with the backup session)" else "new (with the backup session)"
-        ) else resumen
+        return if (added > 0) "$resumen · $added " + tr(if (added == 1) "nuevo" else "nuevos", "new")
+        else resumen
     }
 
     /** Escribe los ajustes del respaldo; lo que ya estaba y no viene en el respaldo se queda como está. */

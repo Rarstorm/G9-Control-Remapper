@@ -97,7 +97,7 @@ private val NAV = listOf(
     NavItem(Page.TEST, "Botones", "Buttons", Icons.Outlined.RadioButtonChecked, Icons.Filled.RadioButtonChecked),
     NavItem(Page.BACK, "Traseros", "Paddles", Icons.Outlined.FlipToBack, Icons.Filled.FlipToBack),
     NavItem(Page.GESTURES, "Gestos", "Gestures", Icons.Outlined.TouchApp, Icons.Filled.TouchApp),
-    NavItem(Page.PROFILES, "Perfiles", "Profiles", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
+    NavItem(Page.PROFILES, "Respaldo", "Backup", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
     // Las dos.
     NavItem(Page.DIAGNOSTICS, "Ajustes", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
@@ -124,6 +124,9 @@ fun App(s: AppState, a: MainActivity) {
                 TabBar(s, a)
                 // La franja de Vista + Menú es del G9: en la sección Tablet no hace falta.
                 if (s.section == Section.G9) ModeStrip(s)
+                // El mando está en modo Android pero la app no tiene el puerto (por ejemplo al volver de
+                // X-Input/DS5, que le quita el permiso USB): aviso con botón para reconectar.
+                if (s.section == Section.G9 && !s.connected && s.padMode == PadMode.ANDROID) ReconnectBar(s, a)
                 PageHost(s, a, Modifier.weight(1f))
                 HintBar(s)
             }
@@ -360,6 +363,33 @@ private fun PageHost(s: AppState, a: MainActivity, modifier: Modifier) {
                         Page.DIAGNOSTICS -> DiagnosticsPage(s, a)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Aviso cuando el mando está conectado en modo Android pero la app no tiene el puerto USB (al volver de
+ * X-Input/DS5 Android le quitó el permiso). Sin esto, la única salida era tocar la píldora de conexión.
+ */
+@Composable
+fun ReconnectBar(s: AppState, a: MainActivity) {
+    val c = MaterialTheme.colorScheme
+    Surface(color = c.errorContainer) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.WarningAmber, null, Modifier.size(18.dp), tint = c.onErrorContainer)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                tr("El control está en modo Android, pero la app no está conectada: Android le quitó el permiso USB al reconectarse.",
+                    "The controller is in Android mode, but the app isn't connected: Android dropped the USB permission when it reconnected."),
+                Modifier.weight(1f), fontSize = 13.sp, color = c.onErrorContainer
+            )
+            Spacer(Modifier.width(10.dp))
+            FilledTonalButton(onClick = { if (!s.busy) a.readAll() }, enabled = !s.busy) {
+                Text(tr("Reconectar", "Reconnect"))
             }
         }
     }

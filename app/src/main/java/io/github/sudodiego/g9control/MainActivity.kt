@@ -51,10 +51,24 @@ class MainActivity : ComponentActivity() {
     private val inputListener = object : InputManager.InputDeviceListener {
         // Al enchufar el control, Android muestra su propio aviso ("abrir con G9 Control"):
         // aquí solo se conecta si ya hay permiso, para no sumar un segundo aviso.
-        override fun onInputDeviceAdded(id: Int) { refreshDevice(); autoConnect(ask = false) }
-        override fun onInputDeviceRemoved(id: Int) = refreshDevice()
+        override fun onInputDeviceAdded(id: Int) {
+            refreshDevice()
+            autoConnect(ask = false)
+            // Si Android no le dio el permiso (su aviso puede no salir, o cerrarse sin aceptar), se pide desde
+            // aquí un momento después y una sola vez: en el caso normal ya quedó conectado y no se pide nada.
+            handler.removeCallbacks(askWhenBack)
+            handler.postDelayed(askWhenBack, 1500)
+        }
+        // El mando se fue (desconectado o cambiado de modo): Android le quitó el permiso USB ("only until the
+        // device is disconnected"), así que se olvida a quién se le pidió, para volver a pedirlo al volver.
+        override fun onInputDeviceRemoved(id: Int) { refreshDevice(); askedDeviceId = -1 }
         override fun onInputDeviceChanged(id: Int) { refreshDevice(); autoConnect(ask = false) }
     }
+
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** El mando volvió en modo Android y sigue sin conexión: se pide el permiso USB otra vez. */
+    private val askWhenBack = Runnable { if (resumed && !state.connected) autoConnect(ask = true) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,7 +142,10 @@ class MainActivity : ComponentActivity() {
         resumed = true
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, null)
         refreshDevice()
-        autoConnect(ask = true)
+        // La app puede recrearse (por ejemplo al importar un respaldo) con el puerto USB todavía abierto: en
+        // ese caso autoConnect no lee nada y la app quedaría sin la configuración del control (no se podría
+        // aplicar un perfil ni guardar ningún cambio, sin ningún aviso). Se lee aquí.
+        if (G9Usb.isOpen() && !state.configKnown) readAll() else autoConnect(ask = true)
         KeyBus.listener = { e -> if (state.testMode) addOtherKey(e, viaService = true) }
         // Si la prueba quedó abierta (o su aviso al servicio se perdió en pausa), se vuelve a sincronizar.
         KeyBus.testing = state.testMode
