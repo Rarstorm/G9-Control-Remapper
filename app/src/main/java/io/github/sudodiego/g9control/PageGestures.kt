@@ -60,7 +60,9 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     val labels: (String) -> String? = remember(names) { { p -> names[p] } }
     val globRule = remember(rev, key) { if (key == 0) null else Gestures.rules(a)[key] }
     val appRule = remember(rev, key, scope) { if (key == 0 || scope == null) null else Gestures.appRules(a, scope!!)[key] }
-    val shown = appRule ?: globRule ?: GestureRule(key, GestureAction.NONE, GestureAction.NONE, GestureAction.NONE)
+    val base = appRule ?: globRule ?: GestureRule(key, GestureAction.NONE, GestureAction.NONE, GestureAction.NONE)
+    // Un trasero manda un pulso de ~20 ms: no hay forma de saber si lo mantienes, así que no se ofrece.
+    val shown = if (selPaddle != null) base.copy(long = GestureAction.NONE) else base
     val inherited = scope != null && appRule == null && globRule != null
     val scopeLabel = scope?.let { p -> apps.firstOrNull { it.first == p }?.second ?: p } ?: tr("Todas las apps", "All apps")
 
@@ -69,6 +71,8 @@ fun GesturesPage(s: AppState, a: MainActivity) {
         val p = scope
         if (p == null) Gestures.setRule(a, r) else Gestures.setAppRule(a, p, r)
         rev++
+        // Si es un trasero, la app lo deja preparado sola (no hay que saber nada de marcas ni de botones).
+        if (selPaddle != null) a.preparePaddles()
     }
 
     val padOf = MACRO_KEY_BYTE.entries.associate { (k, v) -> v to k }
@@ -131,12 +135,23 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         )
                     }
                 }
-                OutlinedButton(onClick = { a.writeSignatures() }, enabled = s.connected && !s.busy) {
-                    Text(tr("Grabar los traseros en el mando", "Write the paddles to the controller"))
+                TextButton(onClick = { a.writeSignatures() }, enabled = s.connected && !s.busy) {
+                    Text(tr("Preparar los traseros", "Prepare the paddles"))
                 }
+                // Sin firma grabada el trasero no manda nada al apretarlo: hay que decirlo bien claro (pasó:
+                // se veía todo «bien» y el trasero estaba vacío, así que parecía que la app no hacía nada).
+                val sinFirma = BackKey.entries.filter { s.backKeys[it.id] != null && s.backKeys[it.id] != BACK_MACRO }
+                val hayReglasTrasero = remember(rev) {
+                    Gestures.rules(a).keys.any { it in PADDLE_KEYCODE.values } ||
+                        Gestures.apps(a).any { p -> Gestures.appRules(a, p).keys.any { it in PADDLE_KEYCODE.values } }
+                }
+                if (s.connected && sinFirma.isNotEmpty() && (hayReglasTrasero || selPaddle != null)) Hint(
+                    tr("Los traseros no están preparados: al apretarlos no manda nada. Toca «Preparar los traseros».",
+                        "The paddles aren't prepared: pressing them sends nothing. Tap “Prepare the paddles”.")
+                )
                 Hint(
-                    tr("Toca ese botón una sola vez: se graba en el mando qué botón es cada trasero. Después, cada trasero puede hacer una cosa distinta en cada app.",
-                        "Tap that button once: it writes into the controller which button each paddle is. After that, each paddle can do a different thing in each app.")
+                    tr("Solo hace falta si al apretar un trasero no pasa nada: la app los prepara sola la primera vez que les asignas algo aquí.",
+                        "Only needed if pressing a paddle does nothing: the app prepares them on its own the first time you assign something here.")
                 )
                 Hint(
                     tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando».",
@@ -165,12 +180,11 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                 // El orden es el de uso: un toque, dos toques y, por último, mantener.
                 GestureRow(tr("Un toque", "One tap"), shown.tap) { write(shown.copy(tap = it)) }
                 GestureRow(tr("Doble toque", "Double tap"), shown.dbl) { write(shown.copy(dbl = it)) }
-                GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
-
-                // Un trasero manda un toque cortísimo: no hay forma de saber cuánto lo mantuviste.
-                if (selPaddle != null) Hint(
-                    tr("Un trasero manda un toque muy corto: distingue «Un toque» y «Doble toque», pero no «Mantener».",
-                        "A paddle sends a very short press: it can tell “One tap” and “Double tap” apart, but not “Long-press”.")
+                if (selPaddle == null) {
+                    GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
+                } else Hint(
+                    tr("Un trasero solo distingue un toque de un doble toque: el mando no puede saber si lo mantienes.",
+                        "A paddle only tells a single tap from a double tap: the controller can't know if you hold it.")
                 )
 
                 // La tecla solo aparece si algún gesto la usa: el mando NO envía teclas de teclado,

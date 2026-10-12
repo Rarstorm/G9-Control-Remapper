@@ -1,6 +1,7 @@
 package io.github.sudodiego.g9control
 
 import android.os.Handler
+import android.util.Log
 import android.view.KeyEvent
 
 /**
@@ -54,6 +55,7 @@ class SignatureDetector(
 
     /** @return true si el evento es nuestro (se consume y no llega a la app). */
     fun onKey(keyCode: Int, down: Boolean): Boolean {
+        Log.d("G9Auto", "DIAG sig k=$keyCode down=$down held=$held")
         if (keyCode !in SIG_KEYCODES) {
             // Otro botón: lo retenido no era una firma.
             if (held.isNotEmpty()) finish(null)
@@ -76,6 +78,7 @@ class SignatureDetector(
         handler.removeCallbacks(expire)
         val codes = held.toList()
         held.clear()
+        Log.d("G9Auto", "DIAG sig FIN ${paddle?.label ?: "sin firma"} $codes")
         if (paddle != null) onPaddle(paddle) else codes.forEach(resend)
     }
 

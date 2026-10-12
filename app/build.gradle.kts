@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.sudodiego.g9control"
         minSdk = 29
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.3.9"
+        versionCode = 16
+                versionName = "1.3.10-diag"
     }
 
     // Firma de las versiones publicadas: keystore.properties (no va a git) apunta a la clave.

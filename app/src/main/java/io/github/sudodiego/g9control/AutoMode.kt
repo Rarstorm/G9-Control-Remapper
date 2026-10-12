@@ -727,6 +727,8 @@ class AutoModeService : AccessibilityService() {
      */
     private fun handleKey(event: KeyEvent): Boolean {
         val k = event.keyCode
+        // DIAG TEMPORAL (bug de L4): qué le llega de verdad al servicio. Quitar al cerrar el diagnóstico.
+        Log.d(TAG, "DIAG key k=$k ${if (event.action == KeyEvent.ACTION_DOWN) "down" else "up"} rep=${event.repeatCount} pkg=$lastPackage appInFront=$appInFront testing=${KeyBus.testing}")
         // Teclas que no llegan a las apps (encendido, volumen…): se pasan a la prueba de botones.
         KeyBus.listener?.let { l ->
             if (!KeyEvent.isGamepadButton(k) && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
@@ -747,9 +749,9 @@ class AutoModeService : AccessibilityService() {
         // Vista/Menú normal cuando no se usan firmas.
         if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES) {
             val rules = Gestures.rulesFor(this, lastPackage)
-            if (rules.keys.any { it in PADDLE_KEYCODE.values } &&
-                signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)
-            ) return true
+            val hayTrasero = rules.keys.any { it in PADDLE_KEYCODE.values }
+            Log.d(TAG, "DIAG firma alcanzada k=$k hayTrasero=$hayTrasero claves=${rules.keys}")
+            if (hayTrasero && signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)) return true
         }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
@@ -867,7 +869,7 @@ class AutoModeService : AccessibilityService() {
      */
     private fun runPaddle(back: BackKey) {
         val code = PADDLE_KEYCODE[back] ?: return
-        Log.d(TAG, "firma de ${back.label} en ${lastPackage ?: "?"}")
+        Log.d(TAG, "firma de ${back.label} en ${lastPackage ?: "?"} (regla=${Gestures.rulesFor(this, lastPackage)[code] ?: "SIN REGLA"})")
         // Entra al mismo motor de gestos que los demás botones: así «Un toque» y «Doble toque» funcionan
         // igual que en un botón normal (antes solo corría el toque). El mando manda una firma corta
         // (~25 ms), así que no hay forma de saber cuánto la mantuviste: el «Mantener» de un trasero no se

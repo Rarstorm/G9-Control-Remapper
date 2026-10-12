@@ -867,35 +867,58 @@ class MainActivity : ComponentActivity() {
         s.status = tr("Macro de ${k.label} quitada.", "${k.label} macro removed.")
     }
 
+    /** Botón manual («Preparar los traseros»): comprueba los cuatro y avisa en el estado si algo no quedó. */
+    fun writeSignatures() = preparePaddles(loud = true)
+
+    /** ¿Este trasero tiene gestos en alguna parte (generales o de alguna app)? */
+    private fun paddleHasRules(b: BackKey): Boolean {
+        val code = PADDLE_KEYCODE[b] ?: return false
+        if (Gestures.rules(this).containsKey(code)) return true
+        return Gestures.apps(this).any { p -> Gestures.appRules(this, p).containsKey(code) }
+    }
+
     /**
-     * Graba en los cuatro traseros la firma que identifica a cada uno (una macro cortísima de Vista/Menú, de
-     * 5-10 ms). Con eso el servicio sabe qué trasero se apretó y puede darle una acción distinta en cada app.
-     * Se hace una vez; después, cada reinstalación del control no la borra.
+     * Deja los traseros listos sin que el usuario tenga que saber nada: al mando hay que ponerle una «marca» en
+     * cada trasero para poder distinguirlos, y la app la pone sola cuando hace falta (al asignarles algo en
+     * «Gestos»). [loud] = comprobar los cuatro y avisarlo en el estado (botón manual).
      */
-    fun writeSignatures() = launchIo {
+    fun preparePaddles(loud: Boolean = false) = launchIo {
         val s = state
-        val res = withContext(Dispatchers.IO) {
-            PADDLE_SIGNATURES.map { sig ->
+        if (!s.connected) {
+            if (loud) s.fail(tr("Conecta el mando para preparar los traseros.", "Connect the controller to prepare the paddles."))
+            return@launchIo
+        }
+        var hechos = 0
+        var fallos = 0
+        withContext(Dispatchers.IO) {
+            for (sig in PADDLE_SIGNATURES) {
+                if (!loud && !paddleHasRules(sig.back)) continue
                 val m = signatureMacro(sig)
-                // Los ajustes van PRIMERO: escribirlos después de los pasos los borra.
-                G9Usb.transact(MacroGcm.writeSettings(sig.back.id, m))
-                G9Usb.transact(MacroGcm.writeSteps(sig.back.id, m.steps))
-                Triple(
-                    sig,
-                    MacroGcm.parseSteps(G9Usb.transact(MacroGcm.read(sig.back.id))),
-                    G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u(),
-                )
+                var mapping = G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
+                if (mapping != BACK_MACRO) {
+                    G9Usb.transact(MacroGcm.writeSettings(sig.back.id, m))
+                    G9Usb.transact(MacroGcm.writeSteps(sig.back.id, m.steps))
+                    mapping = G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
+                    // Si el mando no lo deja apuntando a su macro, se le dice explícitamente.
+                    if (mapping != BACK_MACRO) {
+                        G9Usb.transact(Gcm.setBackKey(sig.back.id, BACK_MACRO))
+                        mapping = G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
+                    }
+                    // Se relee la macro para dejar los pasos confirmados.
+                    MacroGcm.parseSteps(G9Usb.transact(MacroGcm.read(sig.back.id)))?.let { pasos ->
+                        if (pasos.size == m.steps.size) s.macros[sig.back.id] = m.copy(steps = pasos)
+                    }
+                }
+                if (mapping != null) s.backKeys[sig.back.id] = mapping
+                if (mapping == BACK_MACRO) hechos++ else fallos++
             }
         }
-        var bad = 0
-        res.forEach { (sig, steps, mapping) ->
-            val ok = steps != null && steps.size == sig.codes.size && steps.map { it.key } == signatureMacro(sig).steps.map { it.key }
-            if (ok) s.macros[sig.back.id] = signatureMacro(sig).copy(steps = steps!!) else bad++
-            if (mapping != null) s.backKeys[sig.back.id] = mapping
-        }
         s.appliedBackKeys = s.backKeys.toMap()
-        if (bad == 0) s.status = tr("Firmas grabadas en los 4 traseros.", "Signatures written to the 4 paddles.")
-        else s.fail(tr("$bad firma(s) no se pudieron confirmar.", "$bad signature(s) couldn't be confirmed."))
+        when {
+            fallos > 0 -> s.fail(tr("No pude preparar $fallos trasero(s): apriétalos y vuelve a intentarlo.",
+                                    "Couldn't prepare $fallos paddle(s): press them and try again."))
+            loud -> s.status = tr("Traseros preparados ($hechos).", "Paddles prepared ($hechos).")
+        }
     }
 
     /**

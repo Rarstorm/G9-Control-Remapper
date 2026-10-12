@@ -129,4 +129,23 @@ Los 4 puntos de `2026-10-11-sesion-registro-modificaciones.md`, en una sola pasa
 - [x] App lanzada por adb: **sin crash**; accesibilidad y `shizuku_server` activos.
 - [x] En pantalla: pestaña «Ajustes rápidos», Traseros con filas llenas + «Borrar todos», «Botones mapeados: "Todas las apps"», resumen con «Ajustes rápidos», tiempos 200/330/500 ms en el orden nuevo.
 - [ ] **Probar en la tablet con el mando conectado** (hoy salía «Sin conexión»): traseros (Un toque / Doble toque), «Borrar todos», «Abrir una app» (con y sin Shizuku), cajón y páginas del launcher.
-- [ ] **Fusión visual** pendiente de la ronda pasada: una sola página «Botones». 
+- [ ] **Fusión visual** pendiente de la ronda pasada: una sola página «Botones».
+
+## 2026-10-11 (10ª parte — BUG de L4 en los traseros: diagnóstico y arreglo → 1.3.11)
+Roberto reportó que **L4 no hacía nada** con sus gestos de «Gestos» (en 1.3.7/1.3.8 el toque sí funcionaba). Esta vez se midió en vez de suponer.
+
+### Diagnóstico (pruebas, no teoría)
+- `logcat`: el canal de la app funciona (tag `G9Auto`); al apretar **A** llega `DIAG key k=96` (KEYCODE_BUTTON_A) y el kernel lo registra en `/dev/input/event8`.
+- Al apretar **L4**: **no llegaba NADA** — ni al servicio ni al kernel (`getevent` en el mando: 0 eventos en toda la ventana). La app no tenía nada que hacer: el mando no mandaba nada.
+- **Causa raíz**: al mando le faltaban las «marcas» (macros-firma) de los traseros. Se pierden al **reasignar un trasero** o con **«Borrar todos»** (`Gcm.clearBackKey` = restaurar). En 1.3.9 ese borrado existía y **no avisaba de nada**: todo se veía «bien» y el trasero estaba vacío.
+- **Arreglo inmediato**: volver a grabar las marcas → L4 volvió a funcionar. Confirmado en el kernel: **16 pares `BTN_SELECT → BTN_START`** encadenados (~18-20 ms cada uno), uno por pulsación; y en el log: `DIAG sig FIN L4 [109, 108]` + `firma de L4 … (regla=GestureRule(key=-11, tap=KEY, long=NOTIFICATIONS, dbl=PANEL, kc=31))`.
+
+### Arreglo de fondo
+- [x] **`preparePaddles()` (automático)**: si un trasero tiene gestos y en el mando le falta su marca, la app se la escribe **sola** (macro + `Gcm.setBackKey(id, 0xFF)` si el mando no lo pone solo) y **confirma releyendo** (mapping == 0xFF). Se dispara al **guardar un gesto de un trasero** en «Gestos». Nada de botones técnicos.
+- [x] **`writeSignatures()` = `preparePaddles(loud = true)`**: el botón manual (ahora **«Preparar los traseros»**) comprueba los cuatro y avisa si alguno no quedó.
+- [x] **Avisos en llano**: en «Gestos» y en «Traseros» la app avisa si un trasero no está preparado («al apretarlos no manda nada») y «Borrar todos» avisa de que desprepara los traseros.
+- [x] **«Mantener» ya no se ofrece en los traseros**: el mando manda un pulso de ~19 ms, así que **es imposible** distinguir si lo mantienes (probado: `BTN_SELECT DOWN/UP` y `BTN_START DOWN/UP` juntos). Se ocultó la fila y se explica en una línea; si Roberto quiere Notificaciones en L4, va en «Doble toque».
+- [x] **Copy sin jerga**: fuera «firmas», «grabar», «0xFF»; el único botón dice «Preparar los traseros» y su nota explica en una línea cuándo hace falta.
+- [x] Verificado en pantalla: en «Traseros» los cuatro aparecen como **«L4/R4/L5/R5 Macro»** (el mando los tiene), y no queda la palabra «firma» en la interfaz.
+- [ ] **Pendiente**: que Roberto confirme la 1.3.11-diag (asignar en «Gestos» → se prepara sola) y después **quitar los logs `DIAG`**, subir la versión limpia y cerrar el registro.
+
