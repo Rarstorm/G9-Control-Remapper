@@ -40,6 +40,19 @@ object Gcm {
     }
 
 
+    /**
+     * ¿El paquete escribe de verdad en el control (no es una lectura, ni el identificador, ni la vibración
+     * inmediata)? La barra de abajo lo usa para encender el «Guardado en el control» en todas las páginas.
+     */
+    fun isWrite(cmd: ByteArray): Boolean = when (cmd[0].u()) {
+        4 -> false                                             // vibración inmediata: no toca la memoria
+        0x1F -> cmd.getOrNull(1)?.u() != 0                    // traseros: 0 lee, 1 escribe, 2 restaura
+        0x1E -> cmd.getOrNull(1)?.u() != 0                    // distribución: 1E 00 lee
+        0x53 -> cmd.getOrNull(1)?.u()?.let { it != 0xFE && it != 0xFD } ?: false  // macros: FE y FD leen
+        33 -> cmd.getOrNull(1)?.u() != 0                      // gatillo rápido: sub 0 lee
+        else -> (cmd.getOrNull(3)?.u() ?: 0) != 0             // el resto: el 4.º byte es la acción
+    }
+
     /** Constructor genérico (GcmProtocol.y en la app oficial). */
     fun generic(cmd: Int, sub: Int, action: Int, payload: ByteArray? = null): ByteArray {
         val p = payload ?: ByteArray(0)

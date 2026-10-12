@@ -290,15 +290,13 @@ private fun HintBar(s: AppState) {
         if (!problem) { kotlinx.coroutines.delay(4000); shown = false }
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        // Estado de guardado de la página (siempre en el mismo lugar).
-        val save: (@Composable () -> Unit)? = when (s.page) {
-            Page.LIGHTS -> { { SaveStatus(s.lightsDirty, s.connected, s.lightsChangedAt,
-                MainActivity.LIGHTS_SAVE_MS, held = s.sliderHeld, quietMs = MainActivity.LIGHTS_QUIET_MS, modifier = Modifier) } }
-            Page.STICKS -> { { SaveStatus(s.sticksDirty, s.connected, modifier = Modifier) } }
-            Page.VIBRATION -> { { SaveStatus(s.vibrationDirty, s.connected, modifier = Modifier) } }
-            else -> null
-        }
-        if (save != null) { save(); Spacer(Modifier.width(20.dp)) }
+        // Aviso de guardado de TODA la app: mismas palabras y mismo sitio en cualquier pestaña, para que se
+        // note que un cambio (de luces, traseros, gestos, macros…) sí quedó escrito en el control.
+        SaveStatus(
+            s.savePending, s.connected, s.pendingAt, s.pendingWaitMs,
+            held = s.sliderHeld, quietMs = s.pendingQuietMs, doneAt = s.savedAt, modifier = Modifier
+        )
+        Spacer(Modifier.width(20.dp))
         Text(
             if (shown) s.status else "", Modifier.weight(1f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (problem) c.error else c.onSurfaceVariant
@@ -496,7 +494,7 @@ fun TwoPane(first: @Composable ColumnScope.() -> Unit, second: @Composable Colum
 @Composable
 fun SaveStatus(
     dirty: Boolean, known: Boolean, changedAt: Long = 0L, waitMs: Long = 0L,
-    held: Boolean = false, quietMs: Long = 0L, modifier: Modifier = Modifier.fillMaxWidth()
+    held: Boolean = false, quietMs: Long = 0L, doneAt: Long = 0L, modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     val c = MaterialTheme.colorScheme
     // Cuenta atrás hasta el guardado (si la página la usa). No corre con el dedo sobre un slider ni
@@ -542,9 +540,12 @@ fun SaveStatus(
                 Text(tr("Guardando…", "Saving…"), fontSize = 13.sp, color = c.primary)
             }
             else -> {
-                Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = Color(0xFF3DDC84))
+                // Recién guardado: se enseña en verde un momento para que se note que sí se escribió.
+                val fresh = doneAt > 0L && android.os.SystemClock.uptimeMillis() - doneAt < 3000L
+                val tint = if (fresh) Color(0xFF3DDC84) else c.onSurfaceVariant
+                Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = tint)
                 Spacer(Modifier.width(8.dp))
-                Text(tr("Guardado en el control", "Saved to the controller"), fontSize = 13.sp, color = c.onSurfaceVariant)
+                Text(tr("Guardado en el control", "Saved to the controller"), fontSize = 13.sp, color = tint)
             }
         }
     }

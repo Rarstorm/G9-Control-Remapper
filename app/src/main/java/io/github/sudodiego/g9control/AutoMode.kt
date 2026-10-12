@@ -293,9 +293,21 @@ class AutoModeService : AccessibilityService() {
      */
     private val signatures = SignatureDetector(
         main,
-        resend = { code -> scope.launch { Shell.run(Shell.keyEvent(code)) } },
+        onLost = { code -> lostSignatureKey(code) },
         onPaddle = { back -> runPaddle(back) },
     )
+
+    /**
+     * Vista/Menú que resultaron NO ser la firma de un trasero. Si esa app los usa como botones de gestos, se le
+     * pasan al motor de gestos (como si se acabaran de apretar); si no, se reenvían a la app tal cual. Antes se
+     * reenviaban siempre: en esta ROM el reenvío de Menú abría la app Files y además se comía los gestos.
+     */
+    private fun lostSignatureKey(code: Int) {
+        val rule = Gestures.rulesFor(this, lastPackage)[code]
+        if (rule != null && rule.any) {
+            gestures.onKey(this, lastPackage, code, true, 0) { act, kc, pkg -> runGestureAction(act, kc, pkg) }
+        } else scope.launch { Shell.run(Shell.keyEvent(code)) }
+    }
 
     /**
      * Pantalla apagada: la guía se quita (no tiene sentido en la pantalla de bloqueo). Al desbloquear,

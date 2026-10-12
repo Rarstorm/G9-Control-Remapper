@@ -171,6 +171,9 @@ object G9Usb {
      * Envía un paquete y, si [expectReply], espera la respuesta que coincide con comando y subcomando.
      * Devuelve null si no hubo respuesta válida.
      */
+    /** Aviso de guardado: lo enciende cada escritura de verdad (la barra de abajo lo muestra en toda la app). */
+    var onWrite: (() -> Unit)? = null
+
     @Synchronized
     fun transact(cmd: ByteArray, expectReply: Boolean = true): ByteArray? {
         val conn = connection ?: run { addLog(tr("Sin conexión", "Not connected")); return null }
@@ -183,6 +186,7 @@ object G9Usb {
             close()
             return null
         }
+        if (Gcm.isWrite(cmd)) runCatching { onWrite?.invoke() }
         if (!expectReply) return null
         val buf = ByteArray(inp.maxPacketSize)
         val deadline = System.currentTimeMillis() + 600

@@ -149,3 +149,32 @@ Roberto reportó que **L4 no hacía nada** con sus gestos de «Gestos» (en 1.3.
 - [x] Verificado en pantalla: en «Traseros» los cuatro aparecen como **«L4/R4/L5/R5 Macro»** (el mando los tiene), y no queda la palabra «firma» en la interfaz.
 - [ ] **Pendiente**: que Roberto confirme la 1.3.11-diag (asignar en «Gestos» → se prepara sola) y después **quitar los logs `DIAG`**, subir la versión limpia y cerrar el registro.
 
+## 2026-10-11 (11ª parte — L5/R5 y el «Files»: dos causas reales → 1.3.15-diag)
+### El mando FUSIONA pasos seguidos del mismo botón (dato nuevo del firmware)
+Las firmas de L5/R5 eran `Vista,Vista,Menú` y `Menú,Menú,Vista`. Al apretar L5 llegaban a Android **solo dos botones**
+(`109,108` = la firma de L4): el firmware mantiene el botón apretado entre pasos iguales y lo entrega como **un solo
+botón largo**. Por eso L5/R5 nunca se reconocían: la app leía la firma de L4/R4. Comprobado con las pulsaciones de
+Roberto (log `G9Auto`) y con las macros grabadas leídas por USB (`53 FE 06 01..04`): el mando **sí** tenía los 4 pasos
+distintos guardados, el problema era cómo los emite.
+- **Firmas nuevas (1.3.15)**: L4 `Vista,Menú` · R4 `Menú,Vista` · L5 `Vista,Menú,Vista` · R5 `Menú,Vista,Menú`
+  (sin dos pasos iguales seguidos). L5/R5 son el principio de L4/R4, así que el detector **espera 60 ms**
+  ([`EXTEND_MS`]) por si viene el botón que falta antes de disparar la corta.
+- **Reescritura automática**: `preparePaddles` ya no se fía de que el trasero apunte a su macro: compara **los pasos**
+  y reescribe si no son los de ahora; y se llama solo al leer el mando si algún trasero tiene gestos.
+### Vista/Menú: el reenvío del detector abría «Files» y se comía los gestos
+`SignatureDetector` retenía Vista/Menú 80 ms y, al no ser firma, los **reenviaba** con `input keyevent`: en esta ROM
+el reenvío de Menú abría la app **Files** (buscador) y, como el servicio no ve las teclas inyectadas, los gestos de
+Menú de esa app nunca se disparaban. Ahora, si esa app usa Vista/Menú como botones de gestos, el botón se le pasa al
+motor de gestos ([`lostSignatureKey`]); solo se reenvía si la app no los usa.
+### Otros arreglos de la misma ronda
+- **Regresión propia**: bajé la ventana del detector a 45 ms y **L4 dejó de responder** (la firma tarda ~20 ms pero el
+  sistema puede tardar más). Ventana a 90 ms.
+- **Guardado silencioso**: si el control no está conectado, el guardado automático se saltaba el cambio **sin decir
+  nada**. Ahora avisa («El control no está conectado: el cambio no se guardó.»).
+- **Aviso de guardado global** (idea de Roberto, del de Luces): mismo aviso en **todas** las pestañas, con cuenta
+  atrás + barra mientras está en cola, spinner al escribir y **✓ verde** al terminar; se enciende con cualquier
+  escritura real (`Gcm.isWrite`, gancho en `G9Usb.onWrite`).
+- **«Botones mapeados» agrupado** por gesto: «Un toque:», «Doble toque:», «Mantener:» con `botón → acción`.
+- **Lección de proceso**: un `ZipFile` abierto en el kernel de Python bloqueaba `app-release.apk` y hacía fallar
+  `packageRelease` («Unable to delete directory»). Cerrar el handle antes de compilar.
+

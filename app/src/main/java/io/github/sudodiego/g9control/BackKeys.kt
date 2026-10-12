@@ -153,21 +153,17 @@ fun BackPage(s: AppState, a: MainActivity) {
             OutlinedButton(onClick = { a.clearAllBackKeys() }, enabled = editable && !s.busy) {
                 Text(tr("Borrar todos", "Clear all"))
             }
-            // Si un trasero deja de responder, se prepara desde aquí, en llano (nada de «firmas»).
-            OutlinedButton(onClick = { a.preparePaddles(loud = true) }, enabled = s.connected && !s.busy) {
-                Text(tr("Preparar los traseros", "Prepare the paddles"))
-            }
-            Hint(
-                tr("Solo si al apretar un trasero no pasa nada: la app los prepara sola cuando les asignas algo en «Gestos». Reasignar un trasero aquí o «Borrar todos» los desprepara.",
-                    "Only if pressing a paddle does nothing: the app prepares them on its own when you assign something in “Gestures”. Reassigning a paddle here or “Clear all” un-prepares them.")
-            )
-            // Recordatorio cuando de verdad importa: hay gestos de trasero y alguno se quedó sin firma.
+            // Solo si de verdad pasa algo (un trasero dejó de mandar): una línea y el botón de arreglarlo.
             val sinFirma = BackKey.entries.filter { s.backKeys[it.id] != null && s.backKeys[it.id] != BACK_MACRO }
             val hayReglasTrasero = remember(s.backKeys) { Gestures.rules(a).keys.any { it in PADDLE_KEYCODE.values } }
-            if (s.connected && sinFirma.isNotEmpty() && hayReglasTrasero) Hint(
-                tr("Recordatorio: " + sinFirma.joinToString { it.label } + " no está(n) preparado(s): sus gestos de «Gestos» no se van a usar hasta prepararlos.",
-                    "Reminder: " + sinFirma.joinToString { it.label } + " isn't/aren't prepared: their “Gestures” won't be used until you prepare them.")
-            )
+            if (s.connected && sinFirma.isNotEmpty() && hayReglasTrasero) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tr("Al apretar un trasero no pasa nada.", "Pressing a paddle does nothing."),
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = { a.writeSignatures() }, enabled = !s.busy) { Text(tr("Arreglar", "Fix")) }
+            }
             when {
                 !s.connected ->
                     Hint(tr("Conecta el control en modo Android para cambiarlos.", "Connect the controller in Android mode to change them."))

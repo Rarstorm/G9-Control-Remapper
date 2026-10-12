@@ -103,6 +103,8 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
         startTriggerPreview()
         startAutoSave()
+        // Cualquier escritura de verdad (luces, traseros, gestos, macros, perfiles…) enciende el aviso de la barra.
+        G9Usb.onWrite = { state.saved() }
     }
 
     /**
@@ -116,7 +118,14 @@ class MainActivity : ComponentActivity() {
             quietMs: Long, read: () -> T, ready: () -> Boolean, onChange: () -> Unit = {}, save: () -> Unit
         ) = lifecycleScope.launch {
             snapshotFlow(read).drop(1).onEach { onChange() }.debounce(quietMs).collect {
-                if (ready() && !applyingProfile && G9Usb.isOpen()) save()
+                if (!ready() || applyingProfile) return@collect
+                // Antes, sin control conectado, el cambio se quedaba sin guardar en silencio (y no había forma
+                // de saberlo): ahora se avisa en la barra de abajo.
+                if (G9Usb.isOpen()) save()
+                else state.fail(tr(
+                    "El control no está conectado: el cambio no se guardó.",
+                    "The controller isn't connected: the change wasn't saved."
+                ))
             }
         }
         val s = state
@@ -125,13 +134,18 @@ class MainActivity : ComponentActivity() {
         watch(
             LIGHTS_QUIET_MS + LIGHTS_SAVE_MS, { listOf(s.left, s.right, s.homeToSend(), s.sliderHeld) },
             { s.connected && s.lightsDirty && !s.sliderHeld },
-            onChange = { s.lightsChangedAt = android.os.SystemClock.uptimeMillis() }
+            onChange = {
+                s.lightsChangedAt = android.os.SystemClock.uptimeMillis()
+                s.queued(LIGHTS_SAVE_MS, LIGHTS_QUIET_MS)
+            }
         ) { applyLights() }
         // Listo para escribir = el control conectado, NO que su lectura haya salido bien: si la lectura falló,
         // los cambios del usuario se escriben igual en vez de perderse en silencio.
         watch(700, { listOf(s.deadZones.toMap(), s.quickL, s.quickR, s.dpadLock, s.swapDpad, s.sliderHeld) },
-            { s.connected && s.sticksDirty && !s.sliderHeld }) { saveSticks() }
-        watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) }) { saveVibration() }
+            { s.connected && s.sticksDirty && !s.sliderHeld },
+            onChange = { s.queued(0L, 0L) }) { saveSticks() }
+        watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) },
+            onChange = { s.queued(0L, 0L) }) { saveVibration() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -561,6 +575,8 @@ class MainActivity : ComponentActivity() {
                     s.appliedBackKeys = s.backKeys.toMap()
                     s.macros.clear(); s.macros.putAll(macros)
                 }
+                // Marcas nuevas (sin pasos repetidos): se rehacen solas al leer el mando, si el trasero tiene gestos.
+                if (s.connected && BackKey.entries.any { paddleHasRules(it) }) preparePaddles(loud = false)
                 if (layout != null) s.abSwapped = layout == 0x04
                 s.devInfo = buildList {
                     if (basic != null && basic.size >= 19) {
@@ -895,7 +911,12 @@ class MainActivity : ComponentActivity() {
                 if (!loud && !paddleHasRules(sig.back)) continue
                 val m = signatureMacro(sig)
                 var mapping = G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
-                if (mapping != BACK_MACRO) {
+                // Las marcas viejas (con pasos repetidos, que el mando manda como un botón largo) se reescriben
+                // aunque el trasero ya esté apuntando a su macro: si no, seguirían sin distinguirse.
+                val pasosHoy = G9Usb.transact(MacroGcm.read(sig.back.id))?.let { MacroGcm.parseSteps(it) }
+                val pasosOk = pasosHoy != null && pasosHoy.size == m.steps.size &&
+                    pasosHoy.indices.all { pasosHoy[it].key == m.steps[it].key }
+                if (mapping != BACK_MACRO || !pasosOk) {
                     G9Usb.transact(MacroGcm.writeSettings(sig.back.id, m))
                     G9Usb.transact(MacroGcm.writeSteps(sig.back.id, m.steps))
                     mapping = G9Usb.transact(Gcm.readBackKey(sig.back.id))?.takeIf { it.size >= 5 }?.get(3)?.u()
@@ -1106,6 +1127,20 @@ class AppState {
     var appliedHome by mutableStateOf<Light?>(null)
     /** Último cambio en las luces (uptime): la barra de "Guardando en 2 s" cuenta desde aquí. */
     var lightsChangedAt by mutableStateOf(0L)
+    /** Última escritura terminada (uptime): la barra de abajo lo enseña en verde un momento. */
+    var savedAt by mutableStateOf(0L)
+    /** Cambio en cola de guardar: cuándo se hizo y con qué ventana (la cuenta atrás de la barra de abajo). */
+    var pendingAt by mutableStateOf(0L)
+    var pendingWaitMs by mutableStateOf(0L)
+    var pendingQuietMs by mutableStateOf(0L)
+    /** Hay algo esperando a guardarse (luces, zonas muertas o vibración). */
+    val savePending: Boolean get() = lightsDirty || sticksDirty || vibrationDirty
+    /** Una escritura terminó: la barra de abajo lo enseña en todas las páginas. */
+    fun saved() { savedAt = android.os.SystemClock.uptimeMillis() }
+    /** Un cambio quedó en cola de guardar. */
+    fun queued(waitMs: Long, quietMs: Long) {
+        pendingAt = android.os.SystemClock.uptimeMillis(); pendingWaitMs = waitMs; pendingQuietMs = quietMs
+    }
     /** Prueba de botones en curso (se entra a propósito con "Probar botones"). */
     private var testModeState by mutableStateOf(false)
     /**

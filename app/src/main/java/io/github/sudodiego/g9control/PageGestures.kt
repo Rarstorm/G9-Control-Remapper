@@ -135,24 +135,23 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         )
                     }
                 }
-                TextButton(onClick = { a.writeSignatures() }, enabled = s.connected && !s.busy) {
-                    Text(tr("Preparar los traseros", "Prepare the paddles"))
-                }
-                // Sin firma grabada el trasero no manda nada al apretarlo: hay que decirlo bien claro (pasó:
-                // se veía todo «bien» y el trasero estaba vacío, así que parecía que la app no hacía nada).
+                // Nada de explicaciones cuando todo va bien. La app prepara los traseros sola; esto solo sale
+                // si de verdad al apretar un trasero no pasa nada (una línea, y el botón de arreglarlo).
                 val sinFirma = BackKey.entries.filter { s.backKeys[it.id] != null && s.backKeys[it.id] != BACK_MACRO }
                 val hayReglasTrasero = remember(rev) {
                     Gestures.rules(a).keys.any { it in PADDLE_KEYCODE.values } ||
                         Gestures.apps(a).any { p -> Gestures.appRules(a, p).keys.any { it in PADDLE_KEYCODE.values } }
                 }
-                if (s.connected && sinFirma.isNotEmpty() && (hayReglasTrasero || selPaddle != null)) Hint(
-                    tr("Los traseros no están preparados: al apretarlos no manda nada. Toca «Preparar los traseros».",
-                        "The paddles aren't prepared: pressing them sends nothing. Tap “Prepare the paddles”.")
-                )
-                Hint(
-                    tr("Solo hace falta si al apretar un trasero no pasa nada: la app los prepara sola la primera vez que les asignas algo aquí.",
-                        "Only needed if pressing a paddle does nothing: the app prepares them on its own the first time you assign something here.")
-                )
+                if (s.connected && sinFirma.isNotEmpty() && (hayReglasTrasero || selPaddle != null)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            tr("Al apretar un trasero no pasa nada.", "Pressing a paddle does nothing."),
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        OutlinedButton(onClick = { a.writeSignatures() }, enabled = !s.busy) { Text(tr("Arreglar", "Fix")) }
+                    }
+                }
                 Hint(
                     tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando».",
                         "Tap a button on the drawing, or press it on the controller with “Learn from controller”.")
@@ -183,8 +182,8 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                 if (selPaddle == null) {
                     GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
                 } else Hint(
-                    tr("Un trasero solo distingue un toque de un doble toque: el mando no puede saber si lo mantienes.",
-                        "A paddle only tells a single tap from a double tap: the controller can't know if you hold it.")
+                    tr("En un trasero no hay «Mantener»: el mando no distingue si lo dejas apretado.",
+                        "There's no “Long-press” on a paddle: the controller can't tell if you hold it.")
                 )
 
                 // La tecla solo aparece si algún gesto la usa: el mando NO envía teclas de teclado,
@@ -259,7 +258,25 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         tr("Botones mapeados: ", "Mapped buttons: ") + "\"$scopeLabel\"",
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(summary, fontSize = 13.sp)
+                    // Agrupado por gesto: «Un toque: Y → tecla A», así se lee de un vistazo (idea de Roberto).
+                    val slots: List<Pair<String, (GestureRule) -> GestureAction>> = listOf(
+                        tr("Un toque", "One tap") to { r -> r.tap },
+                        tr("Doble toque", "Double tap") to { r -> r.dbl },
+                        tr("Mantener", "Long-press") to { r -> r.long },
+                    )
+                    slots.forEach { (title, slot) ->
+                        val rows = scopeRules.entries.filter { it.value.any && slot(it.value) != GestureAction.NONE }
+                        if (rows.isEmpty()) return@forEach
+                        Text(
+                            "$title:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)
+                        )
+                        rows.forEach { (k, r) ->
+                            Row(Modifier.padding(start = 14.dp)) {
+                                Text(gestureKeyLabel(k) + " → " + gestureActionName(slot(r), r.kc, r.pkg, labels), fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
                 // Tiempos de los gestos: antes solo se podían cambiar por dentro (g_tap_max, g_long, g_double).
                 // Los tres sliders a la vez ocupaban mucho: se elige el tiempo con un botón y debajo sale solo
