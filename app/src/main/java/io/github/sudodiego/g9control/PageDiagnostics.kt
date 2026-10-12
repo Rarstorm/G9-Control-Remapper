@@ -245,7 +245,7 @@ fun NoticesPanel(s: AppState, a: MainActivity) {
  */
 @Composable
 private fun GamePanelSettings(s: AppState, a: MainActivity) {
-    var on by remember { mutableStateOf(AutoRules.gamePanel(a)) }
+    var on by remember { mutableStateOf(MouseRules.chord(a)) }
     var guide by remember { mutableStateOf(AutoRules.legionKeys(a)) }
     var burst by remember { mutableStateOf(AutoRules.burstShots(a)) }
     var shotPos by remember { mutableStateOf(AutoRules.shotPos(a)) }
@@ -262,8 +262,8 @@ private fun GamePanelSettings(s: AppState, a: MainActivity) {
                     "The one in the middle of the controller (Legion on the G9, Xbox, PS or Home). Tap: Back. Hold: game panel. With RB: screenshot. With LB: hold Back (with Shizuku). While streaming from a PC (Artemis, Moonlight…) it goes to the PC.")) {
                 guide = it; AutoRules.setLegionKeys(a, it)
             }
-            SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Para controles sin botón guía. Tocar: abre el panel. Mantener: captura.", "For controllers without a guide button. Tap: opens the panel. Hold: screenshot.")) {
-                on = it; AutoRules.setGamePanel(a, it)
+            SwitchRow(tr("L3 + R3", "L3 + R3"), on, tr("Enciende y apaga el puntero del ratón. Se configura en su pestaña.", "Turns the mouse pointer on and off. Set it up in its own tab.")) {
+                on = it; MouseRules.setChord(a, it)
             }
             SwitchRow(tr("Ráfaga de capturas", "Screenshot burst"), burst,
                 tr("Guía + RB y seguir manteniendo RB: una captura por segundo hasta soltarlo.", "Guide + RB and keep holding RB: one screenshot per second until you let go.")) {

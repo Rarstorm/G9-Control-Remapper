@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.DisplaySettings
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Restore
@@ -506,6 +507,7 @@ class GamePanel(private val svc: AutoModeService) {
         val needs = tr("Necesita Shizuku", "Needs Shizuku")
         // El juego. La captura toma solo la ventana del juego: no hace falta esperar a que el panel desaparezca.
         add(PanelItem(tr("Captura", "Screenshot"), Icons.Outlined.Screenshot, sub = tr("También: guía + RB", "Also: guide + RB")) { hide(); screenshot() })
+        add(PanelItem(tr("Ratón", "Mouse"), Icons.Outlined.Mouse, sub = if (MouseRules.live) tr("Puntero encendido", "Pointer on") else "L3 + R3", active = MouseRules.live) { svc.toggleMouse() })
         if (ZuiGame.inGame(svc)) {
             // Oculto: abrirlo. Visible: solo ocultarlo (abrirlo ya está a mano con su pestaña).
             val gaVisible = gaShownByUs || ZuiGame.hiddenNow == false

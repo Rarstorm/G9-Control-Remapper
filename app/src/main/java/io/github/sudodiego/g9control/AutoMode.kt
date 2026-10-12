@@ -116,7 +116,11 @@ object AutoRules {
     fun showLabel(ctx: Context) = sp(ctx).getBoolean("show_label", true)
     fun setShowLabel(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("show_label", v).apply()
 
-    /** L3 + R3 abre el panel de juego (captura, Game Assistant, modo del control). */
+    /**
+     * Opción vieja de «L3 + R3 abre el panel de juego»: ya no se usa — esa combinación es ahora el puntero del
+     * ratón (ver [MouseRules.chord]) y el panel se abre manteniendo el botón guía. Se deja por compatibilidad con
+     * los respaldos, pero no la lee nadie.
+     */
     fun gamePanel(ctx: Context) = sp(ctx).getBoolean("game_panel", true)
     fun setGamePanel(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("game_panel", v).apply()
 
@@ -285,6 +289,14 @@ class AutoModeService : AccessibilityService() {
 
     /** Motor de gestos: botones con gestos configurados (tocar / mantener / doble toque). */
     private val gestures = GestureEngine(main, onPass = { code -> injectKey(code) })
+
+    /**
+     * Emulación de ratón (el puntero de «L3 + R3»): dibuja el puntero encima de todo y saca los clics como gestos
+     * inyectados en su posición. El stick lo mueve con velocidad, suavidad, curva y zona muerta configurables.
+     */
+    private val mouse by lazy {
+        MouseMode(this, main, { cmd -> scope.launch { Shell.run(cmd) } }, { x1, y1, x2, y2 -> swipe(x1, y1, x2, y2) })
+    }
 
     /**
      * Detector de las firmas de los traseros (Vista/Menú en 5 ms): reconoce la secuencia que lleva grabada cada
@@ -613,6 +625,7 @@ class AutoModeService : AccessibilityService() {
         ZuiBattery.init(this)
         ZuiGame.initPerf(this)
         updateTouchpad()
+        updateMouse()
         getSharedPreferences("g9", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, main)
         getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(displayListener, main)
@@ -771,7 +784,7 @@ class AutoModeService : AccessibilityService() {
         // Imagen congelada (cambiando el rendimiento): moverse sin ver a dónde, no. Los sticks los toma su ventana.
         if (panel.busy && (KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
                 event.isFromSource(InputDevice.SOURCE_DPAD))) return true
-        if (panelChord(event)) return true
+        if (mouseChord(event)) return true
         if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
         if (legionKey(event)) return true
@@ -801,6 +814,12 @@ class AutoModeService : AccessibilityService() {
                 lastPackage = fresh
                 gpkg = fresh
             }
+        }
+        // El botón de «arrastrar»: se apunta dónde estaba el puntero al apretarlo, para saber de dónde sale.
+        if (!appInFront && !KeyBus.testing && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && mouse.isOn) {
+            val mr = Gestures.rulesFor(this, gpkg)[k]
+            if (mr != null && (mr.tap == GestureAction.MOUSE_DRAG || mr.long == GestureAction.MOUSE_DRAG || mr.dbl == GestureAction.MOUSE_DRAG))
+                mouse.rememberOrigin()
         }
         if (!appInFront && !KeyBus.testing && gestures.onKey(this, gpkg, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
@@ -903,6 +922,21 @@ class AutoModeService : AccessibilityService() {
             // horizontal, así que se hace ese deslizamiento.
             GestureAction.PAGE_NEXT -> swipe(0.86f, 0.5f, 0.12f, 0.5f)
             GestureAction.PAGE_PREV -> swipe(0.14f, 0.5f, 0.88f, 0.5f)
+            // Ratón: si el puntero estaba apagado, una acción suya lo enciende (si no, no habría dónde hacer el
+            // clic y parecería que el botón no hace nada).
+            GestureAction.MOUSE_CLICK, GestureAction.MOUSE_RIGHT, GestureAction.MOUSE_DOUBLE, GestureAction.MOUSE_DRAG,
+            GestureAction.WHEEL_UP, GestureAction.WHEEL_DOWN -> {
+                if (!MouseRules.on(this)) { MouseRules.setOn(this, true); updateMouse() }
+                when (a) {
+                    GestureAction.MOUSE_RIGHT -> mouse.rightClick()
+                    GestureAction.MOUSE_DOUBLE -> mouse.doubleClick()
+                    GestureAction.MOUSE_DRAG -> mouse.drag()
+                    GestureAction.WHEEL_UP -> mouse.wheel(-1)
+                    GestureAction.WHEEL_DOWN -> mouse.wheel(1)
+                    else -> mouse.click()
+                }
+            }
+            GestureAction.MOUSE_TOGGLE -> toggleMouse()
             // Secuencia de teclas (macro corta): se manda tecla a tecla, con una pausa para que el juego la
             // vea como pulsaciones separadas. Va con origen de mando, que es el que atienden los juegos.
             GestureAction.COMBO -> if (combo.isNotEmpty()) scope.launch {
@@ -1168,6 +1202,7 @@ class AutoModeService : AccessibilityService() {
     /** Al cambiar la opción en Ajustes se aplica enseguida (no recién al reconectar el control). */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "touchpad_shot") updateTouchpad()
+        if (key?.startsWith("mouse_") == true) updateMouse()
         if (key?.startsWith("smart_bypass") == true) evaluateBypass()
         if (key == "charge_limit") evaluateBypass()
         if ((key == "perf_hud" || key == "perf_pos") && ::perfHud.isInitialized) perfHud.update()
@@ -1239,7 +1274,8 @@ class AutoModeService : AccessibilityService() {
 
     private fun applyMotionSources() {
         if (android.os.Build.VERSION.SDK_INT < 34) return
-        val sources = (if (touchpadOn) InputDevice.SOURCE_MOUSE else 0) or (if (panelSticks) InputDevice.SOURCE_JOYSTICK else 0)
+        val sources = (if (touchpadOn) InputDevice.SOURCE_MOUSE else 0) or
+            (if (panelSticks || mouseSticks) InputDevice.SOURCE_JOYSTICK else 0)
         runCatching { serviceInfo = serviceInfo.apply { motionEventSources = sources } }
             .onFailure { Log.w(TAG, "no se pudieron pedir los eventos de movimiento", it) }
     }
@@ -1250,7 +1286,12 @@ class AutoModeService : AccessibilityService() {
      * llegan mientras [updateTouchpad] los pidió.
      */
     override fun onMotionEvent(event: MotionEvent) {
-        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) { if (panel.isOpen) panel.onStick(event); return }
+        // Ejes del control: los usa el panel (para navegarlo) o el puntero del ratón (para moverse). Mientras
+        // uno de los dos está activo, los ejes son suyos y no llegan al juego.
+        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+            if (panel.isOpen) panel.onStick(event) else if (mouse.isOn) mouse.onStick(event)
+            return
+        }
         if (!event.isFromSource(InputDevice.SOURCE_MOUSE)) return
         val now = android.os.SystemClock.uptimeMillis()
         val quiet = now - lastTouchpad > 1500
@@ -1265,45 +1306,46 @@ class AutoModeService : AccessibilityService() {
     private val sticksDown = mutableSetOf<Int>()
     /** El stick que completó L3 + R3: ni su presión ni su soltar llegan al juego. */
     private var chordKey = -1
-    /** L3 + R3 apretados y todavía sin decidir si es toque (panel) o mantener (captura). */
-    private var chordPending = false
-
-    /** L3 + R3 mantenidos medio segundo: captura directa, sin abrir el panel. */
-    private val chordHold = Runnable {
-        if (!chordPending) return@Runnable
-        chordPending = false
-        Log.d(TAG, "L3 + R3 mantenidos: captura")
-        panel.hide()
-        panel.capture()
-    }
 
     /**
-     * L3 + R3: tocarlos abre o cierra el panel de juego; mantenerlos 0,5 s saca la captura directamente.
-     * El primero de los dos llega al juego como siempre (no se sabe todavía si viene el otro); el segundo
-     * se lo queda el panel. No funciona mientras está la guía.
+     * L3 + R3: enciende y apaga el puntero del ratón (como en Mantis Gamepad), en cualquier app, en el launcher o
+     * en el cajón de apps. El primero de los dos sticks llega al juego como siempre (todavía no se sabe si viene
+     * el otro); el segundo se lo queda el ratón. Sin gestos asignados, los sticks no cambian nada más.
      */
-    private fun panelChord(e: KeyEvent): Boolean {
+    private fun mouseChord(e: KeyEvent): Boolean {
         val k = e.keyCode
         if (k != KeyEvent.KEYCODE_BUTTON_THUMBL && k != KeyEvent.KEYCODE_BUTTON_THUMBR) return false
+        if (!MouseRules.chord(this)) return false
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (e.repeatCount > 0) return k == chordKey
                 sticksDown += k
-                if (sticksDown.size == 2 && AutoRules.gamePanel(this) && !guide.isGuiding) {
-                    chordKey = k
-                    chordPending = true
-                    main.postDelayed(chordHold, 500)
-                    return true
-                }
+                if (sticksDown.size == 2 && !guide.isGuiding) { chordKey = k; toggleMouse(); return true }
             }
             KeyEvent.ACTION_UP -> {
                 sticksDown -= k
-                // Se soltó antes del medio segundo: era un toque.
-                if (chordPending) { chordPending = false; main.removeCallbacks(chordHold); panel.toggle() }
                 if (k == chordKey) { chordKey = -1; return true }
             }
         }
         return false
+    }
+
+    /** Enciende o apaga el puntero (L3 + R3, la pestaña «Ratón» o el mosaico del panel de juego). */
+    fun toggleMouse() {
+        val want = !MouseRules.on(this)
+        MouseRules.setOn(this, want)
+        updateMouse()
+        Log.d(TAG, if (want) "puntero del ratón encendido" else "puntero del ratón apagado")
+        if (this::panel.isInitialized)
+            panel.message(if (want) tr("Puntero del ratón encendido", "Mouse pointer on") else tr("Puntero del ratón apagado", "Mouse pointer off"))
+    }
+
+    /** El puntero está encendido: sus sticks los lee la app (Android no deja mirarlos sin quedárselos). */
+    private var mouseSticks = false
+    private fun updateMouse() {
+        val want = MouseRules.on(this)
+        if (want != mouseSticks) { mouseSticks = want; applyMotionSources() }
+        mouse.sync()
     }
 
     private val transientCache = mutableMapOf<String, Boolean>()

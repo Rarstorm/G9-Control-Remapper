@@ -235,3 +235,20 @@ Roberto volvió de probar la **1.3.15-diag** con tres quejas; salió a probar la
 **Verificación.** `:app:assembleRelease` **BUILD SUCCESSFUL** (1.3.20-diag, versionCode 26) → `app/build/outputs/apk/release/app-release.apk`, 2.777.095 bytes, sha256 `cb2ff43fbd5565d425c8121378e3bb20e85eba40abdd40fe8929bcfaae7a10e4`. La tablet se reinició y quedó desconectada: **instalación pendiente de que Roberto la conecte** (y ahí se rehace el ADB inalámbrico).
 
 **Pendiente:** (1) instalar por adb la 1.3.20-diag + ADB inalámbrico; (2) prueba de Roberto de los 9 puntos; (3) sigue en la lista: mouse y sus botones (F6 del plan), fusión visual «Gestos»+«Traseros», gesto en Home con «Botón guía» encendido.
+
+## 2026-10-12 (14ª parte — 1.4.0-diag: emulación de ratón con L3 + R3, al estilo Mantis)
+
+**Cómo funciona (y qué se puede y qué no, según la documentación de Android).**
+- Android **no tiene ninguna API de ratón**: la única inyección sin root es `AccessibilityService.dispatchGesture` (toques/deslizamientos; el XML del servicio ya traía `canPerformGestures="true"`). Así que el **puntero lo dibuja la app** (una ventana `TYPE_ACCESSIBILITY_OVERLAY`, la misma del panel, de pantalla completa y sin toques: mover el ratón es solo repintar) y **el clic es un toque inyectado justo ahí**. Por eso funciona en cualquier sitio: launcher, cajón de apps o dentro de una app.
+- Los ejes del stick se leen por `setMotionEventSources` (API 34, docs oficiales: admite `SOURCE_JOYSTICK`), lo mismo que ya usaba el panel para navegarse. **Mientras el puntero está encendido, ese stick lo lee la app y el juego no lo ve**; al apagarlo vuelve tal cual.
+- Un gesto inyectado se manda entero (no se puede ir moviendo mientras el dedo está apoyado): el **arrastre** se resuelve al soltar (`MOUSE_DRAG`), de donde estaba el puntero al apretar hasta donde esté ahora.
+
+**Lo que se hizo.**
+- `Mouse.kt` (nuevo): `MouseRules` (opciones, en las preferencias `g9`) + `MouseMode` (puntero, movimiento y clics). `MouseMode` lee el stick con **zona muerta radial**, **curva/aceleración** configurable y **suavidad** (filtro exponencial); el clic es un toque de 55 ms, el clic derecho un toque largo (menú contextual, lo más cerca del botón derecho sin root), el doble clic dos toques y la rueda un deslizamiento corto (o `input mouse roll` por Shizuku, con caída al deslizamiento).
+- **L3 + R3 enciende y apaga el puntero** (`AutoMode.mouseChord` + `toggleMouse`), en cualquier app. La combinación **antes abría el panel / sacaba la captura**: eso queda **deprecado** y fuera de los textos de la UI (`PageTabletHome` deja de anunciarla y el interruptor de `PageDiagnostics` pasa a ser el del ratón). El panel sigue con el botón guía y la captura con guía + RB o M dos veces en DS5.
+- Pestaña nueva **«Ratón»** (`PageMouse.kt`): encender/apagar ahora, stick (izquierdo/derecho/el que muevas), **Velocidad (DPI) 200–4000**, **Suavidad 0–90 %**, **Curva 0–100 %**, **Zona muerta 0–40 %**, modo de rueda y cuánto avanza cada paso.
+- Categoría **«Ratón»** en «Gestos»: clic (toque), clic derecho (menú), doble clic, arrastrar, rueda arriba, rueda abajo y «Puntero: encender/apagar» — botón por botón y por app (`Aplica a`). Si una acción de ratón se dispara con el puntero apagado, se enciende sola (si no, no habría dónde hacer el clic).
+- Mosaico **«Ratón»** en el panel de juego (ajustes rápidos) para encenderlo/apagarlo sin soltar el control.
+- Versión **1.4.0-diag (versionCode 27)**; `assembleRelease` **BUILD SUCCESSFUL**.
+
+**Pendiente al conectar la tableta:** instalar por adb (se saltó la 1.3.20: esta 1.4.0 la incluye) + ADB inalámbrico; y **comprobar el comando de la rueda real** (`adb shell input` imprime los comandos de ese Android): si `input mouse roll` no existe, ya cae sola al deslizamiento y la opción «rueda de verdad» se marca como no disponible.

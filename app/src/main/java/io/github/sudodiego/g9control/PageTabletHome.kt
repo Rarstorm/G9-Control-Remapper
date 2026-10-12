@@ -91,7 +91,7 @@ private fun QuickPanel(a: MainActivity) {
 
 /**
  * Controles conectados ahora, de cualquier marca. El G9 con su modo (y el acceso a su sección); los demás solo el
- * nombre: el panel de juego, las capturas con L3 + R3 y el monitor sirven con cualquiera.
+ * nombre: el panel de juego (botón guía), las capturas y el monitor sirven con cualquiera.
  */
 @Composable
 private fun ControllersPanel(s: AppState) {
@@ -129,13 +129,13 @@ private fun ControllersPanel(s: AppState) {
 private fun ShortcutsHelp() {
     Panel(tr("Atajos del mando", "Controller shortcuts")) {
         // El botón guía es el del centro de cualquier control (Legion en el G9, Xbox, PS, Home).
-        HelpRow(tr("Ajustes rápidos", "Quick settings"), tr("Mantener el botón guía, o tocar L3 + R3", "Hold the guide button, or tap L3 + R3"))
-        HelpRow(tr("Captura", "Screenshot"), tr("Botón guía + RB, o mantener L3 + R3 · En el G9 en DS5, también M dos veces",
-            "Guide button + RB, or hold L3 + R3 · On the G9 in DS5, also M twice"))
+        HelpRow(tr("Ajustes rápidos", "Quick settings"), tr("Mantener el botón guía", "Hold the guide button"))
+        HelpRow(tr("Captura", "Screenshot"), tr("Botón guía + RB · En el G9 en DS5, también M dos veces",
+            "Guide button + RB · On the G9 in DS5, also M twice"))
         HelpRow(tr("Atrás", "Back"), tr("Tocar el botón guía · Mantener Atrás: guía + LB", "Tap the guide button · Hold Back: guide + LB"))
         // Transmitiendo, el botón guía es del PC: la captura tiene que ir por otro lado.
         HelpRow(tr("Transmitiendo (Artemis, Moonlight)", "Streaming (Artemis, Moonlight)"),
-            tr("El botón guía va al PC. Captura: mantener L3 + R3, o M dos veces en el G9 en DS5", "The guide button goes to the PC. Screenshot: hold L3 + R3, or M twice on the G9 in DS5"))
+            tr("El botón guía va al PC. Captura: M dos veces en el G9 en DS5", "The guide button goes to the PC. Screenshot: M twice on the G9 in DS5"))
         Text(tr("Botón guía: el del centro del control (Legion en el G9, Xbox, PS u Home).", "Guide button: the one in the middle of the controller (Legion on the G9, Xbox, PS or Home)."),
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

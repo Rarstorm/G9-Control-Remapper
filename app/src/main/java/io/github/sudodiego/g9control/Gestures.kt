@@ -17,6 +17,7 @@ val GESTURE_CATS: List<Pair<String, String>> = listOf(
     "Apps" to "Apps",
     "Launcher" to "Launcher",
     "Entradas" to "Input",
+    "Ratón" to "Mouse",
 )
 
 /** Qué hace un gesto de un botón. `cat` = categoría del menú (índice de [GESTURE_CATS]). */
@@ -28,7 +29,7 @@ enum class GestureAction(val es: String, val en: String, val cat: Int) {
     RECENTS("Recientes", "Recents", 1),
     NOTIFICATIONS("Notificaciones", "Notifications", 1),
     SCREENSHOT("Captura", "Screenshot", 1),
-    /** Abre «Ajustes rápidos» (el mismo panel de mantener el botón guía o L3 + R3). */
+    /** Abre «Ajustes rápidos» (el mismo panel de mantener el botón guía). */
     PANEL("Ajustes rápidos", "Quick settings", 1),
     // Media
     PLAY_PAUSE("Reproducir / Pausa", "Play / Pause", 2),
@@ -62,7 +63,19 @@ enum class GestureAction(val es: String, val en: String, val cat: Int) {
      */
     KEY("Tecla del teclado", "Keyboard key", 6),
     /** Varias teclas seguidas (una macro corta): los códigos van en [GestureRule.combo]. */
-    COMBO("Secuencia de teclas", "Key sequence", 6);
+    COMBO("Secuencia de teclas", "Key sequence", 6),
+    // Ratón: lo que hace el puntero de «L3 + R3» (ver Mouse.kt).
+    /** Un toque donde está el puntero: el clic normal. */
+    MOUSE_CLICK("Clic (toque)", "Click (tap)", 7),
+    /** Toque largo: en las apps abre el menú contextual (el clic derecho sin root). */
+    MOUSE_RIGHT("Clic derecho (menú)", "Right click (menu)", 7),
+    MOUSE_DOUBLE("Doble clic", "Double click", 7),
+    /** Mantener apretado: al soltar arrastra de donde estaba el puntero a donde esté ahora. */
+    MOUSE_DRAG("Arrastrar", "Drag", 7),
+    WHEEL_UP("Rueda arriba", "Scroll up", 7),
+    WHEEL_DOWN("Rueda abajo", "Scroll down", 7),
+    /** Enciende o apaga el puntero (lo mismo que L3 + R3). */
+    MOUSE_TOGGLE("Puntero: encender/apagar", "Pointer: on/off", 7);
 
     companion object {
         fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE
