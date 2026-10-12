@@ -294,7 +294,8 @@ private fun HintBar(s: AppState) {
         // note que un cambio (de luces, traseros, gestos, macros…) sí quedó escrito en el control.
         SaveStatus(
             s.savePending, s.connected, s.pendingAt, s.pendingWaitMs,
-            held = s.sliderHeld, quietMs = s.pendingQuietMs, doneAt = s.savedAt, modifier = Modifier
+            held = s.sliderHeld, quietMs = s.pendingQuietMs, doneAt = s.savedAt,
+            enControl = s.savedEnControl, modifier = Modifier
         )
         Spacer(Modifier.width(20.dp))
         Text(
@@ -494,7 +495,8 @@ fun TwoPane(first: @Composable ColumnScope.() -> Unit, second: @Composable Colum
 @Composable
 fun SaveStatus(
     dirty: Boolean, known: Boolean, changedAt: Long = 0L, waitMs: Long = 0L,
-    held: Boolean = false, quietMs: Long = 0L, doneAt: Long = 0L, modifier: Modifier = Modifier.fillMaxWidth()
+    held: Boolean = false, quietMs: Long = 0L, doneAt: Long = 0L, enControl: Boolean = true,
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     val c = MaterialTheme.colorScheme
     // Cuenta atrás hasta el guardado (si la página la usa). No corre con el dedo sobre un slider ni
@@ -540,12 +542,21 @@ fun SaveStatus(
                 Text(tr("Guardando…", "Saving…"), fontSize = 13.sp, color = c.primary)
             }
             else -> {
-                // Recién guardado: se enseña en verde un momento para que se note que sí se escribió.
-                val fresh = doneAt > 0L && android.os.SystemClock.uptimeMillis() - doneAt < 3000L
+                // Recién guardado: verde 3 s y vuelve a gris. Antes se quedaba verde para siempre (daba igual
+                // un cambio que ninguno, así que no avisaba de nada) porque nadie recalculaba el «recién».
+                var fresh by remember { mutableStateOf(false) }
+                LaunchedEffect(doneAt) {
+                    fresh = doneAt > 0L
+                    if (fresh) { kotlinx.coroutines.delay(3000); fresh = false }
+                }
                 val tint = if (fresh) Color(0xFF3DDC84) else c.onSurfaceVariant
                 Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = tint)
                 Spacer(Modifier.width(8.dp))
-                Text(tr("Guardado en el control", "Saved to the controller"), fontSize = 13.sp, color = tint)
+                Text(
+                    if (enControl) tr("Guardado en el control", "Saved to the controller")
+                    else tr("Guardado en la app", "Saved in the app"),
+                    fontSize = 13.sp, color = tint
+                )
             }
         }
     }

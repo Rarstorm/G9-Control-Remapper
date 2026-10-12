@@ -284,7 +284,7 @@ class AutoModeService : AccessibilityService() {
         private set
 
     /** Motor de gestos: botones con gestos configurados (tocar / mantener / doble toque). */
-    private val gestures = GestureEngine(main)
+    private val gestures = GestureEngine(main, onPass = { code -> injectKey(code) })
 
     /**
      * Detector de las firmas de los traseros (Vista/Menú en 5 ms): reconoce la secuencia que lleva grabada cada
@@ -298,6 +298,20 @@ class AutoModeService : AccessibilityService() {
     )
 
     /**
+     * Devuelve un botón a la app tal cual (no se pudo dar el evento original). Primero con origen de mando:
+     * los juegos solo atienden ese. Si el sistema no acepta el comando, se reenvía como tecla normal.
+     */
+    private fun injectKey(code: Int) {
+        if (code <= 0) return   // los traseros usan códigos internos negativos: no son teclas
+        scope.launch {
+            val out = Shell.run(Shell.keyEventPad(code))
+            if (out == null || out.contains("rror", true) || out.contains("sage", true)) {
+                Shell.run(Shell.keyEvent(code))
+            }
+        }
+    }
+
+    /**
      * Vista/Menú que resultaron NO ser la firma de un trasero. Si esa app los usa como botones de gestos, se le
      * pasan al motor de gestos (como si se acabaran de apretar); si no, se reenvían a la app tal cual. Antes se
      * reenviaban siempre: en esta ROM el reenvío de Menú abría la app Files y además se comía los gestos.
@@ -305,7 +319,7 @@ class AutoModeService : AccessibilityService() {
     private fun lostSignatureKey(code: Int) {
         val rule = Gestures.rulesFor(this, lastPackage)[code]
         if (rule != null && rule.any) {
-            gestures.onKey(this, lastPackage, code, true, 0) { act, kc, pkg -> runGestureAction(act, kc, pkg) }
+            gestures.onKey(this, lastPackage, code, true, 0) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }
         } else scope.launch { Shell.run(Shell.keyEvent(code)) }
     }
 
@@ -762,12 +776,16 @@ class AutoModeService : AccessibilityService() {
         if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES) {
             val rules = Gestures.rulesFor(this, lastPackage)
             val hayTrasero = rules.keys.any { it in PADDLE_KEYCODE.values }
-            Log.d(TAG, "DIAG firma alcanzada k=$k hayTrasero=$hayTrasero claves=${rules.keys}")
-            if (hayTrasero && signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)) return true
+            // Salida por app: si en ESTA app has configurado Vista o Menú (aunque sea «Nada»), esos botones son
+            // suyos y llegan tal cual (en un juego las teclas reinyectadas no las ve: Eden no veía Menú). A
+            // cambio, en esa app no se reconocen los traseros, porque el mando los firma justo con esos botones.
+            val losUsaLaApp = SIG_KEYCODES.any { Gestures.appRules(this, lastPackage.orEmpty()).containsKey(it) }
+            Log.d(TAG, "DIAG firma alcanzada k=$k hayTrasero=$hayTrasero losUsaLaApp=$losUsaLaApp claves=${rules.keys}")
+            if (hayTrasero && !losUsaLaApp && signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)) return true
         }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
-        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg -> runGestureAction(act, kc, pkg) }) return true
+        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -837,7 +855,7 @@ class AutoModeService : AccessibilityService() {
      * Ejecuta la acción de un gesto. `kc` es la tecla elegida cuando la acción es [GestureAction.KEY] y
      * `pkg` la app cuando es [GestureAction.OPEN_APP].
      */
-    private fun runGestureAction(a: GestureAction, kc: Int = 0, pkg: String = "") {
+    private fun runGestureAction(a: GestureAction, kc: Int = 0, pkg: String = "", combo: List<Int> = emptyList()) {
         when (a) {
             GestureAction.NONE -> {}
             GestureAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
@@ -864,6 +882,15 @@ class AutoModeService : AccessibilityService() {
             // horizontal, así que se hace ese deslizamiento.
             GestureAction.PAGE_NEXT -> swipe(0.86f, 0.5f, 0.12f, 0.5f)
             GestureAction.PAGE_PREV -> swipe(0.14f, 0.5f, 0.88f, 0.5f)
+            // Secuencia de teclas (macro corta): se manda tecla a tecla, con una pausa para que el juego la
+            // vea como pulsaciones separadas. Va con origen de mando, que es el que atienden los juegos.
+            GestureAction.COMBO -> if (combo.isNotEmpty()) scope.launch {
+                for ((i, c) in combo.withIndex()) {
+                    if (i > 0) kotlinx.coroutines.delay(70)
+                    val out = Shell.run(Shell.keyEventPad(c))
+                    if (out == null || out.contains("rror", true) || out.contains("sage", true)) Shell.run(Shell.keyEvent(c))
+                }
+            }
             // Tecla de teclado: el mando no las envía, así que la inyecta Shizuku (`input keyevent`).
             GestureAction.KEY -> if (kc != 0) scope.launch {
                 if (Shell.run(Shell.keyEvent(kc)) == null) {
@@ -886,7 +913,7 @@ class AutoModeService : AccessibilityService() {
         // igual que en un botón normal (antes solo corría el toque). El mando manda una firma corta
         // (~25 ms), así que no hay forma de saber cuánto la mantuviste: el «Mantener» de un trasero no se
         // distingue (se avisa en la página de gestos).
-        gestures.onPress(this, lastPackage, code) { act, kc, pkg -> runGestureAction(act, kc, pkg) }
+        gestures.onPress(this, lastPackage, code) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }
     }
 
     /** Abre una app asignada a un gesto. Sin Shizuku se prueba el camino normal y, si falla, se avisa. */
@@ -1020,6 +1047,11 @@ class AutoModeService : AccessibilityService() {
         // manda y Home deja de ser Atrás/panel. Sin gesto, sigue igual que siempre.
         if (!appInFront && !guide.blocksInput && Gestures.rulesFor(this, lastPackage)[KeyEvent.KEYCODE_BUTTON_MODE]?.any == true) {
             Log.d(TAG, "Home tiene gesto: lo dejo pasar al motor de gestos")
+            return false
+        }
+        // Home configurado en ESTA app (aunque sea «Nada»): es suyo y llega tal cual (en Eden, por ejemplo).
+        if (!appInFront && Gestures.appRules(this, lastPackage.orEmpty()).containsKey(KeyEvent.KEYCODE_BUTTON_MODE)) {
+            Log.d(TAG, "Home configurado en esta app: llega tal cual")
             return false
         }
         when (e.action) {

@@ -70,6 +70,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
         if (key == 0) return   // sin botón elegido no se escribe nada
         val p = scope
         if (p == null) Gestures.setRule(a, r) else Gestures.setAppRule(a, p, r)
+        s.saved(enControl = false)   // los gestos se guardan en la app: se avisa igual
         rev++
         // Si es un trasero, la app lo deja preparado sola (no hay que saber nada de marcas ni de botones).
         if (selPaddle != null) a.preparePaddles()
@@ -92,7 +93,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                             Text(scopeLabel)
                             Icon(Icons.Filled.ArrowDropDown, null)
                         }
-                        DropdownMenu(pick, { pick = false }) {
+                        DropdownMenu(pick, { pick = false }, modifier = Modifier.heightIn(max = 420.dp)) {
                             // Solo el punto: qué tiene cada app se ve en «Botones mapeados», aquí estorbaba.
                             DropdownMenuItem(
                                 text = { Text(tr("Todas las apps", "All apps")) },
@@ -196,6 +197,38 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     )
                 }
 
+                // Secuencia de teclas: solo sale si algún gesto la usa. Esa es «la macro» de un juego: se
+                // asigna por app («Aplica a») y al salir de esa app vuelve lo de siempre.
+                if (shown.tap == GestureAction.COMBO || shown.dbl == GestureAction.COMBO || shown.long == GestureAction.COMBO) {
+                    Text(tr("Secuencia", "Sequence"), fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        shown.combo.forEachIndexed { i, step ->
+                            OutlinedButton(onClick = {
+                                write(shown.copy(combo = shown.combo.toMutableList().also { it.removeAt(i) }))
+                            }) { Text(gestureKeyName(step) + "  ✕") }
+                        }
+                        var addStep by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(onClick = { addStep = true }) {
+                                Text(tr("Añadir paso", "Add step"))
+                                Icon(Icons.Filled.ArrowDropDown, null)
+                            }
+                            DropdownMenu(addStep, { addStep = false }, modifier = Modifier.heightIn(max = 420.dp)) {
+                                GESTURE_KEYS.forEach { kk ->
+                                    DropdownMenuItem(
+                                        text = { Text(if (Lang.en) kk.en else kk.es) },
+                                        onClick = { addStep = false; write(shown.copy(combo = shown.combo + kk.kc)) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Hint(
+                        tr("Se mandan en orden, con ~70 ms entre cada una (necesita Shizuku).",
+                            "They're sent in order, ~70 ms apart (needs Shizuku).")
+                    )
+                }
+
                 // La app solo aparece si algún gesto es «Abrir una app».
                 if (shown.anyOpenApp) {
                     var pickApp by remember { mutableStateOf(false) }
@@ -206,7 +239,7 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                                 Text(shown.pkg.takeIf { it.isNotEmpty() }?.let { labels(it) } ?: tr("Elegir app…", "Choose app…"))
                                 Icon(Icons.Filled.ArrowDropDown, null)
                             }
-                            DropdownMenu(pickApp, { pickApp = false }) {
+                            DropdownMenu(pickApp, { pickApp = false }, modifier = Modifier.heightIn(max = 420.dp)) {
                                 apps.forEach { (p, l) ->
                                     DropdownMenuItem(text = { Text(l) }, onClick = { pickApp = false; write(shown.copy(pkg = p)) })
                                 }
@@ -311,7 +344,8 @@ private fun GestureRow(label: String, cur: GestureAction, onPick: (GestureAction
                 Text(if (Lang.en) cur.en else cur.es)
                 Icon(Icons.Filled.ArrowDropDown, null)
             }
-            DropdownMenu(open, { open = false }) {
+            // Con alto máximo: si no, las últimas acciones (Página anterior) quedaban cortadas y no se veían.
+            DropdownMenu(open, { open = false }, modifier = Modifier.heightIn(max = 420.dp)) {
                 GestureAction.entries.forEach { act ->
                     DropdownMenuItem(
                         text = { Text(if (Lang.en) act.en else act.es) },
@@ -348,7 +382,7 @@ private fun KeyPicker(cur: Int, onPick: (Int) -> Unit) {
                 Text(gestureKeyName(cur).ifEmpty { tr("Elegir tecla…", "Choose key…") })
                 Icon(Icons.Filled.ArrowDropDown, null)
             }
-            DropdownMenu(open, { open = false }) {
+            DropdownMenu(open, { open = false }, modifier = Modifier.heightIn(max = 420.dp)) {
                 GESTURE_KEYS.groupBy { it.group }.forEach { (g, keys) ->
                     val head = GESTURE_KEY_GROUPS.getOrNull(g)
                     if (head != null) Text(

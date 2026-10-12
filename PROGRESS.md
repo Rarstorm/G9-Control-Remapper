@@ -178,3 +178,33 @@ motor de gestos ([`lostSignatureKey`]); solo se reenvía si la app no los usa.
 - **Lección de proceso**: un `ZipFile` abierto en el kernel de Python bloqueaba `app-release.apk` y hacía fallar
   `packageRelease` («Unable to delete directory»). Cerrar el handle antes de compilar.
 
+
+
+## 2026-10-11 (12ª parte — RONDA 6: intercepción estilo Key Mapper, secuencias por app, ADB inalámbrico → 1.3.19-diag)
+Roberto volvió de probar la **1.3.15-diag** con tres quejas; salió a probar la **1.3.19-diag**.
+
+**1) Guardado y marcas (1.3.11 → 1.3.16-diag).**
+- El mando **había perdido las marcas de los traseros** (getevent: 0 pares Vista/Menú antes de la prueba, 16 después): los gestos estaban guardados, lo que faltaba era que el mando dijera cuál trasero se apretó. La app ahora **verifica y rehace las marcas sola** al leer el mando (`preparePaddles(loud = false)` si algún trasero tiene gestos) → ya no hay que remapear.
+- Sin control conectado el guardado **se saltaba en silencio**; ahora lo dice (`state.fail`). El aviso de guardado es global (cuenta atrás + barra), **verde solo 3 s**, y distingue **«Guardado en el control»** (mando) de **«Guardado en la app»** (gestos/perfiles).
+- «Botones mapeados» agrupado en **Un toque / Doble toque / Mantener**.
+
+**2) Intercepción estilo Key Mapper (1.3.18-diag) — lo que Roberto exigió, y tenía razón.**
+- Antes se interceptaba **el botón entero**; ahora: **con «Un toque» = Nada el botón NO se intercepta** (bypass directo, sin retardo ni reinyección) y la app solo **escucha**: captura la **segunda** pulsación de un doble toque (`GestureEngine.listen()`) y, en un mantener, mide la duración y dispara al soltar. Con «Un toque» asignado sí se captura (ese toque *es* la acción).
+- **Lo imposible sin root:** fabricar un mando virtual como hace KeyMapper → un doble toque deja pasar su primera pulsación al juego. Todo lo demás se puede.
+- **Salida por app** (`AutoMode`): si esa app tiene reglas para Vista/Menú/Home, esos botones son suyos y pasan tal cual — era lo que rompía **EDEN** (los gamepads ignoran teclas inyectadas).
+- **Reenvío con origen de mando:** `Shell.keyEventPad` = `input gamepad keyevent <n>` (los juegos sí lo atienden), con caída automática a `input keyevent`; patrón nuevo en la lista blanca de Shizuku.
+
+**3) «Secuencia de teclas» — la macro por app (1.3.19-diag).**
+- `GestureAction.COMBO` + `GestureRule.combo` (**7º campo** de la regla, `key|tap|long|dbl|kc|pkg|combo`, leyendo respaldos viejos) + `gestureActionName` con el resumen de la secuencia.
+- Editor de pasos en «Gestos»: se añade/quita cada paso; teclas del **mando** (A, B, X, Y, LB, RB, LT, RT, L3, R3, Vista, Menú) y de **sistema** (Atrás, Inicio, Recientes), además de flechas/letras/números/F1–F12.
+- En ejecución se manda tecla a tecla con ~70 ms de pausa y **origen de mando**. Ejemplo de Roberto resuelto: **R5 con «Aplica a: GameHub» = Atrás, Atrás, Arriba, Abajo, A**; al salir de GameHub vuelve lo general (por app, como el resto de gestos).
+
+**4) «Página anterior» y los desplegables (1.3.19-diag).**
+- La acción **sí existía** (deslizamiento al revés): el fallo real era que la **lista de acciones se cortaba** y las últimas no se veían → todos los desplegables con `Modifier.heightIn(max = 420.dp)` (acciones, teclas y apps).
+
+**5) Verificación (herramientas, no memoria).**
+- `assembleRelease` **BUILD SUCCESSFUL** (1.3.18 y 1.3.19); instalada **por adb con el cable** (`HA2HA6AQ`) → `Success`, **`firstInstallTime` 2026-10-11 00:42:25 intacto** (datos conservados) y **sin crash** al abrir.
+- **ADB inalámbrico re-validado:** lo activé desde el cable (`adb tcpip 5555`) y comprobé que responde sin cable (`192.168.68.106:5555`); el PC también la ve por USB. Se pierde al reiniciar la tablet.
+- **El G9 no estaba en la tablet** (`dumpsys input`: ningún gamepad; la app con cero tráfico USB) → **la prueba de los traseros/botones con el mando queda en manos de Roberto**.
+
+**Pendiente:** (1) prueba de Roberto con la 1.3.19-diag (traseros sin remapear, bypass con «Un toque: Nada» en EDEN, secuencia R5 en GameHub, páginas del launcher, «Abrir una app» con y sin Shizuku); (2) si aprueba → **F6 del plan: mouse y sus botones** (stick → mouse con curva; botón → tecla/botón de mouse); (3) arrastra la **fusión visual** («Gestos» + «Traseros» → página «Botones»), los 5 puntos de UI de la 1.3.4 y el gesto en **Home** con «Botón guía» encendido.

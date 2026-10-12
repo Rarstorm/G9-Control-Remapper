@@ -164,6 +164,9 @@ class MainActivity : ComponentActivity() {
         // ese caso autoConnect no lee nada y la app quedaría sin la configuración del control (no se podría
         // aplicar un perfil ni guardar ningún cambio, sin ningún aviso). Se lee aquí.
         if (G9Usb.isOpen() && !state.configKnown) readAll() else autoConnect(ask = true)
+        // Los traseros se comprueban cada vez que se vuelve a la app: si el mando perdió la marca de alguno,
+        // se le vuelve a poner sola. Sin esto había que «remapear» para que volvieran a funcionar.
+        if (state.connected && BackKey.entries.any { paddleHasRules(it) }) preparePaddles(loud = false)
         KeyBus.listener = { e -> if (state.testMode) addOtherKey(e, viaService = true) }
         // Si la prueba quedó abierta (o su aviso al servicio se perdió en pausa), se vuelve a sincronizar.
         state.syncBus()
@@ -1135,8 +1138,13 @@ class AppState {
     var pendingQuietMs by mutableStateOf(0L)
     /** Hay algo esperando a guardarse (luces, zonas muertas o vibración). */
     val savePending: Boolean get() = lightsDirty || sticksDirty || vibrationDirty
+    /** Si lo último guardado fue en el control (escritura USB) o en la app (ajustes propios, gestos…). */
+    var savedEnControl by mutableStateOf(true)
     /** Una escritura terminó: la barra de abajo lo enseña en todas las páginas. */
-    fun saved() { savedAt = android.os.SystemClock.uptimeMillis() }
+    fun saved(enControl: Boolean = true) {
+        savedEnControl = enControl
+        savedAt = android.os.SystemClock.uptimeMillis()
+    }
     /** Un cambio quedó en cola de guardar. */
     fun queued(waitMs: Long, quietMs: Long) {
         pendingAt = android.os.SystemClock.uptimeMillis(); pendingWaitMs = waitMs; pendingQuietMs = quietMs

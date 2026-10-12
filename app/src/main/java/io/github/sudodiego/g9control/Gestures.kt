@@ -27,7 +27,9 @@ enum class GestureAction(val es: String, val en: String) {
     /** Página siguiente del launcher: un deslizamiento hacia la izquierda. */
     PAGE_NEXT("Página siguiente", "Next page"),
     /** Página anterior del launcher: un deslizamiento hacia la derecha. */
-    PAGE_PREV("Página anterior", "Previous page");
+    PAGE_PREV("Página anterior", "Previous page"),
+    /** Varias teclas seguidas (una macro corta): los códigos van en [GestureRule.combo]. */
+    COMBO("Secuencia de teclas", "Key sequence");
 
     companion object { fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE }
 }
@@ -42,6 +44,8 @@ val GESTURE_KEY_GROUPS: List<Pair<String, String>> = listOf(
     "Letras" to "Letters",
     "Números" to "Numbers",
     "Función" to "Function",
+    "Mando" to "Controller",
+    "Sistema" to "System",
 )
 
 /** Teclas de teclado que se pueden asignar a un gesto (códigos de Android). */
@@ -65,7 +69,28 @@ val GESTURE_KEYS: List<GestureKey> =
     ) +
     ('A'..'Z').map { GestureKey(KeyEvent.KEYCODE_A + (it - 'A'), it.toString(), it.toString(), 2) } +
     (0..9).map { GestureKey(KeyEvent.KEYCODE_0 + it, it.toString(), it.toString(), 3) } +
-    (1..12).map { GestureKey(KeyEvent.KEYCODE_F1 + it - 1, "F$it", "F$it", 4) }
+    (1..12).map { GestureKey(KeyEvent.KEYCODE_F1 + it - 1, "F$it", "F$it", 4) } +
+    // Botones del mando: una secuencia de combate (p. ej. Atrás, Atrás, Arriba, Abajo, A) los necesita.
+    listOf(
+        GestureKey(KeyEvent.KEYCODE_BUTTON_A, "A", "A", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_B, "B", "B", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_X, "X", "X", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_Y, "Y", "Y", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_L1, "LB", "LB", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_R1, "RB", "RB", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_L2, "LT", "LT", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_R2, "RT", "RT", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_THUMBL, "L3", "L3", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_THUMBR, "R3", "R3", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_SELECT, "Vista", "View", 5),
+        GestureKey(KeyEvent.KEYCODE_BUTTON_START, "Menú", "Menu", 5),
+    ) +
+    // Teclas del sistema (las que se usan para «atrás» en una secuencia).
+    listOf(
+        GestureKey(KeyEvent.KEYCODE_BACK, "Atrás", "Back", 6),
+        GestureKey(KeyEvent.KEYCODE_HOME, "Inicio del sistema", "System Home", 6),
+        GestureKey(KeyEvent.KEYCODE_APP_SWITCH, "Recientes", "Recents", 6),
+    )
 
 /** Nombre de la tecla elegida (vacío si todavía no se eligió ninguna). */
 fun gestureKeyName(kc: Int): String =
@@ -76,10 +101,13 @@ fun gestureKeyName(kc: Int): String =
  * [GestureAction.OPEN_APP] al nombre de la app (null = todavía no se eligió ninguna).
  */
 fun gestureActionName(
-    a: GestureAction, kc: Int, pkg: String = "", appLabel: (String) -> String? = { null }
+    a: GestureAction, kc: Int, pkg: String = "", appLabel: (String) -> String? = { null },
+    combo: List<Int> = emptyList()
 ): String = when {
     a == GestureAction.KEY -> (if (Lang.en) "key " else "tecla ") + gestureKeyName(kc).ifEmpty { "?" }
     a == GestureAction.OPEN_APP -> appLabel(pkg) ?: tr("una app sin elegir", "an app not chosen")
+    a == GestureAction.COMBO -> (if (Lang.en) "sequence: " else "secuencia: ") +
+        combo.take(6).joinToString(" ", transform = { gestureKeyName(it) }) + if (combo.size > 6) "…" else ""
     else -> if (Lang.en) a.en else a.es
 }
 
@@ -95,9 +123,9 @@ fun gestureSummary(rules: Map<Int, GestureRule>, appLabel: (String) -> String? =
     .filter { it.value.any }
     .joinToString(" · ") { (k, r) ->
         val parts = listOfNotNull(
-            r.tap.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel) },
-            r.long.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel) },
-            r.dbl.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel) },
+            r.tap.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel, r.combo) },
+            r.long.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel, r.combo) },
+            r.dbl.takeIf { it != GestureAction.NONE }?.let { gestureActionName(it, r.kc, r.pkg, appLabel, r.combo) },
         )
         gestureKeyLabel(k) + " → " + parts.joinToString(", ")
     }
@@ -109,6 +137,8 @@ data class GestureRule(
     val kc: Int = 0,
     /** App que se abre cuando el gesto es [GestureAction.OPEN_APP] (paquete; vacío = sin elegir). */
     val pkg: String = "",
+    /** Teclas de [GestureAction.COMBO], en orden (códigos de Android). */
+    val combo: List<Int> = emptyList(),
 ) {
     val any get() = tap != GestureAction.NONE || long != GestureAction.NONE || dbl != GestureAction.NONE
     val anyKey get() = tap == GestureAction.KEY || long == GestureAction.KEY || dbl == GestureAction.KEY
@@ -157,13 +187,14 @@ object Gestures {
             it to GestureRule(
                 it, GestureAction.of(p[1]), GestureAction.of(p[2]), GestureAction.of(p[3]),
                 p.getOrNull(4)?.toIntOrNull() ?: 0,
-                p.getOrNull(5).orEmpty()
+                p.getOrNull(5).orEmpty(),
+                p.getOrNull(6).orEmpty().split(',').mapNotNull { it.trim().toIntOrNull() }
             )
         }
     }.toMap()
 
     private fun enc(m: Collection<GestureRule>) =
-        m.map { "${it.key}|${it.tap.name}|${it.long.name}|${it.dbl.name}|${it.kc}|${it.pkg}" }.toSet()
+        m.map { "${it.key}|${it.tap.name}|${it.long.name}|${it.dbl.name}|${it.kc}|${it.pkg}|${it.combo.joinToString(",")}" }.toSet()
 
     /** Toque = hasta tapMax ms; mantener = a partir de longMs; doble = dos toques dentro de doubleMs. */
     fun tapMax(ctx: Context) = sp(ctx).getInt("g_tap_max", 220)
@@ -218,33 +249,78 @@ object Gestures {
  * mantener o doble toque, y consume el evento (no llega a las apps). Un solo motor por servicio.
  * Las reglas se resuelven por app: las generales, pisadas por las propias de la app al frente.
  */
-class GestureEngine(private val handler: Handler) {
+class GestureEngine(
+    private val handler: Handler,
+    /**
+     * Un botón se apretó y el gesto que le tocaba es «Nada»: hay que devolverlo a la app tal cual, o el botón
+     * desaparece (con «Doble toque» asignado y «Un toque» en Nada, el toque normal no llegaba al juego).
+     */
+    private val onPass: (Int) -> Unit = {},
+) {
     private var longFired = false
     private var curRule: GestureRule? = null
-    private var curFire: ((GestureAction, Int, String) -> Unit)? = null
+    private var curFire: ((GestureAction, Int, String, List<Int>) -> Unit)? = null
     private var pendingKey = 0
     private var pendingAt = 0L
     private var pendingRule: GestureRule? = null
-    private var pendingFire: ((GestureAction, Int, String) -> Unit)? = null
+    private var pendingFire: ((GestureAction, Int, String, List<Int>) -> Unit)? = null
     private var swallowUp = false
 
     private val longRunnable = Runnable {
         longFired = true
         val r = curRule
-        if (r != null && r.long != GestureAction.NONE) curFire?.invoke(r.long, r.kc, r.pkg)
+        if (r == null) return@Runnable
+        if (r.long != GestureAction.NONE) curFire?.invoke(r.long, r.kc, r.pkg, r.combo) else onPass(r.key)
     }
 
     private val tapRunnable = Runnable {
         val r = pendingRule
         val f = pendingFire
+        val k = pendingKey
         pendingKey = 0; pendingRule = null; pendingFire = null
-        if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc, r.pkg)
+        if (r == null) return@Runnable
+        if (r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc, r.pkg, r.combo) else onPass(k)
+    }
+
+    private var lKey = 0
+    private var lAt = 0L
+    private var lPressAt = 0L
+    private var lSwallowUp = false
+
+    /**
+     * Escucha sin interceptar (modo Key Mapper). El botón llega entero a la app; aquí solo se mira si hay dos
+     * toques seguidos (se captura el segundo) o si se mantuvo lo suficiente para disparar «Mantener».
+     * @return true solo en la pulsación que sí es nuestra (el segundo toque de un doble).
+     */
+    private fun listen(
+        ctx: Context, rule: GestureRule, keyCode: Int, down: Boolean, repeatCount: Int,
+        fire: (GestureAction, Int, String, List<Int>) -> Unit
+    ): Boolean {
+        val now = SystemClock.uptimeMillis()
+        if (down) {
+            if (repeatCount > 0) return false
+            if (rule.dbl != GestureAction.NONE && lKey == keyCode && now - lAt <= Gestures.doubleMs(ctx)) {
+                lKey = 0; lSwallowUp = true
+                fire(rule.dbl, rule.kc, rule.pkg, rule.combo)
+                return true
+            }
+            lKey = keyCode; lAt = now; lPressAt = now; lSwallowUp = false
+            return false
+        }
+        if (lSwallowUp) { lSwallowUp = false; return true }   // el soltar del segundo toque sí es nuestro
+        if (rule.long != GestureAction.NONE && lKey == keyCode &&
+            now - lPressAt >= Gestures.longMs(ctx)
+        ) {
+            lKey = 0
+            fire(rule.long, rule.kc, rule.pkg, rule.combo)
+        }
+        return false
     }
 
     /** @return true si el evento es nuestro (se consumió y no llega a las apps). */
     fun onKey(
         ctx: Context, pkg: String?, keyCode: Int, down: Boolean, repeatCount: Int,
-        fire: (GestureAction, Int, String) -> Unit
+        fire: (GestureAction, Int, String, List<Int>) -> Unit
     ): Boolean {
         val rules = Gestures.rulesFor(ctx, pkg)
         // Al apretar otro botón, el toque que esperaba su doble se resuelve ya.
@@ -253,10 +329,15 @@ class GestureEngine(private val handler: Handler) {
             val r = pendingRule
             val f = pendingFire
             pendingKey = 0; pendingRule = null; pendingFire = null
-            if (r != null && r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc, r.pkg)
+            if (r != null) {
+                if (r.tap != GestureAction.NONE) f?.invoke(r.tap, r.kc, r.pkg, r.combo) else onPass(r.key)
+            }
         }
         val rule = rules[keyCode]
         if (rule == null || !rule.any) return false
+        // Modelo Key Mapper: con «Un toque» sin asignar, el botón NO se intercepta: pasa tal cual (al juego, al
+        // sistema…) y la app solo escucha el doble toque y el mantener, que sí están asignados.
+        if (rule.tap == GestureAction.NONE) return listen(ctx, rule, keyCode, down, repeatCount, fire)
 
         if (down) {
             if (repeatCount > 0) return true
@@ -265,7 +346,7 @@ class GestureEngine(private val handler: Handler) {
             if (pendingKey == keyCode && now - pendingAt <= Gestures.doubleMs(ctx)) {
                 handler.removeCallbacks(tapRunnable)
                 pendingKey = 0; pendingRule = null; pendingFire = null
-                if (rule.dbl != GestureAction.NONE) fire(rule.dbl, rule.kc, rule.pkg)
+                if (rule.dbl != GestureAction.NONE) fire(rule.dbl, rule.kc, rule.pkg, rule.combo) else onPass(keyCode)
                 swallowUp = true
                 return true
             }
@@ -284,7 +365,9 @@ class GestureEngine(private val handler: Handler) {
             pendingRule = rule; pendingFire = fire
             handler.postDelayed(tapRunnable, Gestures.doubleMs(ctx).toLong())
         } else if (rule.tap != GestureAction.NONE) {
-            fire(rule.tap, rule.kc, rule.pkg)
+            fire(rule.tap, rule.kc, rule.pkg, rule.combo)
+        } else {
+            onPass(keyCode)   // «Nada»: el botón sigue su camino normal (llega al juego)
         }
         return true
     }
@@ -294,7 +377,7 @@ class GestureEngine(private val handler: Handler) {
      * ~25 ms, así que no hay forma de saber cuánto la mantuviste: dispara el mismo camino que un botón
      * (un toque o, si la aprietas dos veces seguidas, el doble toque).
      */
-    fun onPress(ctx: Context, pkg: String?, keyCode: Int, fire: (GestureAction, Int, String) -> Unit): Boolean {
+    fun onPress(ctx: Context, pkg: String?, keyCode: Int, fire: (GestureAction, Int, String, List<Int>) -> Unit): Boolean {
         val down = onKey(ctx, pkg, keyCode, true, 0, fire)
         val up = onKey(ctx, pkg, keyCode, false, 0, fire)
         return down || up

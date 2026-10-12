@@ -49,6 +49,13 @@ object Shell {
     // el shell de Shizuku con `input keyevent <código>`. El código lo elige el usuario en «Gestos».
     fun keyEvent(code: Int) = "input keyevent $code"
     private val KEY_EVENT = Regex("input keyevent (--longpress )?\\d{1,3}")
+    /**
+     * El mismo botón, pero mandado «como si fuera del mando» (origen gamepad). Un juego atiende esto y no la
+     * tecla con origen de teclado: es lo que hacía que Eden no viera Menú/Vista. Si el sistema no lo admite,
+     * [Shell.run] devuelve el error y se cae al reenvío normal.
+     */
+    fun keyEventPad(code: Int) = "input gamepad keyevent $code"
+    private val KEY_PAD = Regex("input gamepad keyevent \\d{1,3}")
     // Abrir una app asignada a un gesto: Android no deja abrir actividades en segundo plano, pero el shell
     // de Shizuku sí (`am start -n paquete/actividad`). El paquete y la actividad salen de la propia app.
     fun amStart(component: String) = "am start -n $component"
@@ -72,7 +79,7 @@ object Shell {
 
     private fun allowed(cmd: String) =
         cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) ||
-            KEY_EVENT.matches(cmd) || AM_START.matches(cmd) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
+            KEY_EVENT.matches(cmd) || KEY_PAD.matches(cmd) || AM_START.matches(cmd) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */
