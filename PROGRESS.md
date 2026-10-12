@@ -208,3 +208,30 @@ Roberto volvió de probar la **1.3.15-diag** con tres quejas; salió a probar la
 - **El G9 no estaba en la tablet** (`dumpsys input`: ningún gamepad; la app con cero tráfico USB) → **la prueba de los traseros/botones con el mando queda en manos de Roberto**.
 
 **Pendiente:** (1) prueba de Roberto con la 1.3.19-diag (traseros sin remapear, bypass con «Un toque: Nada» en EDEN, secuencia R5 en GameHub, páginas del launcher, «Abrir una app» con y sin Shizuku); (2) si aprueba → **F6 del plan: mouse y sus botones** (stick → mouse con curva; botón → tecla/botón de mouse); (3) arrastra la **fusión visual** («Gestos» + «Traseros» → página «Botones»), los 5 puntos de UI de la 1.3.4 y el gesto en **Home** con «Botón guía» encendido.
+
+## 2026-10-12 (13ª parte — RONDA 7: los 9 puntos de Roberto → 1.3.20-diag)
+
+**1) El toque que se confundía con el nativo (Brave, Cocoon, NextPlayer… no solo Brave).**
+- Causa: al entrar a una app, `lastPackage` podía ir un paso atrás (el evento del mando llega antes del cambio de ventana) y el botón no encontraba su regla para esa app → pasaba tal cual (en Brave, «Y» abría su menú).
+- Arreglo: si el botón no tiene regla para el paquete que creemos al frente, se le pregunta a la ventana activa (`rootInActiveWindow.packageName`) y se corrige `lastPackage` — solo cuando hace falta, no en cada evento.
+- Además `GestureEngine.reset()` al cambiar de app: lo que quedaba a medias (un doble toque esperando su segundo, un mantener midiéndose) ya no se arrastra a la app nueva. Eso era «se come el primer toque al recién entrar».
+
+**2) Una tecla de teclado por gesto.** `GestureRule` pasa de UN `kc` a **`kcTap` / `kcLong` / `kcDbl`** y el formato de la regla es de **9 campos**: `key|tap|long|dbl|kcTap|kcLong|kcDbl|pkg|combo` (los respaldos de 4–7 campos se siguen leyendo: su tecla única va al gesto que era «Tecla del teclado»). En «Gestos» el selector de tecla sale **debajo del gesto** que sea «Tecla del teclado».
+
+**3) Lista de acciones por categorías.** `GESTURE_CATS` (Nada, Sistema, Media, Pantalla, Apps, Launcher, Entradas) + `GestureAction.cat`; el desplegable de cada gesto va en **dos pasos**: categoría → acción, con «‹ volver». Media nueva: siguiente/anterior pista, adelantar/retroceder, detener, silenciar (además de reproducir/pausa y volumen).
+
+**4) Bumpers y gatillos tocables.** Chips **LB / RB / LT / RT** en «Gestos», junto a los traseros: en el dibujo no se pueden tocar a propósito (quedan en el borde), así que ya no hay que pasar por «Aprender del mando».
+
+**5) Cajón de apps desde cualquier app.** `openAppDrawer()` prueba tres caminos en orden: (1) el intent público `android.intent.action.ALL_APPS` lanzado **por Shizuku**, (2) el mismo intent abierto a mano, (3) Inicio + deslizamiento. Antes solo deslizaba → funcionaba únicamente en el launcher.
+
+**6) Adelantar / retroceder video.** `seekVideo(±1)`: un deslizamiento horizontal **corto**, del tamaño elegido en «Tiempos» → **«Deslizamiento»** (2–30 %, 8 % por defecto), en lugar de «Página siguiente/anterior» (media pantalla: avanzaba muchísimo).
+
+**7) «Pantalla de inicio» como ámbito.** El launcher se saca del sistema (`resolveActivity` de `CATEGORY_HOME`) y sale arriba en «Aplica a»: sirve para lo que solo pasa ahí (cajón de apps, páginas del launcher).
+
+**8) Subir / Bajar brillo.** Usan `SystemLevels` (el mismo motor interno y el permiso que ya existían; solo faltaba la acción en la lista).
+
+**9) Reconexión sola del mando.** `reconnectController()`: si el control reaparece como dispositivo de entrada y la conexión no está abierta, se reabre **sola** (aprovecha el permiso USB «Usar siempre» ya guardado) tras 800 ms — antes había que abrir la app. Las marcas de los traseros siguen guardadas en el mando y la app las re-verifica al abrirse.
+
+**Verificación.** `:app:assembleRelease` **BUILD SUCCESSFUL** (1.3.20-diag, versionCode 26) → `app/build/outputs/apk/release/app-release.apk`, 2.777.095 bytes, sha256 `cb2ff43fbd5565d425c8121378e3bb20e85eba40abdd40fe8929bcfaae7a10e4`. La tablet se reinició y quedó desconectada: **instalación pendiente de que Roberto la conecte** (y ahí se rehace el ADB inalámbrico).
+
+**Pendiente:** (1) instalar por adb la 1.3.20-diag + ADB inalámbrico; (2) prueba de Roberto de los 9 puntos; (3) sigue en la lista: mouse y sus botones (F6 del plan), fusión visual «Gestos»+«Traseros», gesto en Home con «Botón guía» encendido.

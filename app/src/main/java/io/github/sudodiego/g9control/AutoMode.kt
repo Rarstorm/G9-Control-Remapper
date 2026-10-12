@@ -598,6 +598,7 @@ class AutoModeService : AccessibilityService() {
             updateTouchpad()
             updatePadWatch()
             if (ModeSwitcher.detect() == PadMode.ANDROID) returnPending = false
+            reconnectController()
             guide.update()
         }
     }
@@ -657,6 +658,10 @@ class AutoModeService : AccessibilityService() {
         val wasHidden = hiddenForApp
         hiddenForApp = false
         lastPackage = pkg
+        // Otra app: el motor de gestos suelta lo que quedaba a medias (un doble toque que esperaba su segundo
+        // toque, un mantener que se estaba midiendo). Si no, la primera pulsación en la app nueva se podía
+        // comer como continuación de la anterior.
+        gestures.reset()
         panel.hide()
         panel.onAppChanged()
         // Bypass automático: otra app, otra decisión ("solo en juegos"). Lo manual sigue valiendo hasta desconectar el
@@ -785,7 +790,19 @@ class AutoModeService : AccessibilityService() {
         }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
-        if (!appInFront && !KeyBus.testing && gestures.onKey(this, lastPackage, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }) return true
+        // Si este botón no tiene regla para la app que creemos al frente, se le pregunta a la ventana activa:
+        // justo al entrar a una app el paquete puede ir un paso atrás y entonces el botón se iba tal cual a la
+        // app (en Brave, «Y» abría su menú en vez de mandar la tecla). Solo se consulta cuando hace falta.
+        var gpkg = lastPackage
+        if (!appInFront && !KeyBus.testing && gpkg != null && Gestures.rulesFor(this, gpkg)[k] == null) {
+            val fresh = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+            if (!fresh.isNullOrEmpty() && fresh != gpkg && !isTransient(fresh)) {
+                Log.d(TAG, "paquete al frente corregido: $gpkg -> $fresh")
+                lastPackage = fresh
+                gpkg = fresh
+            }
+        }
+        if (!appInFront && !KeyBus.testing && gestures.onKey(this, gpkg, k, event.action == KeyEvent.ACTION_DOWN, event.repeatCount) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }) return true
         if (k != KeyEvent.KEYCODE_BUTTON_START && k != KeyEvent.KEYCODE_BUTTON_SELECT) {
             // Guía grande con bloqueo: el resto de los botones del control no llega a las apps.
             val fromPad = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
@@ -864,20 +881,24 @@ class AutoModeService : AccessibilityService() {
             GestureAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
             GestureAction.VOL_UP -> adjustVolume(AudioManager.ADJUST_RAISE)
             GestureAction.VOL_DOWN -> adjustVolume(AudioManager.ADJUST_LOWER)
-            GestureAction.PLAY_PAUSE -> {
-                val am = getSystemService(AudioManager::class.java)
-                am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-                am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-            }
+            GestureAction.PLAY_PAUSE -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            GestureAction.MEDIA_NEXT -> mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+            GestureAction.MEDIA_PREV -> mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            // Adelantar / retroceder: un deslizamiento corto, del tamaño elegido en «Gestos» → «Tiempos».
+            GestureAction.MEDIA_FF -> seekVideo(1)
+            GestureAction.MEDIA_REW -> seekVideo(-1)
+            GestureAction.MEDIA_STOP -> mediaKey(KeyEvent.KEYCODE_MEDIA_STOP)
+            GestureAction.MUTE -> SystemLevels.toggleMute(this)
+            GestureAction.BRIGHT_UP -> SystemLevels.stepBrightness(this, 1)
+            GestureAction.BRIGHT_DOWN -> SystemLevels.stepBrightness(this, -1)
             GestureAction.SCREENSHOT -> if (this::panel.isInitialized) panel.capture()
             // Ajustes rápidos: el mismo panel que se abre manteniendo el botón guía o L3 + R3.
             GestureAction.PANEL -> if (this::panel.isInitialized) panel.show()
             // Abrir una app: con Shizuku se abre por el shell (siempre puede); sin él se prueba el camino
             // normal, que Android solo deja si el sistema lo permite estando en segundo plano.
             GestureAction.OPEN_APP -> openApp(pkg)
-            // Cajón de apps: el launcher lo abre con un deslizamiento hacia arriba (Android no tiene una
-            // acción de accesibilidad para eso).
-            GestureAction.APP_DRAWER -> swipe(0.5f, 0.72f, 0.5f, 0.30f)
+            // Cajón de apps: primero el intent del launcher y, si no lo atiende, inicio + deslizamiento.
+            GestureAction.APP_DRAWER -> openAppDrawer()
             // Páginas del launcher: tampoco hay acción; el launcher cambia de página con un deslizamiento
             // horizontal, así que se hace ese deslizamiento.
             GestureAction.PAGE_NEXT -> swipe(0.86f, 0.5f, 0.12f, 0.5f)
@@ -955,6 +976,68 @@ class AutoModeService : AccessibilityService() {
         val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
         if (!dispatchGesture(g, null, null) && this::panel.isInitialized)
             panel.message(tr("No se pudo deslizar la pantalla.", "Couldn't swipe the screen."))
+    }
+
+    /**
+     * Adelantar / retroceder video. Los reproductores que se manejan con el dedo (NextPlayer, VLC…) entienden
+     * un deslizamiento horizontal como «buscar», y el salto es proporcional a lo que arrastras: por eso
+     * «Página siguiente/anterior» (que recorre media pantalla) avanzaba muchísimo. Aquí se usa el tamaño
+     * elegido en «Gestos» → «Tiempos» → «Deslizamiento» (8 % por defecto: un salto corto).
+     */
+    private fun seekVideo(dir: Int) {
+        val pct = Gestures.swipePct(this).coerceIn(2, 30) / 100f
+        if (dir > 0) swipe(0.5f - pct / 2, 0.5f, 0.5f + pct / 2, 0.5f, ms = 120)
+        else swipe(0.5f + pct / 2, 0.5f, 0.5f - pct / 2, 0.5f, ms = 120)
+    }
+
+    /** Tecla multimedia (reproducir, siguiente, anterior, detener…): el sistema la lleva al que esté sonando. */
+    private fun mediaKey(code: Int) {
+        val am = getSystemService(AudioManager::class.java)
+        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+    }
+
+    /**
+     * Cajón de apps desde cualquier app. Android no tiene una acción para abrirlo (cada launcher hace lo suyo),
+     * así que se prueban tres caminos en orden: (1) el intent público `android.intent.action.ALL_APPS`, que
+     * atienden pocos launchers pero es el más limpio — se lanza por Shizuku, que no lo frena la restricción de
+     * abrir actividades en segundo plano; (2) el mismo intent abierto a mano, sin Shizuku; (3) ir al inicio y
+     * deslizar hacia arriba, que es lo que hace el dedo y funciona en cualquier launcher (a cambio de salir de
+     * la app en la que estabas).
+     */
+    private fun openAppDrawer() {
+        val intent = Intent("android.intent.action.ALL_APPS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val comp = runCatching { packageManager.resolveActivity(intent, 0)?.activityInfo }.getOrNull()
+        if (comp != null && comp.packageName != "android") {
+            val flat = "${comp.packageName}/${comp.name}"
+            Log.d(TAG, "cajón de apps: el launcher lo atiende ($flat)")
+            if (Shell.state == Shell.State.READY) scope.launch { if (Shell.run(Shell.amStart(flat)) == null) openAppDirect(intent) }
+            else openAppDirect(intent)
+            return
+        }
+        Log.d(TAG, "cajón de apps: el launcher no atiende el intent -> inicio + deslizamiento")
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        main.postDelayed({ swipe(0.5f, 0.72f, 0.5f, 0.30f) }, 450)
+    }
+
+    /**
+     * El mando se duerme solo si no lo usas y, al despertar, la conexión USB ya se había caído: antes había que
+     * abrir la app para que se reconectara. Aquí se vuelve a abrir sola en cuanto el control reaparece como
+     * dispositivo de entrada (el aviso lo da el escucha de dispositivos, que ya vigilaba si el mando estaba).
+     * Necesita el permiso USB guardado («Usar siempre»), que es el que se pide la primera vez.
+     */
+    private fun reconnectController() {
+        if (G9Usb.isOpen()) return
+        val d = G9Usb.findDevice(this) ?: return
+        if (!G9Usb.hasPermission(this, d)) return
+        scope.launch {
+            kotlinx.coroutines.delay(800)   // el control tarda un momento en quedar listo tras despertar
+            if (G9Usb.isOpen()) return@launch
+            val err = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { G9Usb.open(this@AutoModeService) }.getOrNull()
+            }
+            Log.d(TAG, if (err == null) "mando reconectado solo" else "no se pudo reconectar el mando: $err")
+        }
     }
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */

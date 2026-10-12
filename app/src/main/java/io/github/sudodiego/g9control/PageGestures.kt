@@ -1,26 +1,36 @@
 package io.github.sudodiego.g9control
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
+ * Bumpers y gatillos (LB/RB/LT/RT). En el dibujo del control no se pueden tocar a propósito: están en el borde
+ * y quedan muy chicos, así que van como botones aparte, aquí junto a los traseros — antes la única forma de
+ * darles gestos era «Aprender del mando».
+ */
+private val BUMPER_KEYS = listOf(PadKey.LB, PadKey.RB, PadKey.LT, PadKey.RT)
+
+/**
  * Página «Gestos»: qué hace cada botón del control —al tocarlo, con doble toque o manteniéndolo— y qué
- * hace cada trasero. Todo se resuelve por app con el selector «Aplica a».
+ * hace cada trasero. Todo se resuelve por app con el selector «Aplica a», que incluye la pantalla de inicio
+ * (para lo que solo tiene sentido en el launcher: cajón de apps y páginas).
  */
 @Composable
 fun GesturesPage(s: AppState, a: MainActivity) {
@@ -33,6 +43,14 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     // Los traseros se configuran aquí mismo: su «botón» es un código interno y sus reglas se guardan por app.
     var selPaddle by remember { mutableStateOf<BackKey?>(null) }
     val key = selPaddle?.let { PADDLE_KEYCODE[it] } ?: sel?.let { PAD_KEYCODE[it] } ?: 0   // 0 = todavía no se tocó nada
+
+    // La pantalla de inicio (el launcher de la tablet): se saca del sistema, no de una lista escrita a mano.
+    val launcherPkg = remember {
+        runCatching {
+            val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            ctx.packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+        }.getOrNull()
+    }
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
@@ -64,7 +82,11 @@ fun GesturesPage(s: AppState, a: MainActivity) {
     // Un trasero manda un pulso de ~20 ms: no hay forma de saber si lo mantienes, así que no se ofrece.
     val shown = if (selPaddle != null) base.copy(long = GestureAction.NONE) else base
     val inherited = scope != null && appRule == null && globRule != null
-    val scopeLabel = scope?.let { p -> apps.firstOrNull { it.first == p }?.second ?: p } ?: tr("Todas las apps", "All apps")
+    val scopeLabel = when {
+        scope == null -> tr("Todas las apps", "All apps")
+        scope == launcherPkg -> tr("Pantalla de inicio", "Home screen")
+        else -> scope?.let { p -> apps.firstOrNull { it.first == p }?.second ?: p } ?: ""
+    }
 
     fun write(r: GestureRule) {
         if (key == 0) return   // sin botón elegido no se escribe nada
@@ -99,6 +121,14 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                                 text = { Text(tr("Todas las apps", "All apps")) },
                                 onClick = { pick = false; scope = null }
                             )
+                            // La pantalla de inicio, arriba y con nombre fijo: sirve para lo que solo pasa ahí
+                            // (cajón de apps, páginas del launcher) sin buscarla entre las apps.
+                            launcherPkg?.let { lp ->
+                                DropdownMenuItem(
+                                    text = { Text((if (lp in withRules) "● " else "") + tr("Pantalla de inicio", "Home screen")) },
+                                    onClick = { pick = false; scope = lp }
+                                )
+                            }
                             apps.sortedByDescending { it.first in withRules }.forEach { (p, l) ->
                                 DropdownMenuItem(
                                     text = { Text((if (p in withRules) "● " else "") + l) },
@@ -116,6 +146,16 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     // Home ya se puede usar (si tiene gesto, el servicio le deja pasar): lo que no se puede
                     // son los botones que no llegan a Android (M, sticks).
                     else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
+                }
+                Text(tr("Bumpers y gatillos", "Bumpers and triggers"), fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BUMPER_KEYS.forEach { k ->
+                        FilterChip(
+                            selected = sel == k,
+                            onClick = { sel = k; selPaddle = null },
+                            label = { Text(k.label) }
+                        )
+                    }
                 }
                 Text(tr("Botón con gestos", "Gesture button"), fontWeight = FontWeight.SemiBold)
                 if (s.learnGesture) {
@@ -154,8 +194,8 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     }
                 }
                 Hint(
-                    tr("Toca un botón del dibujo, o apriétalo en el mando con «Aprender del mando».",
-                        "Tap a button on the drawing, or press it on the controller with “Learn from controller”.")
+                    tr("Toca un botón del dibujo (o un bumper/gatillo), o apriétalo en el mando con «Aprender del mando».",
+                        "Tap a button on the drawing (or a bumper/trigger), or press it on the controller with “Learn from controller”.")
                 )
             }
         },
@@ -177,25 +217,24 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     Hint(tr("Toca un botón del dibujo (o elige un trasero) para ver y cambiar sus gestos.",
                         "Tap a button on the drawing (or pick a back paddle) to see and change its gestures."))
                 } else {
-                // El orden es el de uso: un toque, dos toques y, por último, mantener.
-                GestureRow(tr("Un toque", "One tap"), shown.tap) { write(shown.copy(tap = it)) }
-                GestureRow(tr("Doble toque", "Double tap"), shown.dbl) { write(shown.copy(dbl = it)) }
+                // El orden es el de uso: un toque, dos toques y, por último, mantener. CADA gesto lleva su
+                // propia tecla de teclado: la fila de la tecla sale debajo del gesto que sea «Tecla del teclado».
+                GestureRow(tr("Un toque", "One tap"), shown.tap, shown.kcTap,
+                    { write(shown.copy(tap = it)) }, { write(shown.copy(kcTap = it)) })
+                GestureRow(tr("Doble toque", "Double tap"), shown.dbl, shown.kcDbl,
+                    { write(shown.copy(dbl = it)) }, { write(shown.copy(kcDbl = it)) })
                 if (selPaddle == null) {
-                    GestureRow(tr("Mantener", "Long-press"), shown.long) { write(shown.copy(long = it)) }
+                    GestureRow(tr("Mantener", "Long-press"), shown.long, shown.kcLong,
+                        { write(shown.copy(long = it)) }, { write(shown.copy(kcLong = it)) })
                 } else Hint(
                     tr("En un trasero no hay «Mantener»: el mando no distingue si lo dejas apretado.",
                         "There's no “Long-press” on a paddle: the controller can't tell if you hold it.")
                 )
 
-                // La tecla solo aparece si algún gesto la usa: el mando NO envía teclas de teclado,
-                // las inyecta la app con Shizuku (`input keyevent`).
-                if (shown.anyKey) {
-                    KeyPicker(shown.kc) { write(shown.copy(kc = it)) }
-                    if (Shell.state != Shell.State.READY) Hint(
-                        tr("Ojo: para enviar la tecla hace falta Shizuku iniciado (Ajustes → Permisos).",
-                            "Note: sending the key needs Shizuku running (Settings → Permissions).")
-                    )
-                }
+                if (shown.anyKey && Shell.state != Shell.State.READY) Hint(
+                    tr("Ojo: para enviar la tecla hace falta Shizuku iniciado (Ajustes → Permisos).",
+                        "Note: sending the key needs Shizuku running (Settings → Permissions).")
+                )
 
                 // Secuencia de teclas: solo sale si algún gesto la usa. Esa es «la macro» de un juego: se
                 // asigna por app («Aplica a») y al salir de esa app vuelve lo de siempre.
@@ -270,16 +309,20 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                             "To clear a gesture: “Nothing” on all three. A tap waits ~0.3 s (in case a double comes); long-press triggers at ~0.45 s.")
                     )
                     Hint(
-                        tr("La tecla del teclado la envía G9 Control (el mando no manda teclas): tarda unas décimas de segundo y necesita Shizuku.",
-                            "G9 Control sends the keyboard key (the controller doesn't send keys): it takes a few tenths of a second and needs Shizuku.")
+                        tr("Cada gesto puede llevar su propia tecla del teclado (las envía G9 Control: el mando no manda teclas; tardan unas décimas y necesitan Shizuku).",
+                            "Each gesture can have its own keyboard key (G9 Control sends them: the controller doesn't send keys; they take a few tenths of a second and need Shizuku).")
                     )
                     if (scope != null) Hint(
                         tr("Aquí, «Nada» en los tres hace que el botón funcione normal en esta app (llega al juego).",
                             "Here, “Nothing” on all three makes the button work normally in this app (it reaches the game).")
                     )
                     Hint(
-                        tr("«Abrir el cajón de apps» y «Página siguiente / anterior» deslizan la pantalla: funcionan en el launcher.",
-                            "“Open the app drawer” and “Next / previous page” swipe the screen: they work on the launcher.")
+                        tr("El cajón de apps y las páginas del launcher primero prueban el intent del launcher y, si no lo atiende, van al inicio y deslizan. «Adelantar / Retroceder video» usan el tamaño de «Tiempos» → «Deslizamiento».",
+                            "The app drawer and launcher pages first try the launcher's intent and, if it doesn't answer, go home and swipe. “Seek forward / back” use the size from “Timings” → “Swipe”.")
+                    )
+                    if (launcherPkg != null) Hint(
+                        tr("«Pantalla de inicio» en «Aplica a» sirve para lo que solo pasa en el launcher (cajón de apps, páginas).",
+                            "“Home screen” in “Applies to” is for what only happens in the launcher (app drawer, pages).")
                     )
                 }
                 }
@@ -292,12 +335,12 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         fontWeight = FontWeight.SemiBold
                     )
                     // Agrupado por gesto: «Un toque: Y → tecla A», así se lee de un vistazo (idea de Roberto).
-                    val slots: List<Pair<String, (GestureRule) -> GestureAction>> = listOf(
-                        tr("Un toque", "One tap") to { r -> r.tap },
-                        tr("Doble toque", "Double tap") to { r -> r.dbl },
-                        tr("Mantener", "Long-press") to { r -> r.long },
+                    val slots: List<Triple<String, (GestureRule) -> GestureAction, Int>> = listOf(
+                        Triple(tr("Un toque", "One tap"), { r: GestureRule -> r.tap }, 0),
+                        Triple(tr("Doble toque", "Double tap"), { r: GestureRule -> r.dbl }, 2),
+                        Triple(tr("Mantener", "Long-press"), { r: GestureRule -> r.long }, 1),
                     )
-                    slots.forEach { (title, slot) ->
+                    slots.forEach { (title, slot, at) ->
                         val rows = scopeRules.entries.filter { it.value.any && slot(it.value) != GestureAction.NONE }
                         if (rows.isEmpty()) return@forEach
                         Text(
@@ -306,67 +349,101 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                         )
                         rows.forEach { (k, r) ->
                             Row(Modifier.padding(start = 14.dp)) {
-                                Text(gestureKeyLabel(k) + " → " + gestureActionName(slot(r), r.kc, r.pkg, labels), fontSize = 13.sp)
+                                Text(gestureKeyLabel(k) + " → " + gestureActionName(slot(r), r.kcOf(at), r.pkg, labels), fontSize = 13.sp)
                             }
                         }
                     }
                 }
                 // Tiempos de los gestos: antes solo se podían cambiar por dentro (g_tap_max, g_long, g_double).
-                // Los tres sliders a la vez ocupaban mucho: se elige el tiempo con un botón y debajo sale solo
-                // el slider del elegido (0 = un toque, 1 = doble toque, 2 = mantener).
+                // Los sliders a la vez ocupaban mucho: se elige el tiempo con un botón y debajo sale solo el
+                // slider del elegido (0 = un toque, 1 = doble toque, 2 = mantener, 3 = deslizamiento).
                 var tapMs by remember(rev) { mutableIntStateOf(Gestures.tapMax(a)) }
                 var longMs by remember(rev) { mutableIntStateOf(Gestures.longMs(a)) }
                 var doubleMs by remember(rev) { mutableIntStateOf(Gestures.doubleMs(a)) }
+                var swipePct by remember(rev) { mutableIntStateOf(Gestures.swipePct(a)) }
                 var openTimer by remember { mutableStateOf<Int?>(null) }
                 Text(tr("Tiempos", "Timings"), fontWeight = FontWeight.SemiBold)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TimerButton(tr("Un toque", "One tap"), "$tapMs ms", openTimer == 0, Modifier.weight(1f)) { openTimer = if (openTimer == 0) null else 0 }
                     TimerButton(tr("Doble toque", "Double tap"), "$doubleMs ms", openTimer == 1, Modifier.weight(1f)) { openTimer = if (openTimer == 1) null else 1 }
                     TimerButton(tr("Mantener", "Long"), "$longMs ms", openTimer == 2, Modifier.weight(1f)) { openTimer = if (openTimer == 2) null else 2 }
+                    TimerButton(tr("Deslizamiento", "Swipe"), "$swipePct %", openTimer == 3, Modifier.weight(1f)) { openTimer = if (openTimer == 3) null else 3 }
                 }
                 when (openTimer) {
                     0 -> SliderRow(tr("Un toque: hasta", "One tap: up to"), tapMs, 100..500, "$tapMs ms") { tapMs = it; Gestures.setDurations(a, it, longMs, doubleMs) }
                     1 -> SliderRow(tr("Doble toque: dentro de", "Double tap: within"), doubleMs, 150..600, "$doubleMs ms") { doubleMs = it; Gestures.setDurations(a, tapMs, longMs, it) }
                     2 -> SliderRow(tr("Mantener: desde", "Long-press: from"), longMs, 250..1000, "$longMs ms") { longMs = it; Gestures.setDurations(a, tapMs, it, doubleMs) }
+                    3 -> SliderRow(tr("Deslizamiento: avance de video", "Swipe: video seek"), swipePct, 2..30, "$swipePct %") { swipePct = it; Gestures.setSwipePct(a, it) }
                 }
             }
         }
     )
 }
 
+/**
+ * Fila de un gesto. El menú de acciones va en dos pasos (categoría → acción) porque con tantas acciones una
+ * lista plana se volvía un chorizo. Si el gesto es «Tecla del teclado», sale debajo su propio selector de
+ * tecla: cada gesto lleva la suya.
+ */
 @Composable
-private fun GestureRow(label: String, cur: GestureAction, onPick: (GestureAction) -> Unit) {
+private fun GestureRow(
+    label: String, cur: GestureAction, kc: Int,
+    onPick: (GestureAction) -> Unit, onPickKey: (Int) -> Unit
+) {
     var open by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), fontSize = 15.sp)
-        Box {
-            OutlinedButton(onClick = { open = true }) {
-                Text(if (Lang.en) cur.en else cur.es)
-                Icon(Icons.Filled.ArrowDropDown, null)
-            }
-            // Con alto máximo: si no, las últimas acciones (Página anterior) quedaban cortadas y no se veían.
-            DropdownMenu(open, { open = false }, modifier = Modifier.heightIn(max = 420.dp)) {
-                GestureAction.entries.forEach { act ->
-                    DropdownMenuItem(
-                        text = { Text(if (Lang.en) act.en else act.es) },
-                        onClick = { open = false; onPick(act) }
-                    )
+    var cat by remember { mutableStateOf(-1) }   // -1 = primera pantalla (lista de categorías)
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f), fontSize = 15.sp)
+            Box {
+                OutlinedButton(onClick = { cat = -1; open = true }) {
+                    Text(if (Lang.en) cur.en else cur.es)
+                    Icon(Icons.Filled.ArrowDropDown, null)
+                }
+                DropdownMenu(open, { open = false; cat = -1 }, modifier = Modifier.heightIn(max = 420.dp)) {
+                    if (cat < 0) {
+                        // «Nada» directo (para quitar el gesto de un toque) y, debajo, las categorías.
+                        DropdownMenuItem(
+                            text = { Text(if (Lang.en) GestureAction.NONE.en else GestureAction.NONE.es) },
+                            onClick = { open = false; onPick(GestureAction.NONE) }
+                        )
+                        GESTURE_CATS.forEachIndexed { i, _ ->
+                            if (i == 0) return@forEachIndexed   // «Nada» ya está arriba
+                            DropdownMenuItem(
+                                text = { Text(gestureCatName(i)) },
+                                trailingIcon = { Icon(Icons.Filled.KeyboardArrowRight, null) },
+                                onClick = { cat = i }
+                            )
+                        }
+                    } else {
+                        DropdownMenuItem(
+                            text = { Text("‹ " + gestureCatName(cat)) },
+                            onClick = { cat = -1 }
+                        )
+                        GestureAction.inCat(cat).forEach { act ->
+                            DropdownMenuItem(
+                                text = { Text(if (Lang.en) act.en else act.es) },
+                                onClick = { open = false; cat = -1; onPick(act) }
+                            )
+                        }
+                    }
                 }
             }
         }
+        if (cur == GestureAction.KEY) KeyPicker(kc, onPickKey)
     }
 }
 
-/** Un tiempo de gesto (Tocar / Mantener / Doble): al tocarlo aparece su slider debajo del todo el bloque. */
+/** Un tiempo de gesto (Tocar / Mantener / Doble / Deslizamiento): al tocarlo sale su slider debajo. */
 @Composable
 private fun TimerButton(label: String, value: String, open: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val content: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, fontSize = 13.sp, maxLines = 1)
-            Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(label, fontSize = 12.sp, maxLines = 1)
+            Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
-    val padding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+    val padding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
     if (open) Button(onClick = onClick, modifier = modifier, contentPadding = padding) { content() }
     else OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = padding) { content() }
 }

@@ -1187,7 +1187,7 @@ private fun PanelSlider(item: PanelItem, selected: Boolean, editing: Boolean, mo
  * pantalla de adb (WRITE_SECURE_SETTINGS) o "Modificar ajustes del sistema". Los pasos del brillo no son lineales
  * (el ojo nota mucho más los cambios abajo): 11 niveles, de 0 a 100 %.
  */
-private object SystemLevels {
+internal object SystemLevels {
     private val LEVELS = intArrayOf(2, 5, 10, 18, 29, 44, 64, 90, 125, 180, 255)
 
     fun canBrightness(ctx: Context) = Aspect.canWrite(ctx) || Settings.System.canWrite(ctx)
