@@ -1,6 +1,12 @@
 package io.github.sudodiego.g9control
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,9 +21,17 @@ import androidx.compose.ui.unit.sp
  *
  * Funciona en cualquier sitio —el launcher, el cajón de apps o dentro de una app— porque el puntero lo dibuja la
  * app encima de todo y el clic se inyecta justo donde está (Android no tiene API para mover el ratón del
- * sistema). Los botones del ratón (clic, clic derecho, doble clic, arrastrar y rueda) se asignan en «Gestos» →
- * categoría «Ratón», botón por botón y por app.
+ * sistema). Los botones del ratón (clic, clic derecho, doble clic, arrastrar y rueda) se asignan AQUÍ, en la
+ * última sección de esta pestaña, y valen en todas las apps a la vez: no importa en qué app o en qué parte de
+ * la tableta estés, el botón que elijas mueve el ratón. Se guardan APARTE (no son gestos), así que no salen
+ * listados en la pestaña «Gestos» ni se comportan como un gesto del botón.
  */
+/** Colores del puntero (ARGB): blanco, negro, amarillo, verde, cian, rosa y naranja. */
+private val CURSOR_COLORS = listOf(
+    0xFFFFFFFF.toInt(), 0xFF101010.toInt(), 0xFFFFD400.toInt(),
+    0xFF35D07F.toInt(), 0xFF38D9F5.toInt(), 0xFFFF5FA2.toInt(), 0xFFFF8A34.toInt()
+)
+
 @Composable
 fun MousePage(s: AppState, a: MainActivity) {
     val ctx = LocalContext.current
@@ -28,8 +42,11 @@ fun MousePage(s: AppState, a: MainActivity) {
     var smooth by remember { mutableStateOf(MouseRules.smooth(a)) }
     var curve by remember { mutableStateOf(MouseRules.curve(a)) }
     var dead by remember { mutableStateOf(MouseRules.dead(a)) }
-    var wheelMode by remember { mutableStateOf(MouseRules.wheelMode(a)) }
     var wheelStep by remember { mutableStateOf(MouseRules.wheelStep(a)) }
+    var scrollInv by remember { mutableStateOf(MouseRules.scrollInvert(a)) }
+    var cursorSize by remember { mutableStateOf(MouseRules.cursorSize(a)) }
+    var cursorColor by remember { mutableStateOf(MouseRules.cursorColor(a)) }
+    var cursorStyle by remember { mutableStateOf(MouseRules.cursorStyle(a)) }
     val live = MouseRules.live   // estado en vivo: el servicio y la app comparten el mismo proceso
     val api = android.os.Build.VERSION.SDK_INT
 
@@ -48,8 +65,8 @@ fun MousePage(s: AppState, a: MainActivity) {
         }
         SwitchRow(
             tr("L3 + R3 lo enciende", "L3 + R3 turns it on"), chord,
-            tr("La misma combinación lo apaga. Si lo apagas aquí abajo, la combinación queda libre.",
-                "The same combination turns it off. If you turn it off here below, the combination stops being used.")
+            tr("La misma combinación lo apaga. En la pantalla de inicio, L3 y R3 no llegan a los iconos (encender el ratón ahí abría la app del primer icono). Si lo apagas aquí abajo, la combinación queda libre.",
+                "The same combination turns it off. On the home screen, L3 and R3 never reach the icons (turning the pointer on there used to open the first icon's app). If you turn it off here below, the combination stops being used.")
         ) { chord = it; MouseRules.setChord(a, it); save() }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(
@@ -112,32 +129,137 @@ fun MousePage(s: AppState, a: MainActivity) {
         )
     }
 
-    Panel(tr("Rueda", "Wheel"), tr("Para listas, menús y páginas que se desplazan.", "For lists, menus and pages that scroll.")) {
-        Text(tr("Cómo se manda", "How it's sent"), fontWeight = FontWeight.SemiBold)
+    Panel(tr("Aspecto del puntero", "Pointer looks"), tr("Tamaño, color y forma.", "Size, colour and shape.")) {
+        SliderRow(tr("Tamaño", "Size"), cursorSize, 10..48, "$cursorSize dp") {
+            cursorSize = it; MouseRules.setCursorSize(a, it); save()
+        }
+        Text(tr("Forma", "Shape"), fontWeight = FontWeight.SemiBold)
         ChoiceChips(
             listOf(
-                0 to tr("Deslizamiento (siempre funciona)", "Swipe (always works)"),
-                1 to tr("Rueda de verdad (Shizuku)", "Real wheel (Shizuku)")
+                MouseRules.CURSOR_ARROW to tr("Flecha", "Arrow"),
+                MouseRules.CURSOR_DOT to tr("Punto", "Dot"),
+                MouseRules.CURSOR_CROSS to tr("Cruz", "Cross")
             ),
-            wheelMode
-        ) { wheelMode = it; MouseRules.setWheelMode(a, it); save() }
-        SliderRow(tr("Cuánto avanza cada paso", "How far each step goes"), wheelStep, 1..10, "$wheelStep") {
-            wheelStep = it; MouseRules.setWheelStep(a, it); save()
+            cursorStyle
+        ) { cursorStyle = it; MouseRules.setCursorStyle(a, it); save() }
+        Text(tr("Color", "Colour"), fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            CURSOR_COLORS.forEach { argb ->
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(argb))
+                        .border(
+                            if (argb == cursorColor) 3.dp else 1.dp,
+                            if (argb == cursorColor) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            CircleShape
+                        )
+                        .clickable { cursorColor = argb; MouseRules.setCursorColor(a, argb); save() }
+                )
+            }
         }
         Hint(
-            tr("El deslizamiento es un tirón corto en la posición del puntero (lo entienden todas las apps). La rueda de verdad manda el aviso de rueda del sistema por Shizuku: se siente como un ratón, pero necesita Shizuku iniciado.",
-                "The swipe is a short flick at the pointer's position (every app understands it). The real wheel sends the system's wheel event through Shizuku: it feels like a mouse, but needs Shizuku running.")
+            tr("El contorno del puntero se pone solo del color que contraste con el relleno, para que se vea sobre cualquier fondo.",
+                "The pointer's outline picks a contrasting colour by itself, so it shows on any background.")
         )
     }
 
-    Panel(tr("Botones del ratón", "Mouse buttons"), tr("Se asignan como cualquier otro gesto.", "They're assigned like any other gesture.")) {
+    Panel(tr("Rueda", "Wheel"), tr("Para listas, menús y páginas que se desplazan.", "For lists, menus and pages that scroll.")) {
+        // La «rueda de verdad» por Shizuku se retiró: en la tableta no desplazaba (comando medido en 0 px) y
+        // el tirón corto sí funciona en todas las apps.
+        SliderRow(tr("Cuánto avanza cada paso", "How far each step goes"), wheelStep, 1..10, "$wheelStep") {
+            wheelStep = it; MouseRules.setWheelStep(a, it); save()
+        }
+        // Cada quien siente la rueda al revés: quien la quiera al contrario, lo activa aquí.
+        SwitchRow(
+            tr("Reversar la dirección", "Reverse the direction"),
+            scrollInv,
+            tr("Si al desplazar te parece que va al revés.", "If scrolling feels backwards to you.")
+        ) { scrollInv = it; MouseRules.setScrollInvert(a, it); save() }
         Hint(
-            tr("En «Gestos» hay una categoría «Ratón»: clic (toque), clic derecho (menú), doble clic, arrastrar, rueda arriba, rueda abajo y «Puntero: encender/apagar». Se ponen botón por botón y, si quieres, solo en una app («Aplica a»).",
-                "In “Gestures” there's a “Mouse” category: click (tap), right click (menu), double click, drag, scroll up, scroll down and “Pointer: on/off”. You set them button by button and, if you want, only in one app (“Applies to”).")
-        )
-        Hint(
-            tr("«Arrastrar» conviene ponerlo en «Mantener»: aprietas, mueves el puntero y al soltar se arrastra de donde estaba al principio hasta donde está ahora (como mover un icono).",
-                "“Drag” is best set on “Long-press”: you press, move the pointer and on release it drags from where it started to where it is now (like moving an icon).")
+            tr("El desplazamiento es un tirón corto en la posición del puntero (lo entienden todas las apps). Cuanto más apartes el stick, más largo el paso. Si te parece que va al revés, activa «Reversar la dirección».",
+                "Scrolling is a short flick at the pointer's position (every app understands it). The further you push the stick, the longer the step. If it feels backwards, turn on \"Reverse the direction\".")
         )
     }
+
+    // ── Botones del ratón ─────────────────────────────────────────────────────────────────────────────────
+    // Antes vivían en la pestaña «Gestos» y se guardaban como reglas de gestos generales: por eso aparecían
+    // listados en «Gestos» como si fueran gestos del botón. Ahora se guardan en su propio almacén
+    // (MouseRules.buttons) y el servicio los lee aparte: da igual en qué app o en qué parte de la tableta estés,
+    // y con el puntero encendido son lo ÚNICO que hace algo del mando.
+    var rev by remember { mutableStateOf(0) }
+    val botones = remember(rev) { MouseRules.buttons(a) }
+    var eligiendo by remember { mutableStateOf<GestureAction?>(null) }
+
+    fun asignar(act: GestureAction, kc: Int) {
+        MouseRules.setButton(a, kc, act)
+        s.saved(enControl = false)
+        rev++
+    }
+
+    fun quitar(act: GestureAction) {
+        MouseRules.clearButton(a, act)
+        s.saved(enControl = false)
+        rev++
+    }
+
+    Panel(
+        tr("Botones del ratón", "Mouse buttons"),
+        tr("Elige qué botón hace cada cosa del ratón. Vale en todas las apps y en cualquier parte de la tableta.",
+            "Pick which button does what. Applies to every app and anywhere on the tablet.")
+    ) {
+        GestureAction.entries.filter { it.cat == 7 }.forEach { act ->
+            val dueno = botones.entries.firstOrNull { it.value == act }?.key
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(if (Lang.en) act.en else act.es, Modifier.weight(1f))
+                OutlinedButton(onClick = { eligiendo = act }) {
+                    Text(dueno?.let { nombreBoton(it) } ?: tr("Sin asignar", "Not assigned"))
+                }
+                if (dueno != null) {
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { quitar(act) }) {
+                        Text(tr("Quitar", "Clear"))
+                    }
+                }
+            }
+        }
+        Hint(
+            tr("Con el puntero encendido el mando es un ratón: lo único que hace algo son los botones de esta sección (y L3 + R3 para apagarlo). Con el puntero apagado estos botones siguen siendo los de siempre: hacen lo que tengan asignado en «Gestos» o lo que haga Android con ellos. Al elegir un botón se suelta de donde estuviera: una acción del ratón, un botón. «Arrastrar»: lo aprietas, mueves el puntero y al soltar arrastra desde donde empezó.",
+                "While the pointer is on, the controller is a mouse: only the buttons in this section do anything (plus L3 + R3 to turn it off). With the pointer off these buttons stay their normal selves: whatever is assigned in “Gestures”, or whatever Android does with them. Picking a button releases it from wherever it was: one mouse action, one button. “Drag”: press it, move the pointer and release to drag from where it started.")
+        )
+        if (eligiendo != null) {
+            val act = eligiendo!!
+            DropdownMenu(
+                expanded = true,
+                onDismissRequest = { eligiendo = null },
+                modifier = Modifier.heightIn(max = 420.dp)
+            ) {
+                Text(
+                    tr("¿Qué botón dispara «${if (Lang.en) act.en else act.es}»?",
+                        "Which button fires “${if (Lang.en) act.en else act.es}”?"),
+                    Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
+                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                )
+                PadKey.entries.forEach { pk ->
+                    DropdownMenuItem(
+                        text = { Text(pk.name) },
+                        onClick = { asignar(act, PAD_KEYCODE.getValue(pk)); eligiendo = null }
+                    )
+                }
+                PADDLE_KEYCODE.entries.forEach { (bk, kc) ->
+                    DropdownMenuItem(
+                        text = { Text(bk.label) },
+                        onClick = { asignar(act, kc); eligiendo = null }
+                    )
+                }
+            }
+        }
+    }
 }
+
+/** Nombre del botón (A, B, LB, L4…) desde su keyCode: es lo que se enseña en la pestaña «Ratón». */
+private fun nombreBoton(kc: Int): String = KEYCODE_PAD[kc]?.name
+    ?: PADDLE_KEYCODE.entries.firstOrNull { it.value == kc }?.key?.label
+    ?: tr("Otro botón", "Another button")

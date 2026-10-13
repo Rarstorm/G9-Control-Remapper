@@ -15,6 +15,8 @@ import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.pow
 
@@ -68,12 +70,77 @@ object MouseRules {
     fun setDead(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_dead", v).apply()
 
     /** Rueda: 0 = deslizamiento (funciona siempre), 1 = rueda de verdad (necesita Shizuku). */
-    fun wheelMode(ctx: Context) = sp(ctx).getInt("mouse_wheel", 0)
-    fun setWheelMode(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_wheel", v).apply()
 
     /** Cuánto avanza cada paso de rueda (líneas de la rueda, o cuadros del deslizamiento). */
     fun wheelStep(ctx: Context) = sp(ctx).getInt("mouse_wheel_step", 3)
     fun setWheelStep(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_wheel_step", v).apply()
+
+    /** Reversar la dirección de la rueda: cada quien la siente al revés. */
+    fun scrollInvert(ctx: Context) = sp(ctx).getBoolean("mouse_scroll_inv", false)
+    fun setScrollInvert(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("mouse_scroll_inv", v).apply()
+
+    /** Aspecto del puntero: tamaño en dp (10-48), color (ARGB) y estilo (ver CURSOR_*). */
+    fun cursorSize(ctx: Context) = sp(ctx).getInt("mouse_cursor_size", 20)
+    fun setCursorSize(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_cursor_size", v).apply()
+    fun cursorColor(ctx: Context) = sp(ctx).getInt("mouse_cursor_color", 0xFFFFFFFF.toInt())
+    fun setCursorColor(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_cursor_color", v).apply()
+    fun cursorStyle(ctx: Context) = sp(ctx).getInt("mouse_cursor_style", CURSOR_ARROW)
+    fun setCursorStyle(ctx: Context, v: Int) = sp(ctx).edit().putInt("mouse_cursor_style", v).apply()
+
+    /** Estilos del puntero. */
+    const val CURSOR_ARROW = 0
+    const val CURSOR_DOT = 1
+    const val CURSOR_CROSS = 2
+
+    // ——— Botones del ratón (almacén propio) ———
+    // Antes se guardaban como reglas de gestos de «Todas las apps», así que salían listados en la pestaña
+    // «Gestos» como si fueran gestos del botón y competían con ellos. Ahora viven aparte: una acción del ratón,
+    // un botón, y solo valen con el puntero encendido (los lee el servicio al vuelo, ver AutoModeService).
+
+    /** Botón del mando → acción del ratón. */
+    fun buttons(ctx: Context): Map<Int, GestureAction> = sp(ctx).getStringSet("mouse_buttons", emptySet()).orEmpty()
+        .mapNotNull { line ->
+            val p = line.split('|')
+            if (p.size != 2) null else p[0].toIntOrNull()?.let { k -> k to GestureAction.of(p[1]) }
+        }.toMap()
+
+    private fun writeButtons(ctx: Context, m: Map<Int, GestureAction>) =
+        sp(ctx).edit().putStringSet("mouse_buttons", m.map { "${it.key}|${it.value.name}" }.toSet()).apply()
+
+    /** Asigna un botón a una acción: suelta esa acción de otro botón y ese botón de otra acción. */
+    fun setButton(ctx: Context, kc: Int, act: GestureAction) {
+        val m = buttons(ctx).toMutableMap()
+        m.keys.filter { it == kc || m[it] == act }.forEach { m.remove(it) }
+        if (act != GestureAction.NONE) m[kc] = act
+        writeButtons(ctx, m)
+    }
+
+    /** Quita una acción del ratón de donde esté. */
+    fun clearButton(ctx: Context, act: GestureAction) {
+        val m = buttons(ctx).toMutableMap()
+        m.keys.filter { m[it] == act }.forEach { m.remove(it) }
+        writeButtons(ctx, m)
+    }
+
+    /**
+     * Una sola vez: los botones del ratón que quedaron guardados como reglas de gestos pasan a este almacén, y
+     * esa regla se limpia. Así dejan de aparecer en «Gestos» (era lo que se veía como «UP y DOWN asignados sin
+     * haberlos asignado») y de comportarse como un gesto del botón.
+     */
+    fun migrateFromGestures(ctx: Context) {
+        if (sp(ctx).getBoolean("mouse_migrated", false)) return
+        val delRaton = GestureAction.entries.filter { it.cat == MOUSE_CAT }.toSet()
+        val m = buttons(ctx).toMutableMap()
+        for ((k, r) in Gestures.rules(ctx)) {
+            var n = r
+            if (r.tap in delRaton) { m[k] = r.tap; n = n.copy(tap = GestureAction.NONE, kcTap = 0) }
+            if (r.long in delRaton) { m[k] = r.long; n = n.copy(long = GestureAction.NONE, kcLong = 0) }
+            if (r.dbl in delRaton) { m[k] = r.dbl; n = n.copy(dbl = GestureAction.NONE, kcDbl = 0) }
+            if (n != r) Gestures.setRule(ctx, n)
+        }
+        writeButtons(ctx, m)
+        sp(ctx).edit().putBoolean("mouse_migrated", true).apply()
+    }
 
     /**
      * Estado en vivo: la app y el servicio viven en el mismo proceso, así que la pestaña «Ratón» y el mosaico
@@ -99,8 +166,10 @@ class MouseMode(
     private val handler: Handler,
     /** Correr un comando de Shizuku sin bloquear (lo pone el servicio). */
     private val shell: (String) -> Unit,
-    /** Deslizamiento en fracciones de pantalla, el mismo que usa el resto de la app. */
-    private val swipe: (Float, Float, Float, Float) -> Unit,
+    /** Deslizamiento en fracciones de pantalla, el mismo que usa el resto de la app. Dice si se despachó. */
+    private val swipe: (Float, Float, Float, Float, Long) -> Boolean,
+    /** Si ahora mismo hay un gesto en marcha: Android rechaza el que llegue encima de otro. */
+    private val gestureBusy: () -> Boolean,
 ) {
     private val wm by lazy { svc.getSystemService(WindowManager::class.java) }
     private var view: View? = null
@@ -121,6 +190,50 @@ class MouseMode(
 
     /** Hasta cuándo se dibuja el aro del clic. */
     private var flashUntil = 0L
+
+    /** Cada cuánto late el reloj que mueve el puntero por su cuenta. */
+    private val TICK = 10L
+
+    /** Cuánto dura el tirón de un paso de rueda. Corto a propósito: el siguiente paso no debe pillarlo vivo. */
+    private val WHEEL_MS = 110L
+
+    /** Última posición leída de cada stick (la guarda [onStick]; la usa [step]). */
+    private var stickLx = 0f
+    private var stickLy = 0f
+    private var stickRx = 0f
+    private var stickRy = 0f
+
+    /**
+     * El puntero se mueve por su cuenta cada [TICK] ms, no solo cuando llega un evento del stick. Android
+     * descarta los cambios de un eje menores que el «flat» que declara el mando (en el G9: 15 sobre 0-255), así
+     * que con el stick quieto —a tope o en diagonal perfecta— el sistema dejaba de mandar eventos y el puntero
+     * se congelaba: medido en la tableta, hasta 2,2 s sin un solo evento con el stick a fondo. Con este reloj el
+     * movimiento es continuo. Cuando el stick vuelve al centro y no queda velocidad, el reloj se apaga solo.
+     */
+    private val ticker = object : Runnable {
+        override fun run() {
+            if (view == null) { ticking = false; return }
+            val now = SystemClock.uptimeMillis()
+            val dt = (now - lastAt).coerceIn(1L, 60L)
+            lastAt = now
+            val sigue = step(dt)
+            if (!sigue) { ticking = false; return }
+            handler.postDelayed(this, TICK)
+        }
+    }
+    private var ticking = false
+
+    private fun startTicker() {
+        if (ticking) return
+        ticking = true
+        lastAt = SystemClock.uptimeMillis()
+        handler.post(ticker)
+    }
+
+    private fun stopTicker() {
+        ticking = false
+        handler.removeCallbacks(ticker)
+    }
 
     val isOn get() = view != null
 
@@ -157,12 +270,14 @@ class MouseMode(
         )
         if (runCatching { wm.addView(v, lp) }.onFailure { Log.w(AutoModeService.TAG, "puntero del ratón", it) }.isFailure) return
         view = v
+        startTicker()
         Log.d(AutoModeService.TAG, "puntero encendido (${width}x$height)")
     }
 
     fun off() {
         view?.let { runCatching { wm.removeView(it) } }
         view = null
+        stopTicker()
         dragFrom = null
         MouseRules.live = false
         Log.d(AutoModeService.TAG, "puntero apagado")
@@ -185,30 +300,42 @@ class MouseMode(
      */
     fun onStick(event: MotionEvent) {
         if (!isOn) return
+        // Solo se guarda dónde está cada stick: el movimiento lo hace el reloj (ver [ticker]), porque Android
+        // deja de mandar eventos en cuanto el stick se queda quieto.
+        stickLx = event.getAxisValue(MotionEvent.AXIS_X)
+        stickLy = event.getAxisValue(MotionEvent.AXIS_Y)
+        stickRx = event.getAxisValue(MotionEvent.AXIS_Z)
+        stickRy = event.getAxisValue(MotionEvent.AXIS_RZ)
+        startTicker()
+    }
+
+    /**
+     * Un paso de movimiento con la última posición leída de los sticks: puntero y/o pasos de rueda según lo que
+     * tenga asignado cada uno. Devuelve si hay que seguir latiendo (stick apartado o puntero aún en movimiento).
+     */
+    private fun step(dt: Long): Boolean {
         val dead = MouseRules.dead(svc).coerceIn(0, 40) / 100f
         val lRole = MouseRules.stickRole(svc, true)
         val rRole = MouseRules.stickRole(svc, false)
-        val lx = event.getAxisValue(MotionEvent.AXIS_X)
-        val ly = event.getAxisValue(MotionEvent.AXIS_Y)
-        val rx = event.getAxisValue(MotionEvent.AXIS_Z)
-        val ry = event.getAxisValue(MotionEvent.AXIS_RZ)
-
         // Puntero: si los dos sticks lo mueven, manda el que más se aparte (no se suman: se doblaría la velocidad).
         when {
             lRole == MouseRules.STICK_POINTER && rRole == MouseRules.STICK_POINTER ->
-                if (hypot(lx, ly) >= hypot(rx, ry)) movePointer(lx, ly, dead) else movePointer(rx, ry, dead)
-            lRole == MouseRules.STICK_POINTER -> movePointer(lx, ly, dead)
-            rRole == MouseRules.STICK_POINTER -> movePointer(rx, ry, dead)
+                if (hypot(stickLx, stickLy) >= hypot(stickRx, stickRy)) movePointer(stickLx, stickLy, dead, dt)
+                else movePointer(stickRx, stickRy, dead, dt)
+            lRole == MouseRules.STICK_POINTER -> movePointer(stickLx, stickLy, dead, dt)
+            rRole == MouseRules.STICK_POINTER -> movePointer(stickRx, stickRy, dead, dt)
         }
-
         // Scroll: pasos de rueda seguidos mientras el stick esté apartado.
         val now = SystemClock.uptimeMillis()
-        if (lRole == MouseRules.STICK_SCROLL) scrollWithStick(ly, dead, now)
-        if (rRole == MouseRules.STICK_SCROLL) scrollWithStick(ry, dead, now)
+        if (lRole == MouseRules.STICK_SCROLL) scrollWithStick(stickLy, dead, now)
+        if (rRole == MouseRules.STICK_SCROLL) scrollWithStick(stickRy, dead, now)
+        val quieto = abs(stickLx) <= dead && abs(stickLy) <= dead &&
+            abs(stickRx) <= dead && abs(stickRy) <= dead
+        return !quieto || vx != 0f || vy != 0f
     }
 
     /** Mueve el puntero con el stick: zona muerta radial, curva, suavidad y velocidad (DPI). */
-    private fun movePointer(ax: Float, ay: Float, dead: Float) {
+    private fun movePointer(ax: Float, ay: Float, dead: Float, dtMs: Long) {
         val draw = hypot(ax, ay)
         if (draw == 0f && vx == 0f && vy == 0f) return
         val curve = MouseRules.curve(svc).coerceIn(0, 100) / 100f
@@ -227,19 +354,37 @@ class MouseMode(
             tx = ax / draw * speed
             ty = ay / draw * speed
         }
-        // Suavidad: mezcla entre la velocidad nueva y la anterior (0 = va directo, 90 = muy filtrado).
-        val mix = (1f - smooth).coerceIn(0.1f, 1f)
+        // Suavidad: mezcla entre la velocidad nueva y la anterior (0 = va directo, 90 = muy filtrado). El filtro
+        // se mide en tiempo real (tau = 190 ms por la suavidad), no por evento: así el tacto es el mismo aunque
+        // el reloj lata más seguido de lo que llegaban los eventos del mando.
+        val tau = smooth * 190f
+        val mix = if (tau < 1f) 1f else (1f - exp(-dtMs / tau)).coerceIn(0.02f, 1f)
         vx += (tx - vx) * mix
         vy += (ty - vy) * mix
-
-        val now = SystemClock.uptimeMillis()
-        // Entre 4 y 60 ms: ni un salto por un evento tardío, ni una velocidad absurda por uno seguido.
-        val dt = (now - lastAt).coerceIn(4L, 60L)
-        lastAt = now
+        // Stick en la zona muerta y velocidad ya despreciable: a cero, para no repintar por nada. El umbral va
+        // CON el stick centrado a propósito: como el filtro de suavidad se mide por tiempo, un solo paso deja la
+        // velocidad por debajo de cualquier umbral «grande» y el puntero no arrancaría nunca.
+        if (tx == 0f && ty == 0f && abs(vx) < 0.01f && abs(vy) < 0.01f) { vx = 0f; vy = 0f; return }
         if (vx == 0f && vy == 0f) return
+
+        // El tiempo lo lleva el reloj (ticker): aquí solo se usa para integrar la velocidad.
+        val now = SystemClock.uptimeMillis()
+        val dt = dtMs
+        val prevX = x
+        val prevY = y
         x = (x + vx * dt).coerceIn(0f, (width - 1).toFloat())
         y = (y + vy * dt).coerceIn(0f, (height - 1).toFloat())
-        view?.invalidate()
+        // Se repinta SOLO la zona del puntero (la de antes y la de ahora), no la pantalla entera: repintar
+        // 3040x1904 en cada evento del stick (cientos por segundo) es lo que lo hacía verse a tirones.
+        // El margen es más grande mientras dura el aro del clic, que dibuja un círculo ancho.
+        val dp = svc.resources.displayMetrics.density
+        val margen = (MouseRules.cursorSize(svc).coerceIn(10, 48) + if (now < flashUntil + 300) 60f else 20f) * dp
+        view?.invalidate(
+            (minOf(prevX, x) - margen).toInt().coerceAtLeast(0),
+            (minOf(prevY, y) - margen).toInt().coerceAtLeast(0),
+            (maxOf(prevX, x) + margen).toInt().coerceAtMost(width),
+            (maxOf(prevY, y) + margen).toInt().coerceAtMost(height)
+        )
     }
 
     /** Hasta cuándo no toca otro paso de scroll por stick (lo comparten los dos sticks). */
@@ -251,15 +396,21 @@ class MouseMode(
      * esté el puntero, con el ajuste de rueda de la pestaña «Ratón» (deslizamiento o rueda por Shizuku).
      */
     private fun scrollWithStick(ay: Float, dead: Float, now: Long) {
-        val dir = when {
+        val dirStick = when {
             ay > dead -> 1
             ay < -dead -> -1
             else -> return
         }
-        if (now < nextScrollAt) return
+        // Cada quien siente la rueda al revés: la preferencia invierte el sentido.
+        val dir = if (MouseRules.scrollInvert(svc)) -dirStick else dirStick
         val mag = ((kotlin.math.abs(ay) - dead) / (1f - dead).coerceAtLeast(0.01f)).coerceIn(0f, 1f)
-        nextScrollAt = now + (200f - 130f * mag).toLong()
-        wheel(dir)
+        if (now < nextScrollAt) return
+        // El tirón anterior marca el ritmo: no se apilan gestos. Android rechaza el gesto que llega con otro en
+        // marcha, y antes se ignoraba ese rechazo, así que el scroll se quedaba en nada. El «más apartado, más
+        // rápido» lo da ahora el tamaño del paso, no la frecuencia.
+        if (gestureBusy()) return
+        nextScrollAt = now + WHEEL_MS + 80
+        wheel(dir, mag)
     }
 
     // ——— Clics, arrastre y rueda ———
@@ -274,8 +425,12 @@ class MouseMode(
         handler.postDelayed({ if (isOn) tap(50) }, 90)
     }
 
-    /** Toque largo: en las apps es el menú contextual (el equivalente al clic derecho sin root). */
-    fun rightClick() = tap(650)
+    /**
+     * Toque largo: en las apps es el menú contextual (el equivalente al clic derecho sin root; sin root no hay
+     * botón derecho de verdad). Dura 900 ms, bastante más que el «mantener» de Android (~500 ms), para que la
+     * app lo vea como mantener aunque el aviso tarde en llegar.
+     */
+    fun rightClick() = tap(1000)
 
     /**
      * Arrastrar: desde donde estaba el puntero cuando se apretó el botón hasta donde está ahora. No es un
@@ -323,18 +478,17 @@ class MouseMode(
      *  - Deslizamiento (por defecto): un tirón corto en la posición del puntero. Lo entienden todas las apps.
      *  - Rueda de verdad (Shizuku): `input roll` manda el aviso de rueda a la ventana que tiene el foco.
      */
-    fun wheel(dir: Int) {
+    fun wheel(dir: Int, mag: Float = 1f) {
         if (!isOn) return
         val step = MouseRules.wheelStep(svc).coerceIn(1, 10)
         val fx = x / width.coerceAtLeast(1)
         val fy = y / height.coerceAtLeast(1)
-        if (MouseRules.wheelMode(svc) == 1 && Shell.state == Shell.State.READY) {
-            shell(Shell.wheel(dir * step))
-            return
-        }
-        // Cada paso ≈ 1,2 % del alto; el dedo va al revés que el contenido.
-        val half = (0.006f * step).coerceIn(0.02f, 0.12f)
-        if (dir > 0) swipe(fx, fy + half, fx, fy - half) else swipe(fx, fy - half, fx, fy + half)
+        // Un tirón corto, no una pasada larga: si durara más que el hueco entre pasos, el gesto siguiente
+        // llegaría con el anterior en marcha y Android lo rechazaría. El paso es 1,2 % del alto por unidad y
+        // crece con lo apartado que esté el stick. El dedo va al revés que el contenido.
+        val half = (0.010f * step * (0.6f + 0.4f * mag)).coerceIn(0.015f, 0.22f)
+        if (dir > 0) swipe(fx, fy + half, fx, fy - half, WHEEL_MS)
+        else swipe(fx, fy - half, fx, fy + half, WHEEL_MS)
     }
 
     /**
@@ -344,38 +498,69 @@ class MouseMode(
      */
     private inner class CursorView : View(svc) {
         private val dp = resources.displayMetrics.density
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.FILL }
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xCC0B0B0B.toInt(); style = Paint.Style.STROKE; strokeWidth = 1.6f * dp
+            style = Paint.Style.STROKE; strokeWidth = 1.6f * dp
         }
         private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFF7DD8F5.toInt(); style = Paint.Style.STROKE; strokeWidth = 2f * dp
         }
-        private val arrow = Path()
-        private val h = 20f * dp
+        private val shape = Path()
+        private var hechoTamano = -1f
+        private var hechoEstilo = -1
 
-        init {
-            // Punta en (0,0) y cuerpo hacia abajo a la derecha, como cualquier puntero.
-            arrow.moveTo(0f, 0f)
-            arrow.lineTo(0f, h)
-            arrow.lineTo(0.26f * h, 0.76f * h)
-            arrow.lineTo(0.44f * h, 1.06f * h)
-            arrow.lineTo(0.60f * h, 0.98f * h)
-            arrow.lineTo(0.42f * h, 0.68f * h)
-            arrow.lineTo(0.72f * h, 0.62f * h)
-            arrow.close()
+        /**
+         * Rehace la figura según tamaño y estilo, y solo cuando cambian (no en cada cuadro). En los tres estilos
+         * el punto (0,0) es el del clic: la punta de la flecha, el centro del punto y el cruce de la cruz.
+         */
+        private fun build(size: Float, style: Int) {
+            shape.reset()
+            when (style) {
+                MouseRules.CURSOR_DOT -> shape.addCircle(0f, 0f, size * 0.30f, Path.Direction.CW)
+                MouseRules.CURSOR_CROSS -> {
+                    val r = size * 0.45f
+                    val g = size * 0.06f
+                    shape.addRect(-r, -g, r, g, Path.Direction.CW)
+                    shape.addRect(-g, -r, g, r, Path.Direction.CW)
+                }
+                else -> {
+                    // Flecha: punta en (0,0) y cuerpo hacia abajo a la derecha, como cualquier puntero.
+                    val h = size
+                    shape.moveTo(0f, 0f)
+                    shape.lineTo(0f, h)
+                    shape.lineTo(0.26f * h, 0.76f * h)
+                    shape.lineTo(0.44f * h, 1.06f * h)
+                    shape.lineTo(0.60f * h, 0.98f * h)
+                    shape.lineTo(0.42f * h, 0.68f * h)
+                    shape.lineTo(0.72f * h, 0.62f * h)
+                    shape.close()
+                }
+            }
+            hechoTamano = size
+            hechoEstilo = style
         }
 
         override fun onDraw(canvas: Canvas) {
+            val size = MouseRules.cursorSize(svc).coerceIn(10, 48).toFloat() * dp
+            val style = MouseRules.cursorStyle(svc)
+            if (size != hechoTamano || style != hechoEstilo) build(size, style)
+            val col = MouseRules.cursorColor(svc)
+            fill.color = col
+            // El contorno se pone del color que contraste con el relleno, para que se vea sobre cualquier fondo.
+            val luz = ((col shr 16 and 0xFF) * 0.299f + (col shr 8 and 0xFF) * 0.587f + (col and 0xFF) * 0.114f) / 255f
+            line.color = if (luz > 0.55f) 0xCC0B0B0B.toInt() else 0xCCFFFFFF.toInt()
             canvas.save()
-            canvas.translate(x, y)
-            canvas.drawPath(arrow, fill)
-            canvas.drawPath(arrow, line)
+            // OJO: aquí «x» e «y» a secas NO son las de MouseMode. Esta clase hereda de android.view.View, que
+            // ya trae getX()/getY() (y valen 0 en una vista a pantalla completa); el miembro heredado gana y el
+            // puntero se dibujaba siempre en la esquina. Hay que decir de quién son.
+            canvas.translate(this@MouseMode.x, this@MouseMode.y)
+            canvas.drawPath(shape, fill)
+            canvas.drawPath(shape, line)
             val left = flashUntil - SystemClock.uptimeMillis()
             if (left > 0) {
-                val r = (14f + (220 - left) / 6f) * dp
+                val r = size * 0.7f + ((220 - left) / 6f) * dp
                 ring.alpha = (left * 255 / 220).toInt().coerceIn(0, 255)
-                canvas.drawCircle(0.3f * h, 0.5f * h, r, ring)
+                canvas.drawCircle(0f, 0f, r, ring)
             }
             canvas.restore()
         }

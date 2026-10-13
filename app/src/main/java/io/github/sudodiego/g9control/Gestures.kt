@@ -20,6 +20,9 @@ val GESTURE_CATS: List<Pair<String, String>> = listOf(
     "Ratón" to "Mouse",
 )
 
+/** Categoría «Ratón» de [GestureAction.cat] (índice de [GESTURE_CATS]). */
+const val MOUSE_CAT = 7
+
 /** Qué hace un gesto de un botón. `cat` = categoría del menú (índice de [GESTURE_CATS]). */
 enum class GestureAction(val es: String, val en: String, val cat: Int) {
     NONE("Nada", "Nothing", 0),
@@ -74,8 +77,11 @@ enum class GestureAction(val es: String, val en: String, val cat: Int) {
     MOUSE_DRAG("Arrastrar", "Drag", 7),
     WHEEL_UP("Rueda arriba", "Scroll up", 7),
     WHEEL_DOWN("Rueda abajo", "Scroll down", 7),
-    /** Enciende o apaga el puntero (lo mismo que L3 + R3). */
-    MOUSE_TOGGLE("Puntero: encender/apagar", "Pointer: on/off", 7);
+    /**
+     * Solo apaga el puntero: encenderlo es L3 + R3 (o el botón de la pestaña «Ratón»). Así se puede apagar con
+     * un botón cómodo y no hay forma de encenderlo sin querer.
+     */
+    MOUSE_TOGGLE("Puntero: solo apagar", "Pointer: turn off only", 7);
 
     companion object {
         fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE
@@ -373,10 +379,26 @@ class GestureEngine(
     private var lAt = 0L
     private var lPressAt = 0L
     private var lSwallowUp = false
+    /** El botón que está esperando pasar su umbral de «Mantener». */
+    private var lRule: GestureRule? = null
+    private var lFire: ((GestureAction, Int, String, List<Int>) -> Unit)? = null
+    /** Ya se disparó «Mantener» en esta pulsación (para no repetirlo al soltar). */
+    private var lLongFired = false
+
+    /** «Mantener» sale al pasar su umbral, sin esperar a que sueltes el botón. */
+    private val lLongRunnable = Runnable {
+        val r = lRule ?: return@Runnable
+        val f = lFire ?: return@Runnable
+        if (lKey == 0 || r.long == GestureAction.NONE) return@Runnable
+        lLongFired = true
+        lKey = 0                      // al soltar ya no toca repetirlo
+        f(r.long, r.kcLong, r.pkg, r.combo)
+    }
 
     /**
      * Escucha sin interceptar (modo Key Mapper). El botón llega entero a la app; aquí solo se mira si hay dos
      * toques seguidos (se captura el segundo) o si se mantuvo lo suficiente para disparar «Mantener».
+     * «Mantener» sale en cuanto se pasa el umbral (no al soltar).
      * @return true solo en la pulsación que sí es nuestra (el segundo toque de un doble).
      */
     private fun listen(
@@ -387,15 +409,24 @@ class GestureEngine(
         if (down) {
             if (repeatCount > 0) return false
             if (rule.dbl != GestureAction.NONE && lKey == keyCode && now - lAt <= Gestures.doubleMs(ctx)) {
-                lKey = 0; lSwallowUp = true
+                handler.removeCallbacks(lLongRunnable)
+                lKey = 0; lSwallowUp = true; lLongFired = false
                 fire(rule.dbl, rule.kcDbl, rule.pkg, rule.combo)
                 return true
             }
-            lKey = keyCode; lAt = now; lPressAt = now; lSwallowUp = false
+            lKey = keyCode; lAt = now; lPressAt = now; lSwallowUp = false; lLongFired = false
+            lRule = rule; lFire = fire
+            handler.removeCallbacks(lLongRunnable)
+            if (rule.long != GestureAction.NONE)
+                handler.postDelayed(lLongRunnable, Gestures.longMs(ctx).coerceAtLeast(1).toLong())
             return false
         }
+        handler.removeCallbacks(lLongRunnable)
         if (lSwallowUp) { lSwallowUp = false; return true }   // el soltar del segundo toque sí es nuestro
-        if (rule.long != GestureAction.NONE && lKey == keyCode &&
+        // Red de seguridad: si el aviso del umbral no llegó a tiempo (hilo ocupado), se resuelve aquí.
+        val fired = lLongFired
+        lLongFired = false
+        if (!fired && rule.long != GestureAction.NONE && lKey == keyCode &&
             now - lPressAt >= Gestures.longMs(ctx)
         ) {
             lKey = 0

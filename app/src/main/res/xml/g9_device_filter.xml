@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- G9 en modo Android (VID 0x3537, PID 0x1134). En X-Input/DS5 el VID cambia, así que no aplica. -->
 <resources>
+    <!-- Los dos PID del G9: 4404 (0x1134) y 4406 (0x1136, el que reporta el mando actual). Con el PID que no
+         coincide, Android no concede el permiso solo al conectar y hay que aceptar el diálogo a mano cada vez. -->
     <usb-device vendor-id="13623" product-id="4404" />
+    <usb-device vendor-id="13623" product-id="4406" />
 </resources>

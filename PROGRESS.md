@@ -252,3 +252,105 @@ Roberto volvió de probar la **1.3.15-diag** con tres quejas; salió a probar la
 - Versión **1.4.0-diag (versionCode 27)**; `assembleRelease` **BUILD SUCCESSFUL**.
 
 **Pendiente al conectar la tableta:** instalar por adb (se saltó la 1.3.20: esta 1.4.0 la incluye) + ADB inalámbrico; y **comprobar el comando de la rueda real** (`adb shell input` imprime los comandos de ese Android): si `input mouse roll` no existe, ya cae sola al deslizamiento y la opción «rueda de verdad» se marca como no disponible.
+
+**Ampliación (mismo día): papel por stick.** Preguntó por tres escenarios reales (Edge, Brave+YouTube, GameHub con point & click) y pidió que el scroll se pueda poner «en cualquier stick, ninguno o ambos» (no para él, para la comunidad). En «Ratón» **cada stick por separado** tiene un papel: **Nada / Puntero / Scroll**. «Scroll» manda pasos de rueda seguidos (≈200 ms al borde de la zona muerta → ≈70 ms a fondo) en la posición del puntero, con el ajuste de rueda de la pestaña. Con los dos en «Puntero» mueve el que muevas (no se suman) y con los dos en «Scroll» los dos desplazan; si ninguno mueve el puntero, la pestaña avisa. Commiteado dentro de la 1.4.0 (`2592a9d`, APK sha256 `134bd624…`, `BUILD SUCCESSFUL`).
+
+## 2026-10-12 (15ª parte — 1.4.2-diag: los pendientes de la lista de Roberto, todos en una versión)
+
+Roberto pidió **una sola versión con todas sus peticiones hechas**, y sobre esa probar. Hecho y compilado: **1.4.2-diag (versionCode 29)**, `assembleRelease` **BUILD SUCCESSFUL**, instalada encima en la Y700 (v29 confirmado con `dumpsys package`). Los registros de diagnóstico (`DIAG …`) que quedaban del depurado **se quitaron todos** (comprobado: no queda ningún `DIAG` temporal en los `.kt`).
+
+**1) Puntero: tamaño, color y forma** (lo que había pedido y faltaba). Panel nuevo **«Aspecto del puntero»** en la pestaña «Ratón»: **Tamaño 10–48 dp** (por defecto 20), **Forma** (Flecha / Punto / Cruz) y **Color** con muestras (blanco, negro, amarillo, verde, cian, rosa, naranja). En los tres estilos **el punto del clic es el punto de la figura** (punta de la flecha, centro del punto, cruce de la cruz), así el clic siempre sale donde ves. El contorno se pone solo del color que **contrasta** con el relleno (calculado por luminancia), para que se vea sobre fondo claro y oscuro sin tener que elegir dos colores. El margen de repintado crece con el tamaño (un puntero grande no deja rastro). `MouseRules` gana `cursorSize`/`cursorColor`/`cursorStyle`; `CursorView` rehace la figura **solo cuando cambian** tamaño o estilo, no en cada cuadro. Verificado en la tableta: la página muestra `Forma → Flecha/Punto/Cruz` y `Color`.
+
+**2) «Traseros» al lado de «Bumpers y gatillos»** (petición con imagen). Estaban **debajo**; ahora van **uno al lado del otro** en la misma fila (dos columnas), y «Botón con gestos» queda debajo de los dos. Verificado leyendo el árbol real de la pantalla en la tableta: `Bumpers y gatillos y=1205 → LB RB LT RT y=1315` y `Traseros y=1205 → L4 R4 L5 R5 y=1315` (misma línea).
+
+**3) El ámbito «Pantalla de inicio» se heredaba en Cocoon — causa encontrada y arreglada.** Roberto lo describió exacto: asignó RT/LT a «Pantalla de inicio», dentro de Cocoon le registraba un doble clic, y al quitarlo se fue. **No era herencia de reglas: era que la app no veía a Cocoon.** El filtro que decide «esta ventana no es una app» (para ignorar superposiciones) preguntaba **primero si el paquete es un teclado**, y la tableta tiene tres teclados activos… y **uno es el propio Cocoon** (`rip.moth.cocoonshell/.ui.keyboard.CocoonInputMethodService`): Cocoon es teclado **y** pantalla de inicio. Por ese orden, **todos los avisos de ventana de Cocoon se descartaban**, la app seguía creyendo que estabas en `com.zui.launcher` y dentro de Cocoon te aplicaba **sus reglas**. Arreglo (`isTransient`): (a) si el aviso trae la ventana, se decide por el **tipo** (`TYPE_APPLICATION` = app; teclado/sistema/superposición = no cuenta); (b) sin ese dato, se pregunta **primero si es una app** (lanzable o pantalla de inicio) y solo después si además es teclado. Medido en la tableta con el registro puesto: antes `transitorio=true` (y ningún aviso de app al frente), ahora `transitorio=false` + `app al frente: rip.moth.cocoonshell (MainActivity), ventana 1376`. De paso: cualquier app que sea teclado y no actividad propia ya no puede “tragarse” el cambio de app.
+
+**4) Cajón de apps: intent no hay, así que se espera de verdad al launcher.** Comprobado en la tableta que **nadie atiende** `android.intent.action.ALL_APPS` (ni ZUI ni Cocoon), así que el camino de MacroDroid **no existe** aquí: queda inicio + deslizamiento. Lo inestable era el **180 ms a ojo**: si el launcher tardaba, el deslizamiento caía en el vacío (te quedabas en el inicio) o se sentía lento. Ahora, al pedir el cajón se **pregunta a la ventana activa** si el launcher está al frente, **cada 60 ms hasta 1 s**, y se desliza **en el momento justo** (`esLauncherAlFrente` + `esperarLauncherYDeslizar`); si el launcher no llega, **no desliza a ciegas** sobre otra app y lo dice en el registro. También el «ya estoy en el launcher» dejó de estar clavado a `com.zui.launcher` y usa las pantallas de inicio reales del sistema.
+
+**5) Rueda/deslizamiento «casi imperceptible».** El deslizamiento con asignación de stick usa el comando corregido (`input mouse scroll <x> <y> --axis VSCROLL`, medido en la tableta: **578 px por paso**; el viejo `input mouse roll` daba **0 px**) y el ritmo de 110 ms con rechazo controlado (no se apilan gestos: Android rechaza el que llega con otro en marcha). Se retiró el `wheelMode`/Shizuku del UI y quedó **«Reversar la dirección»**.
+
+**6) «Arrastrar» ¿es redundante con mantener el clic?** No: el clic se inyecta como un toque de **55 ms** (no se puede dejar apretado mientras mueves). «Arrastrar» guarda dónde estaba el puntero al apretar y manda **un gesto entero** al soltar. Son cosas distintas.
+
+**Pendiente:** solo la prueba de Roberto sobre esta 1.4.2-diag.
+
+## 2026-10-13 (16ª parte — 1.4.3-diag: la ronda de los 5 puntos que Roberto reportó probando la 1.4.2)
+
+Roberto probó la 1.4.2-diag con el mando y trajo 5 puntos (dos imágenes anotadas). Sobre su orden de **no**
+hacer el commit («tiene mucho bug todavía»), todo se implementó en **UNA sola versión**: **1.4.3-diag
+(versionCode 30)**.
+
+1. **No se reconectaba sola tras dormirse (imagen).** `reconnectController()` se **rendía en silencio**
+   cuando faltaba el permiso USB (`if (!G9Usb.hasPermission(this, d)) return`), que es justo lo que Android
+   quita al desconectarse. Ahora el **servicio lo pide** (`G9Usb.askPermission`, petición sin esperar
+   respuesta) y **reintenta a los 1,5 s**, con un tope de una petición cada 10 s para no repetir el
+   diálogo. **A probar con el mando**; el `dumpsys usb` del despertar no se pudo medir (sin ADB).
+2. **Chips de «Gestos» partidos (RT y R5 en dos renglones).** Las dos columnas a media pantalla con chips
+   «naturales» no dejaban sitio. Ahora cada chip `Modifier.weight(1f)`, separación 4 dp, etiqueta a 12 sp
+   **en una sola línea** (`maxLines = 1, softWrap = false`) y 8 dp entre las dos columnas. Opción elegida
+   por él: «los 8 chips con el mismo ancho y más chicos, para que quepan en una sola fila».
+3. **UP/DOWN «asignados» que él nunca asignó.** No era la pestaña Gestos: la pestaña **Ratón** guardaba sus
+   botones como **reglas de gestos generales** (`Gestures.setRule`) y Gestos imprime esas reglas. Ahora los
+   botones del ratón tienen **su propio almacén** (`MouseRules.buttons` → preferencia `mouse_buttons`), con
+   **migración automática** de lo ya guardado (`migrateFromGestures`), y **no aparecen en «Gestos»**.
+4. **Ratón.** (a) **clic derecho** = toque largo, ahora **1 s** (`tap(1000)`); sin root no existe el botón
+   derecho real y un mantener abre menú **solo donde la app lo tenga** (dicho tal cual). (b) Con el puntero
+   encendido **solo hacen algo los botones del ratón** y **el botón guía tampoco** (su decisión): los demás
+   no llegan a la app ni al juego; siguen **L3 + R3** (apagarlo) y el panel ya abierto. (c) **Se quitó el
+   auto-encendido**: apretar el botón del clic ya no saca el puntero; encender es L3 + R3 o la pestaña.
+   (d) La acción del último renglón pasa a **«Puntero: solo apagar»** (`turnMouseOff`), asignable a
+   cualquier botón y activa **solo con el puntero encendido**; L3 + R3 sigue encendiendo y apagando.
+5. **Traseros activos en apps sin reglas.** El detector vigilaba «si algún trasero **tiene reglas**» → con
+   reglas solo en Brave, en las demás apps se apartaba y los **Vista/Menú de la firma llegaban crudos**. La
+   condición ahora es **si el mando trae de verdad la marca** en algún trasero: la app escribe en
+   preferencias qué traseros están en su macro (`paddle_sig`, `MainActivity.syncFirmas`) y el servicio lo
+   lee (`AutoMode.handleKey`). Fuera de la app con reglas, el trasero se consume y **no hace nada**.
+
+**Verificación.** `JAVA_HOME=… ./gradlew :app:assembleRelease --offline` → **BUILD SUCCESSFUL in 33s**
+(1 aviso de deprecación preexistente en `Mouse.kt:382`). APK:
+`app/build/outputs/apk/release/app-release.apk`, **2.957.075 bytes**, sha256
+`5ae1637b4a55eb375c4c91c0ee90b9d1c18220d2ab5e65de822bcf13cf7659f8`. `aapt2 dump badging` →
+`versionCode='30' versionName='1.4.3-diag'`. Los cambios están **en el artefacto** (el dex contiene
+`mouse_buttons`, `solo apagar` y `paddle_sig`).
+
+**Pendiente:** instalar en la Y700 (**no se pudo: `adb devices` vacío**, la tablet se reinició y perdió el
+ADB inalámbrico), probar los 5 puntos con el mando, y `dumpsys usb` al despertar el mando para cerrar el
+punto 1 con dato. **Sin commit** (él lo pidió así).
+
+### Correcciones de la misma ronda (13-10, tras la primera prueba con el mando)
+- **1.4.4-diag (versionCode 31):** Menú/Select con asignaciones en «Todas las apps» — al encender la
+  vigilancia de firmas en todas las apps (punto 5) esos dos botones pasan por el detector, y el camino de
+  devolución (`lostSignatureKey`) mandaba al motor solo el «apretar»; el arreglo apresurado mandó
+  «apretar + soltar» juntos, lo que cancelaba el «Mantener» (salía al soltar el dedo) y forzaba la
+  reinyección de la tecla (`input keyevent 108` = abrir Files en esta ROM).
+- **1.4.5-diag (versionCode 32):** arreglo definitivo — se devuelve **solo el «apretar»** al motor (el
+  soltar real completa el toque) y, sin regla para ese botón, se devuelve con **origen de mando**
+  (`input gamepad keyevent`), nunca con la tecla pelona.
+- **1.4.6-diag (versionCode 33):** R3 (asignado a «Puntero: solo apagar») colaba al launcher al volver a
+  apretarlo y activaba el icono enfocado (Files). Ahora **un botón asignado en «Ratón» nunca llega a la
+  app**: encendido hace lo suyo, apagado no hace nada. Y con el puntero encendido la **cruceta** también se
+  consume (`SOURCE_DPAD` faltaba en el filtro y movía la selección del inicio por debajo del puntero).
+- Las tres versiones se instalaron por **ADB inalámbrico** (`192.168.68.107:5555`, `adb tcpip 5555` con el
+  cable y luego el cable fuera para probar el mando). **Sin commit.**
+
+- **1.4.7-diag (versionCode 34):** L3 + R3 encendía el ratón en la pantalla de inicio y **abría Files**: la
+  combinación solo consumía su segunda tecla y la **primera** llegaba al launcher, donde un botón del mando
+  activa el icono enfocado. Ahora la primera tecla **se consume en la pantalla de inicio** (y solo ahí); en
+  apps y juegos sigue igual. Instalada por ADB inalámbrico. **Sin commit.**
+
+- **1.4.8-diag (versionCode 35):** tras el 1.4.7 («el resto de los botones no funciona»): con el puntero
+  encendido y en la pantalla de inicio, el botón de apagarlo (R3, asignado en «Ratón») se lo comía la lógica
+  de L3 + R3 → el puntero no se apagaba nunca y, como con el puntero encendido los demás botones no hacen
+  nada por diseño, parecía que se habían roto todos. Ahora la primera tecla de la combinación **sí pasa
+  cuando está asignada en «Ratón»**. (La captura de `getevent` de esa ronda se colgó y quedó en 0 bytes.)
+
+- **1.4.9-diag (versionCode 36):** «A no funciona, B no es Atrás, RT/LT al launcher no funcionan» — verificado
+  en la tablet que **no había ventanas de la app** (el puntero estaba apagado), así que el culpable era la
+  regla del 1.4.6 («un botón del ratón nunca llega a la app»): con el puntero apagado se comía A, B, LT, RT…
+  que él también usa para otras cosas (esos botones quedaron en el almacén del ratón por la migración).
+  Ahora con el puntero apagado un botón del ratón **se comporta como si no tuviera nada asignado**; solo se
+  retiene la primera tecla de L3 + R3 en el inicio. **Sin commit.**
+
+- **1.4.10-diag (versionCode 37):** el botón elegido para SALIR del ratón (él tenía L3) dejó de funcionar en la
+  pantalla de inicio: en la condición de la primera tecla de L3 + R3 puse `&&` donde iba `||`. Ahora pasa si
+  no estás en el inicio **o** si es un botón del ratón con el puntero encendido — sirve para **cualquier**
+  botón que el usuario asigne, no solo R3. **Sin commit.**

@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
         SkinState.skin = Prefs.skin(this)
         ThemeState.theme = Prefs.theme(this)
         Lang.load(this)
+        MouseRules.migrateFromGestures(this)   // botones del ratón que estaban guardados como gestos
         state.showSetup = !Prefs.setupDone(this)
         // Tras importar un respaldo la app se reinicia: se vuelve a la pestaña donde estaba (Respaldo).
         Prefs.takeRestoreTo(this)?.let { (sec, pg) -> state.section = sec; state.page = pg }
@@ -92,6 +93,9 @@ class MainActivity : ComponentActivity() {
             G9Theme {
                 // Íconos de la barra de estado y de navegación acordes al tema elegido (no solo al del sistema).
                 val dark = isDarkTheme()
+                // Qué traseros traen su marca en el mando, escrito en las preferencias: el servicio lo lee para
+                // vigilar sus Vista/Menú siempre (si no, la marca llega cruda a la app en las demás apps).
+                androidx.compose.runtime.LaunchedEffect(state.backKeys.values.toList()) { syncFirmas() }
                 androidx.compose.runtime.LaunchedEffect(dark) {
                     val style = if (dark) androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
                     else androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
@@ -146,6 +150,16 @@ class MainActivity : ComponentActivity() {
             onChange = { s.queued(0L, 0L) }) { saveSticks() }
         watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) },
             onChange = { s.queued(0L, 0L) }) { saveVibration() }
+    }
+
+    /**
+     * Deja escrito qué traseros traen su marca en el mando (el byte de macro). El servicio lo lee para vigilar
+     * sus Vista/Menú SIEMPRE: si solo se vigilara cuando hay reglas, en las apps sin reglas la marca llegaría
+     * cruda y sus Vista/Menú harían lo que tuvieran asignado en cualquier app.
+     */
+    private fun syncFirmas() {
+        val sig = state.backKeys.filterValues { it == BACK_MACRO }.keys.map { it.toString() }.toSet()
+        getSharedPreferences("g9", MODE_PRIVATE).edit().putStringSet("paddle_sig", sig).apply()
     }
 
     override fun onNewIntent(intent: Intent) {

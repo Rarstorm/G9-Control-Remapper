@@ -55,13 +55,9 @@ object Shell {
      * [Shell.run] devuelve el error y se cae al reenvío normal.
      */
     fun keyEventPad(code: Int) = "input gamepad keyevent $code"
-    /**
-     * Rueda del ratón (Shizuku): `input roll <dx> <dy>` le manda el aviso de rueda a la ventana que tiene el
-     * foco; con el origen «mouse» queda como el de un ratón de verdad. Si el sistema no lo admite, la app se cae
-     * al deslizamiento corto (ver MouseMode.wheel).
-     */
-    fun wheel(lines: Int) = "input mouse roll 0 $lines"
-    private val WHEEL = Regex("input (mouse )?roll -?\\d{1,2} -?\\d{1,2}")
+    // La «rueda de verdad» por Shizuku se retiró del programa (MouseMode.wheel usa el tirón corto). Se midió
+    // en la tableta que `input mouse roll` no desplazaba nada (0 px con el origen «mouse») y `input mouse scroll`
+    // funcionaba solo en algunas apps: no era fiable. No volver a añadirlo sin medirlo app por app.
     private val KEY_PAD = Regex("input gamepad keyevent \\d{1,3}")
     // Abrir una app asignada a un gesto: Android no deja abrir actividades en segundo plano, pero el shell
     // de Shizuku sí (`am start -n paquete/actividad`). El paquete y la actividad salen de la propia app.
@@ -86,7 +82,7 @@ object Shell {
 
     private fun allowed(cmd: String) =
         cmd in setOf(GA_GET, GA_SHOW, GA_HIDE, GA_LOG, BYPASS_GET, BYPASS_ON, BYPASS_OFF, LIMIT_GET, LIMIT_LEVEL, BACK_LONG, SF_LIST) ||
-            KEY_EVENT.matches(cmd) || KEY_PAD.matches(cmd) || WHEEL.matches(cmd) || AM_START.matches(cmd) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
+            KEY_EVENT.matches(cmd) || KEY_PAD.matches(cmd) || AM_START.matches(cmd) || WM_SIZE.matches(cmd) || SF_LATENCY.matches(cmd) || REFRESH.matches(cmd) || cmd == INPUT_LIST ||
             (app != null && cmd.startsWith(screenCmd("")) && SCREEN.matches(cmd.removePrefix(screenCmd(""))))
 
     /** Para Ajustes (Compose lo vuelve a leer al cambiar). */

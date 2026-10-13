@@ -93,6 +93,20 @@ object G9Usb {
         return um.hasPermission(d)
     }
 
+    /**
+     * Pide el permiso USB sin esperar la respuesta: lo usa el SERVICIO, que no puede quedarse callado cuando el
+     * mando vuelve a aparecer (antes la reconexión sola se rendía en silencio sin el permiso guardado).
+     */
+    fun askPermission(ctx: Context, d: UsbDevice) {
+        val um = ctx.getSystemService(Context.USB_SERVICE) as UsbManager
+        if (um.hasPermission(d)) return
+        val app = ctx.applicationContext
+        val intent = Intent(ACTION_PERMISSION).setPackage(app.packageName)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+        runCatching { um.requestPermission(d, PendingIntent.getBroadcast(app, 0, intent, flags)) }
+    }
+
     /** Pide permiso USB y espera la respuesta del usuario. */
     suspend fun requestPermission(ctx: Context, d: UsbDevice): Boolean {
         val um = ctx.getSystemService(Context.USB_SERVICE) as UsbManager

@@ -283,6 +283,8 @@ class AutoModeService : AccessibilityService() {
     /** G9 Control está al frente: tiene su propia franja de modo, así que la guía se quita. */
     private var appInFront = false
     private var hiddenForApp = false
+    /** Un gesto de deslizamiento está en marcha: si se pide otuno, se cancela (evita que se apilen). */
+    private var gestureRunning = false
     /** Ventana de la app al frente (del último cambio de ventana), o -1. La usa la captura del panel de juego. */
     @Volatile var appWindowId = -1
         private set
@@ -295,7 +297,11 @@ class AutoModeService : AccessibilityService() {
      * inyectados en su posición. El stick lo mueve con velocidad, suavidad, curva y zona muerta configurables.
      */
     private val mouse by lazy {
-        MouseMode(this, main, { cmd -> scope.launch { Shell.run(cmd) } }, { x1, y1, x2, y2 -> swipe(x1, y1, x2, y2) })
+        MouseMode(
+            this, main, { cmd -> scope.launch { Shell.run(cmd) } },
+            { x1, y1, x2, y2, ms -> swipe(x1, y1, x2, y2, ms) },
+            { gestureRunning }
+        )
     }
 
     /**
@@ -331,8 +337,18 @@ class AutoModeService : AccessibilityService() {
     private fun lostSignatureKey(code: Int) {
         val rule = Gestures.rulesFor(this, lastPackage)[code]
         if (rule != null && rule.any) {
+            // Al motor se le pasa SOLO el apretar: el soltar de verdad llega después y con él se resuelve el
+            // toque. Sintetizar también el soltar rompía dos cosas a la vez (medido por Roberto): el
+            // «Mantener» se cancelaba y acababa saliendo al soltar el dedo, y el motor devolvía «no lo tomé»,
+            // con lo que se reinyectaba la tecla — y en esta ROM eso abre la app Files con Menú.
             gestures.onKey(this, lastPackage, code, true, 0) { act, kc, pkg, combo -> runGestureAction(act, kc, pkg, combo) }
-        } else scope.launch { Shell.run(Shell.keyEvent(code)) }
+            return
+        }
+        // Sin regla en esta app: se devuelve con origen de MANDO (nunca `input keyevent` pelón: con Menú abre
+        // la app Files en esta ROM).
+        scope.launch {
+            if (Shell.run(Shell.keyEventPad(code)) == null) Log.w(TAG, "no se pudo devolver la tecla $code")
+        }
     }
 
     /**
@@ -618,6 +634,7 @@ class AutoModeService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Lang.load(this)
+        MouseRules.migrateFromGestures(this)   // botones del ratón que estaban guardados como gestos
         guide = ModeGuide(this)
         panel = GamePanel(this)
         perfHud = PerfHud(this).also { it.update() }
@@ -771,8 +788,6 @@ class AutoModeService : AccessibilityService() {
      */
     private fun handleKey(event: KeyEvent): Boolean {
         val k = event.keyCode
-        // DIAG TEMPORAL (bug de L4): qué le llega de verdad al servicio. Quitar al cerrar el diagnóstico.
-        Log.d(TAG, "DIAG key k=$k ${if (event.action == KeyEvent.ACTION_DOWN) "down" else "up"} rep=${event.repeatCount} pkg=$lastPackage appInFront=$appInFront testing=${KeyBus.testing}")
         // Teclas que no llegan a las apps (encendido, volumen…): se pasan a la prueba de botones.
         KeyBus.listener?.let { l ->
             if (!KeyEvent.isGamepadButton(k) && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
@@ -785,34 +800,67 @@ class AutoModeService : AccessibilityService() {
         if (panel.busy && (KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
                 event.isFromSource(InputDevice.SOURCE_DPAD))) return true
         if (mouseChord(event)) return true
-        if (legionChord(event)) return true
         if (panel.isOpen && panel.onKey(event)) return true
+        // Los botones que se asignan en la pestaña «Ratón» son DEL RATÓN, y con el puntero encendido el mando
+        // entero es un ratón: solo esos botones hacen algo y los demás NO llegan a la app ni al juego (el botón
+        // guía tampoco, que lo pidió así). Sigue funcionando L3 + R3 (la forma de apagarlo) y el panel si ya
+        // estaba abierto. La cruceta también cuenta: si no, movía la selección de la pantalla de inicio por
+        // debajo del puntero. Dentro de G9 Control y en la prueba de botones no se toca nada.
+        val esDelMando = KeyEvent.isGamepadButton(k) || event.isFromSource(InputDevice.SOURCE_GAMEPAD) ||
+            event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD) ||
+            k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN ||
+            k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
+        if (mouse.isOn && esDelMando && !appInFront && !KeyBus.testing) {
+            val act = MouseRules.buttons(this)[k]
+            when {
+                event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 ->
+                    if (act == GestureAction.MOUSE_DRAG) mouse.rememberOrigin() else act?.let { runMouseAction(it) }
+                event.action == KeyEvent.ACTION_UP && act == GestureAction.MOUSE_DRAG -> runMouseAction(act)
+            }
+            return true
+        }
+        // Con el puntero APAGADO un botón del ratón se comporta como si no tuviera nada asignado: sigue siendo
+        // el botón de siempre (A abre lo que esté enfocado, B es Atrás, LB/RB/LT/RT sus gestos, la cruceta
+        // navega). Comérselos aquí fue el «me rompiste el resto de los botones».
+        if (legionChord(event)) return true
         if (legionKey(event)) return true
-        // Firmas de los traseros: la secuencia corta con la que el control dice qué trasero se apretó. Solo se
-        // vigila si algún trasero tiene reglas (en «Todas las apps» o en la app al frente), para no retrasar un
-        // Vista/Menú normal cuando no se usan firmas.
+        // Firmas de los traseros: la secuencia corta con la que el control dice qué trasero se apretó. Se vigila
+        // si algún trasero trae su marca EN EL MANDO (o tiene reglas en «Todas las apps» / en la app al frente),
+        // y si no, Vista/Menú pasan tal cual sin esperar nada.
         if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES) {
-            val rules = Gestures.rulesFor(this, lastPackage)
-            val hayTrasero = rules.keys.any { it in PADDLE_KEYCODE.values }
+            // La marca (la macro corta) vive en el MANDO: si algún trasero la trae, sus Vista/Menú se vigilan
+            // SIEMPRE, tenga o no reglas esa app. Con el filtro viejo («hay alguna regla de trasero») bastaba
+            // con tener reglas solo en una app para que en las demás el detector se apartara y la firma llegara
+            // cruda a la app: los Vista/Menú hacían lo que tuvieran asignado en cualquier app.
+            val firmaEnMando = getSharedPreferences("g9", android.content.Context.MODE_PRIVATE)
+                .getStringSet("paddle_sig", emptySet()).orEmpty().isNotEmpty()
+            val hayTrasero = firmaEnMando ||
+                Gestures.rulesFor(this, lastPackage).keys.any { it in PADDLE_KEYCODE.values }
             // Salida por app: si en ESTA app has configurado Vista o Menú (aunque sea «Nada»), esos botones son
             // suyos y llegan tal cual (en un juego las teclas reinyectadas no las ve: Eden no veía Menú). A
             // cambio, en esa app no se reconocen los traseros, porque el mando los firma justo con esos botones.
             val losUsaLaApp = SIG_KEYCODES.any { Gestures.appRules(this, lastPackage.orEmpty()).containsKey(it) }
-            Log.d(TAG, "DIAG firma alcanzada k=$k hayTrasero=$hayTrasero losUsaLaApp=$losUsaLaApp claves=${rules.keys}")
             if (hayTrasero && !losUsaLaApp && signatures.onKey(k, event.action == KeyEvent.ACTION_DOWN)) return true
         }
         // Gestos (tocar / mantener / doble): no mientras G9 Control está al frente (ahí navega la app) ni
         // durante la prueba de botones: el botón probado tiene que llegar tal cual.
-        // Si este botón no tiene regla para la app que creemos al frente, se le pregunta a la ventana activa:
-        // justo al entrar a una app el paquete puede ir un paso atrás y entonces el botón se iba tal cual a la
-        // app (en Brave, «Y» abría su menú en vez de mandar la tecla). Solo se consulta cuando hace falta.
+        // El paquete que creemos al frente puede ir un paso atrás justo al entrar a una app: el aviso del
+        // sistema llega un poco después que la primera pulsación. Antes solo se le preguntaba a la ventana
+        // activa cuando el paquete viejo NO tenía regla para ese botón — y si sí la tenía (la del launcher,
+        // por ejemplo) se ejecutaba ESA regla y la app recién abierta nunca recibía el botón: exactamente el
+        // «no reconoce la presión sencilla recién entrando a la app». Ahora se pregunta siempre, espaciado
+        // 200 ms para no pagarlo en cada evento.
         var gpkg = lastPackage
-        if (!appInFront && !KeyBus.testing && gpkg != null && Gestures.rulesFor(this, gpkg)[k] == null) {
-            val fresh = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
-            if (!fresh.isNullOrEmpty() && fresh != gpkg && !isTransient(fresh)) {
-                Log.d(TAG, "paquete al frente corregido: $gpkg -> $fresh")
-                lastPackage = fresh
-                gpkg = fresh
+        if (!appInFront && !KeyBus.testing) {
+            val ahora = android.os.SystemClock.uptimeMillis()
+            if (ahora - pkgCheckedAt > 200) {
+                pkgCheckedAt = ahora
+                val fresh = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+                if (!fresh.isNullOrEmpty() && !isTransient(fresh) && fresh != gpkg) {
+                    Log.d(TAG, "paquete al frente al día: ${gpkg ?: "?"} -> $fresh")
+                    lastPackage = fresh
+                    gpkg = fresh
+                }
             }
         }
         // El botón de «arrastrar»: se apunta dónde estaba el puntero al apretarlo, para saber de dónde sale.
@@ -922,21 +970,12 @@ class AutoModeService : AccessibilityService() {
             // horizontal, así que se hace ese deslizamiento.
             GestureAction.PAGE_NEXT -> swipe(0.86f, 0.5f, 0.12f, 0.5f)
             GestureAction.PAGE_PREV -> swipe(0.14f, 0.5f, 0.88f, 0.5f)
-            // Ratón: si el puntero estaba apagado, una acción suya lo enciende (si no, no habría dónde hacer el
-            // clic y parecería que el botón no hace nada).
+            // Ratón: sus botones se asignan en la pestaña «Ratón» y solo valen con el puntero encendido (los
+            // atiende [runMouseAction] antes de llegar aquí). Antes se disparaban como gestos y ENCENDÍAN el
+            // puntero solos: apretar el botón del clic lo sacaba en pantalla sin pedirlo.
             GestureAction.MOUSE_CLICK, GestureAction.MOUSE_RIGHT, GestureAction.MOUSE_DOUBLE, GestureAction.MOUSE_DRAG,
-            GestureAction.WHEEL_UP, GestureAction.WHEEL_DOWN -> {
-                if (!MouseRules.on(this)) { MouseRules.setOn(this, true); updateMouse() }
-                when (a) {
-                    GestureAction.MOUSE_RIGHT -> mouse.rightClick()
-                    GestureAction.MOUSE_DOUBLE -> mouse.doubleClick()
-                    GestureAction.MOUSE_DRAG -> mouse.drag()
-                    GestureAction.WHEEL_UP -> mouse.wheel(-1)
-                    GestureAction.WHEEL_DOWN -> mouse.wheel(1)
-                    else -> mouse.click()
-                }
-            }
-            GestureAction.MOUSE_TOGGLE -> toggleMouse()
+            GestureAction.WHEEL_UP, GestureAction.WHEEL_DOWN -> {}
+            GestureAction.MOUSE_TOGGLE -> turnMouseOff()
             // Secuencia de teclas (macro corta): se manda tecla a tecla, con una pausa para que el juego la
             // vea como pulsaciones separadas. Va con origen de mando, que es el que atienden los juegos.
             GestureAction.COMBO -> if (combo.isNotEmpty()) scope.launch {
@@ -1000,16 +1039,34 @@ class AutoModeService : AccessibilityService() {
         }
     }
 
-    /** Deslizamiento de un dedo por la pantalla, en tanto por uno (0..1): el cajón de apps y las páginas. */
-    private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 260) {
+    /**
+     * Deslizamiento de un dedo por la pantalla, en tanto por uno (0..1): el cajón de apps y las páginas.
+     * `ms` es la duración del gesto: para el cajón se acepta lo mínimo el sistema necesita para reconocer
+     * el toque (el launcher de ZUI tarda en dibujarse) y por eso el cajón no se siente lento.
+     */
+    private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 260): Boolean {
         val m = resources.displayMetrics
         val path = Path().apply {
             moveTo(x1 * m.widthPixels, y1 * m.heightPixels)
             lineTo(x2 * m.widthPixels, y2 * m.heightPixels)
         }
         val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
-        if (!dispatchGesture(g, null, null) && this::panel.isInitialized)
-            panel.message(tr("No se pudo deslizar la pantalla.", "Couldn't swipe the screen."))
+        // Si el gesto anterior todavía no terminó, el nuevo se despacha igual (Android no permite cancelarlo).
+        // Android NO tiene ninguna forma de cancelar un gesto ya despachado: la referencia oficial de
+        // AccessibilityService solo lista dispatchGesture (no existe cancelGesture), así que «cancelar el
+        // anterior» era imposible. Se despacha igual y el sistema resuelve si dos se pisan; el indicador
+        // se queda para no apilar el del cajón.
+        if (gestureRunning) Log.d(TAG, "swipe: ya había uno en marcha")
+        val ok = dispatchGesture(g, null, null)
+        if (!ok) {
+            // Android rechaza el gesto si ya hay otro en marcha (o el servicio no está listo). Antes se
+            // ignoraba el resultado y un scroll podía quedarse en nada sin que nadie se enterara.
+            Log.w(TAG, "el gesto NO se pudo despachar (había otro en marcha o el servicio no está listo)")
+            return false
+        }
+        gestureRunning = true
+        main.postDelayed({ gestureRunning = false }, ms + 80)
+        return true
     }
 
     /**
@@ -1031,27 +1088,69 @@ class AutoModeService : AccessibilityService() {
         am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
     }
 
-    /**
-     * Cajón de apps desde cualquier app. Android no tiene una acción para abrirlo (cada launcher hace lo suyo),
-     * así que se prueban tres caminos en orden: (1) el intent público `android.intent.action.ALL_APPS`, que
-     * atienden pocos launchers pero es el más limpio — se lanza por Shizuku, que no lo frena la restricción de
-     * abrir actividades en segundo plano; (2) el mismo intent abierto a mano, sin Shizuku; (3) ir al inicio y
-     * deslizar hacia arriba, que es lo que hace el dedo y funciona en cualquier launcher (a cambio de salir de
-     * la app en la que estabas).
-     */
+    /** Cuándo se le preguntó por última vez a la ventana activa de qué app se trata (se espacia 200 ms). */
+    private var pkgCheckedAt = 0L
+
+    /** Se pidió el cajón y todavía no se ha deslizado (0 = nada pendiente). */
+    private var cajonPedido = 0L
+
     private fun openAppDrawer() {
-        val intent = Intent("android.intent.action.ALL_APPS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val comp = runCatching { packageManager.resolveActivity(intent, 0)?.activityInfo }.getOrNull()
-        if (comp != null && comp.packageName != "android") {
-            val flat = "${comp.packageName}/${comp.name}"
-            Log.d(TAG, "cajón de apps: el launcher lo atiende ($flat)")
-            if (Shell.state == Shell.State.READY) scope.launch { if (Shell.run(Shell.amStart(flat)) == null) openAppDirect(intent) }
-            else openAppDirect(intent)
-            return
+        // Comprobado en la tableta: `com.zui.launcher/.drawer.DrawerLauncher` es la MISMA ventana del launcher.
+        // Arrancarla lo trae al frente, pero deja la pantalla de INICIO: el cajón es una página dentro de esa
+        // actividad, y Android no tiene ninguna acción para abrirlo (por eso el intent público
+        // `android.intent.action.ALL_APPS` tampoco sirve en este launcher). El único camino que abre el cajón
+        // de verdad es el del dedo: ir al inicio y deslizar hacia arriba.
+        main.removeCallbacks(cajonDeslizar)
+        cajonPedido = android.os.SystemClock.uptimeMillis()
+        if (esLauncherAlFrente()) {
+            // Ya estamos en la pantalla de inicio (o en el propio cajón): no hay que esperar a que se dibuje
+            // nada, el deslizamiento sale en el acto — así el cajón no se siente lento.
+            Log.d(TAG, "cajón de apps: ya en el launcher -> deslizamiento inmediato")
+            main.post(cajonDeslizar)
+        } else {
+            Log.d(TAG, "cajón de apps: inicio + deslizamiento")
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            // Antes se esperaban 180 ms «a ojo» y a veces el launcher no había terminado: el deslizamiento caía
+            // en el vacío (te quedabas en el inicio) o tardaba. Ahora se pregunta hasta que el launcher esté de
+            // verdad al frente (cada 60 ms, hasta 1 s) y se desliza en ese momento.
+            esperarLauncherYDeslizar(0)
         }
-        Log.d(TAG, "cajón de apps: el launcher no atiende el intent -> inicio + deslizamiento")
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        main.postDelayed({ swipe(0.5f, 0.72f, 0.5f, 0.30f) }, 450)
+    }
+
+    /** Insiste hasta que el launcher esté al frente (o se acabe el tiempo) y entonces desliza. */
+    private fun esperarLauncherYDeslizar(intento: Int) {
+        if (cajonPedido == 0L) return
+        if (esLauncherAlFrente()) {
+            Log.d(TAG, "cajón de apps: launcher al frente tras ${intento * 60} ms")
+            main.post(cajonDeslizar)
+        } else if (intento < 16) {
+            main.postDelayed({ esperarLauncherYDeslizar(intento + 1) }, 60)
+        } else {
+            // Se acabó el tiempo y no hay launcher: mejor no deslizar a ciegas encima de otra app.
+            Log.w(TAG, "cajón de apps: el launcher no llegó al frente; no se desliza")
+            cajonPedido = 0L
+        }
+    }
+
+    /** ¿Está el launcher al frente ahora mismo? Se le pregunta a la ventana activa, no al último aviso. */
+    private fun esLauncherAlFrente(): Boolean {
+        val p = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull() ?: return false
+        return esLauncher(p)
+    }
+
+    /** Si ese paquete es una de las pantallas de inicio que declara el sistema. */
+    private fun esLauncher(pkg: String) = runCatching {
+        packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0
+        ).any { it.activityInfo.packageName == pkg }
+    }.getOrDefault(pkg == "com.zui.launcher")
+
+    /** Desliza para abrir el cajón. Si ya se hizo (o se canceló), no repite. */
+    private val cajonDeslizar = Runnable {
+        if (cajonPedido == 0L) return@Runnable
+        cajonPedido = 0L
+        // 120 ms: mínimo que ZUI reconoce como swipe y no como toque.
+        swipe(0.5f, 0.72f, 0.5f, 0.30f, ms = 120)
     }
 
     /**
@@ -1063,7 +1162,22 @@ class AutoModeService : AccessibilityService() {
     private fun reconnectController() {
         if (G9Usb.isOpen()) return
         val d = G9Usb.findDevice(this) ?: return
-        if (!G9Usb.hasPermission(this, d)) return
+        if (!G9Usb.hasPermission(this, d)) {
+            // Android quita el permiso USB al desconectarse ("only until the device is disconnected") y el
+            // permiso automático solo llega si el aviso de conexión encuentra la app: antes, sin permiso, la
+            // reconexión se RENDÍA EN SILENCIO y el mando se quedaba fuera hasta abrir la app. Ahora se pide
+            // (con su diálogo) y se reintenta; como mucho una petición cada 10 s.
+            val ahora = android.os.SystemClock.uptimeMillis()
+            if (ahora - ultimaPeticion > 10_000) {
+                ultimaPeticion = ahora
+                Log.d(TAG, "reconexión sola: falta el permiso USB, se pide")
+                G9Usb.askPermission(this, d)
+                main.postDelayed({
+                    if (!G9Usb.isOpen() && G9Usb.hasPermission(this, d)) reconnectController()
+                }, 1500)
+            }
+            return
+        }
         scope.launch {
             kotlinx.coroutines.delay(800)   // el control tarda un momento en quedar listo tras despertar
             if (G9Usb.isOpen()) return@launch
@@ -1073,6 +1187,9 @@ class AutoModeService : AccessibilityService() {
             Log.d(TAG, if (err == null) "mando reconectado solo" else "no se pudo reconectar el mando: $err")
         }
     }
+
+    /** Cuándo se pidió por última vez el permiso USB desde aquí (para no repetir el diálogo). */
+    private var ultimaPeticion = 0L
 
     /** Esta pulsación del botón Legion es nuestra (no llega a la app). */
     private var legionOwned = false
@@ -1302,29 +1419,64 @@ class AutoModeService : AccessibilityService() {
         panel.capture()
     }
 
-    /** L3 y R3 apretados ahora mismo. */
-    private val sticksDown = mutableSetOf<Int>()
+    /** L3 y R3 apretados ahora mismo, con el momento en que se apretó cada uno. */
+    private val sticksDown = mutableMapOf<Int, Long>()
     /** El stick que completó L3 + R3: ni su presión ni su soltar llegan al juego. */
     private var chordKey = -1
+    /** Cuánto pueden separarse las dos pulsaciones para que cuenten como combinación (ms). */
+    private val chordWindow = 150L
+    /** Si el «soltar» de un stick nunca llegó, su marca se olvida pasado este tiempo (ms). */
+    private val chordStale = 2500L
 
     /**
      * L3 + R3: enciende y apaga el puntero del ratón (como en Mantis Gamepad), en cualquier app, en el launcher o
      * en el cajón de apps. El primero de los dos sticks llega al juego como siempre (todavía no se sabe si viene
      * el otro); el segundo se lo queda el ratón. Sin gestos asignados, los sticks no cambian nada más.
+     *
+     * Las dos teclas tienen que apretarse CASI AL MISMO TIEMPO (ventana de [chordWindow] ms) y una marca vieja
+     * se olvida sola ([chordStale]): antes bastaba con que el «soltar» de un stick no llegara nunca para que el
+     * estado quedara pegado creyendo que las dos estaban apretadas, y entonces una sola tecla encendía y apagaba.
      */
+    /** Teclas de la combinación cuyo «apretar» se dejó pasar a la app: su «soltar» va igual. */
+    private val chordPassed = mutableSetOf<Int>()
+
     private fun mouseChord(e: KeyEvent): Boolean {
         val k = e.keyCode
         if (k != KeyEvent.KEYCODE_BUTTON_THUMBL && k != KeyEvent.KEYCODE_BUTTON_THUMBR) return false
         if (!MouseRules.chord(this)) return false
+        val now = android.os.SystemClock.uptimeMillis()
         when (e.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (e.repeatCount > 0) return k == chordKey
-                sticksDown += k
-                if (sticksDown.size == 2 && !guide.isGuiding) { chordKey = k; toggleMouse(); return true }
+                if (e.repeatCount > 0) return k !in chordPassed
+                sticksDown[k] = now
+                // Se olvida cualquier marca vieja: así una sola pulsación no puede simular la combinación.
+                for (otra in sticksDown.keys.toList()) {
+                    if (otra != k && now - (sticksDown[otra] ?: now) > chordStale) sticksDown.remove(otra)
+                }
+                val otra = sticksDown.keys.firstOrNull { it != k }
+                if (otra != null && now - (sticksDown[otra] ?: now) <= chordWindow && !guide.isGuiding) {
+                    chordKey = k
+                    toggleMouse()
+                    return true
+                }
+                // La PRIMERA tecla de la combinación: no se devuelve a la app si es un botón del ratón (tiene
+                // que llegar a [runMouseAction]: si no, el botón de apagarlo quedaba inservible y el puntero no
+                // se apagaba nunca en la pantalla de inicio) ni si estamos en la pantalla de inicio (ahí un
+                // botón del mando activa el icono enfocado y al encender el ratón se abría el primer icono).
+                // En cualquier app y con un botón que no sea del ratón, se devuelve como siempre, para no
+                // quitarle a los juegos el clic del stick.
+                // Pasa si NO estamos en la pantalla de inicio, o si es un botón del ratón con el puntero
+                // encendido (ese botón tiene que llegar a su acción: es el que apaga el ratón, y puede ser
+                // cualquiera de los dos sticks o el que el usuario elija).
+                val esDelRaton = MouseRules.buttons(this)[k] != null
+                val pasar = !esLauncherAlFrente() || (esDelRaton && mouse.isOn)
+                if (pasar) chordPassed += k
+                return !pasar
             }
             KeyEvent.ACTION_UP -> {
-                sticksDown -= k
+                sticksDown.remove(k)
                 if (k == chordKey) { chordKey = -1; return true }
+                return chordPassed.remove(k).not()
             }
         }
         return false
@@ -1340,6 +1492,31 @@ class AutoModeService : AccessibilityService() {
             panel.message(if (want) tr("Puntero del ratón encendido", "Mouse pointer on") else tr("Puntero del ratón apagado", "Mouse pointer off"))
     }
 
+    /**
+     * Una acción del ratón (los botones que se asignan en la pestaña «Ratón»). Solo se llega aquí con el puntero
+     * encendido: apagarlo no enciende nada por su cuenta.
+     */
+    private fun runMouseAction(a: GestureAction) {
+        when (a) {
+            GestureAction.MOUSE_RIGHT -> mouse.rightClick()
+            GestureAction.MOUSE_DOUBLE -> mouse.doubleClick()
+            GestureAction.MOUSE_DRAG -> mouse.drag()
+            GestureAction.WHEEL_UP -> mouse.wheel(-1)
+            GestureAction.WHEEL_DOWN -> mouse.wheel(1)
+            GestureAction.MOUSE_TOGGLE -> turnMouseOff()
+            else -> mouse.click()
+        }
+    }
+
+    /** Apaga el puntero con su botón («Puntero: solo apagar»): encender es L3 + R3 o la pestaña «Ratón». */
+    fun turnMouseOff() {
+        if (!MouseRules.on(this)) return
+        MouseRules.setOn(this, false)
+        updateMouse()
+        Log.d(TAG, "puntero del ratón apagado con su botón")
+        if (this::panel.isInitialized) panel.message(tr("Puntero del ratón apagado", "Mouse pointer off"))
+    }
+
     /** El puntero está encendido: sus sticks los lee la app (Android no deja mirarlos sin quedárselos). */
     private var mouseSticks = false
     private fun updateMouse() {
@@ -1348,23 +1525,36 @@ class AutoModeService : AccessibilityService() {
         mouse.sync()
     }
 
-    private val transientCache = mutableMapOf<String, Boolean>()
-
     /**
-     * Ventanas que no cuentan como "cambiar de app": esta app, la barra del sistema, el teclado y
-     * superposiciones sin ícono en el menú de apps (por ejemplo la barra de juegos de ZUI, que aparece
-     * justo al abrir un juego). Las pantallas de inicio (Cocoon Shell) sí cuentan.
+     * ¿La ventana que avisa es de una app de verdad, o de algo que no cuenta (teclado, sistema, superposición)?
+     *
+     * [winId] es la ventana que lo pidió, y con ella la decisión es directa: ventana de app = app, cualquier
+     * otra cosa (teclado, sistema, superposición) no cuenta.
+     *
+     * Sin ese dato —normal, porque el aviso suele llegar ANTES de que la ventana esté en la lista— se decide
+     * por el paquete, y aquí está el detalle que importaba: un paquete puede ser teclado Y app. Cocoon
+     * (`rip.moth.cocoonshell`) declara su propio teclado (`CocoonInputMethodService`) y además es pantalla de
+     * inicio; el chequeo de teclado iba primero, así que se descartaban TODOS sus avisos de ventana, la app
+     * seguía creyendo que estabas en el launcher y dentro de Cocoon te aplicaba las reglas de «Pantalla de
+     * inicio». Por eso ahora se pregunta primero si es una app (lanzable o pantalla de inicio) y solo después
+     * se mira si además es teclado.
      */
-    private fun isTransient(pkg: String): Boolean = transientCache.getOrPut(pkg) {
-        if (pkg == packageName || pkg == "com.android.systemui") return@getOrPut true
-        val imm = getSystemService(InputMethodManager::class.java)
-        if (imm.enabledInputMethodList.any { it.packageName == pkg }) return@getOrPut true
+    private fun isTransient(pkg: String, winId: Int = -1): Boolean {
+        if (pkg == packageName || pkg == "com.android.systemui") return true
+        if (winId >= 0) {
+            val tipo = runCatching { windows.firstOrNull { it.id == winId }?.type }.getOrNull()
+            if (tipo != null) {
+                return tipo != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+            }
+        }
         val pm = packageManager
         val launchable = pm.getLaunchIntentForPackage(pkg) != null
-        val home = pm.queryIntentActivities(
+        val esHome = pm.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0
         ).any { it.activityInfo.packageName == pkg }
-        !launchable && !home
+        if (launchable || esHome) return false
+        // Lo que queda (teclados y servicios sin actividad propia) no es una app al frente.
+        return true
     }
 
     private fun wanted(t: AutoTarget) = if (t == AutoTarget.DS5) PadMode.DS5 else PadMode.XINPUT

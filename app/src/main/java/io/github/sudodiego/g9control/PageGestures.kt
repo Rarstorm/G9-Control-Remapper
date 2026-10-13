@@ -147,14 +147,38 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     // son los botones que no llegan a Android (M, sticks).
                     else s.fail(tr("Ese botón no sirve para gestos.", "That button can't be used for gestures."))
                 }
-                Text(tr("Bumpers y gatillos", "Bumpers and triggers"), fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BUMPER_KEYS.forEach { k ->
-                        FilterChip(
-                            selected = sel == k,
-                            onClick = { sel = k; selPaddle = null },
-                            label = { Text(k.label) }
-                        )
+                // Bumpers/gatillos y traseros, uno al lado del otro: son los dos grupos que no están en el
+                // dibujo del mando, y así los traseros quedan a la vista sin bajar por la pantalla.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("Bumpers y gatillos", "Bumpers and triggers"), fontWeight = FontWeight.SemiBold)
+                        // Los cuatro chips se reparten el ancho a partes iguales y la etiqueta va en UNA línea:
+                        // con el chip «natural», en media pantalla «RT» y «R5» se partían en dos renglones.
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            BUMPER_KEYS.forEach { k ->
+                                FilterChip(
+                                    selected = sel == k,
+                                    onClick = { sel = k; selPaddle = null },
+                                    modifier = Modifier.weight(1f),
+                                    label = { Text(k.label, fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                                )
+                            }
+                        }
+                    }
+                    // Traseros: se configuran aquí mismo, con el mismo «Aplica a». El control los reconoce por su
+                    // firma (una macro cortísima que se graba una vez), así que pueden hacer algo distinto por app.
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("Traseros", "Back paddles"), fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            BackKey.entries.forEach { k ->
+                                FilterChip(
+                                    selected = selPaddle == k,
+                                    onClick = { selPaddle = k; sel = null },
+                                    modifier = Modifier.weight(1f),
+                                    label = { Text(k.label, fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                                )
+                            }
+                        }
                     }
                 }
                 Text(tr("Botón con gestos", "Gesture button"), fontWeight = FontWeight.SemiBold)
@@ -163,18 +187,6 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                     TextButton(onClick = { s.learnGesture = false }) { Text(tr("Cancelar", "Cancel")) }
                 } else {
                     OutlinedButton(onClick = { s.learnGesture = true }) { Text(tr("Aprender del mando", "Learn from controller")) }
-                }
-                // Traseros: se configuran aquí mismo, con el mismo «Aplica a». El control los reconoce por su
-                // firma (una macro cortísima que se graba una vez), así que pueden hacer algo distinto por app.
-                Text(tr("Traseros", "Back paddles"), fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BackKey.entries.forEach { k ->
-                        FilterChip(
-                            selected = selPaddle == k,
-                            onClick = { selPaddle = k; sel = null },
-                            label = { Text(k.label) }
-                        )
-                    }
                 }
                 // Nada de explicaciones cuando todo va bien. La app prepara los traseros sola; esto solo sale
                 // si de verdad al apretar un trasero no pasa nada (una línea, y el botón de arreglarlo).
@@ -409,6 +421,17 @@ private fun GestureRow(
                         )
                         GESTURE_CATS.forEachIndexed { i, _ ->
                             if (i == 0) return@forEachIndexed   // «Nada» ya está arriba
+                            // «Ratón» (7) NO se ofrece aquí: sus botones se asignan en la pestaña «Ratón» y
+                            // valen en todas las apps a la vez (no tiene sentido «solo en esta app»).
+                            if (i == 7) {
+                                DropdownMenuItem(
+                                    text = { Text(tr("Ratón: se asignan en la pestaña «Ratón»",
+                                        "Mouse: assign them in the “Mouse” tab"), fontSize = 13.sp) },
+                                    enabled = false,
+                                    onClick = { }
+                                )
+                                return@forEachIndexed
+                            }
                             DropdownMenuItem(
                                 text = { Text(gestureCatName(i)) },
                                 trailingIcon = { Icon(Icons.Filled.KeyboardArrowRight, null) },
