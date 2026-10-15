@@ -1,32 +1,109 @@
-# G9 Control
+# G9 Control Remapper
 
-**An open-source, account-free app to configure the Legion Gaming Controller G9 on the Lenovo Legion Y700 Gen 3 tablet.**
+**Button remapping for the Legion G9 controller on the Lenovo Legion Y700 tablet.** An independent
+fork of [G9Control](https://github.com/sudo-diego/G9Control).
 
 [Español](README.es.md)
 
-> **Not affiliated with Lenovo.** "Legion" and "Lenovo" are trademarks of Lenovo. This is an independent, unofficial app. It talks to the controller over USB with a protocol reconstructed by studying the official app and testing the controller; it contains no code or assets from the official app.
+> **This is a fork.** All of the groundwork —lights, sticks, vibration, profiles, game panel, per-app
+> controller mode— comes from [sudo-diego's original project](https://github.com/sudo-diego/G9Control)
+> (GPL-3.0). What **this** repo adds is the remapping: see "What this fork adds" below.
+>
+> **Not affiliated with Lenovo.** "Legion" and "Lenovo" are trademarks of Lenovo, and "GameSir" of
+> GameSir. This is an independent, unofficial app: it talks to the controller over USB with a protocol
+> reconstructed by studying the official app, and it contains no code or assets from it.
 
-> **This app is vibe-coded.** Every line of code, the protocol research and this README were written by Claude (Anthropic's AI) through Claude Code. I didn't write the code: I described what I wanted, tested every build on my own tablet and controller, and reported what worked and what didn't.
+> **How it was made.** The code in this fork was written by an AI —**DeepSeek**, inside
+> [Hermes Agent](https://hermes-agent.nousresearch.com)**— for Roberto, who tested every build on his
+> own tablet and controller and reported what worked and what didn't. Every round is recorded, with
+> its measurements, in [`PROGRESS.md`](PROGRESS.md) (in Spanish). (The original project was written by
+> Claude Code.)
 
-![Home](docs/screenshots/home.png)
+---
 
-## Why
+## What this fork adds
 
-The official Legion app works, but it requires an account and comes with a launcher and a lot of extras. G9 Control does one thing: configure the controller. No account, no internet access, no ads.
+The original **configures** the controller. This fork turns it into a **remapper**: every button can
+do something else, the behaviour can differ per app, and the controller can stand in for your finger
+and for a mouse.
 
-It also does a few things the official app can't:
+### 1. Button remapping — the "Gestures" page
 
-- **Switches to DS5 mode by software.** The official app sends a mode that leaves the G9 in Xbox mode.
-- **Switches mode automatically per game** (X-Input or DS5), with an on-screen guide to get back to Android mode.
-- **Records macros with the controller itself**, with a timeline editor, and lets back buttons copy Home or stick diagonals.
-- **Profiles** with file backup, **stick drift measurement**, and **full navigation with the controller**.
-- **Careful with the controller's memory**: it only writes what changed, after a short pause, and never writes in a loop.
+- **Three gestures per button**: *tap*, *hold* and *double tap*, each with its own action. It works
+  for any button, including bumpers, triggers, the guide button and the paddles.
+- **Actions**, grouped by category in a two-step menu:
+  - *System*: Back, Home, Recents, Notifications, Screenshot, Quick settings.
+  - *Media*: play/pause, next and previous track, seek forward and back with a **swipe** or with a
+    **double tap**, stop, mute, volume up and down.
+  - *Screen*: brightness up and down.
+  - *Apps*: open a specific app.
+  - *Launcher*: open the app drawer, next page, previous page.
+  - *Input*: a **keyboard key** (one per gesture) or a **key sequence**.
+  - *Mouse*: click, right click, double click, drag and wheel (see point 3).
+- **Per app** — the "Applies to" selector: *All apps* (a general rule) or one specific app. A given
+  app's rules **override** the general ones and, with "Nothing" on all three gestures, the button
+  **passes straight through** to the app, as if the app weren't installed.
+- **Key Mapper–style interception**: a button with something assigned swallows the event; a button
+  with nothing assigned goes straight to the game.
+- **"Learn from the controller"**: you pick the button by pressing it instead of hunting for it in a
+  list.
+- **Per-app indicator**: the app selector shows which buttons already have rules there.
 
-## Features
+### 2. Paddles L4 / R4 / L5 / R5, each with its own command
+
+The G9's firmware only lets a paddle **copy a button** (or run a macro) and, in practice, the four of
+them are **indistinguishable**: measured with `getevent`, L4 sends exactly what the Y button sends.
+That's why the original could only make a paddle copy something.
+
+This fork gives **each paddle a signature**: a very short, unique macro (View→Menu, say, in 5 ms
+steps) that the service **recognises on the way in and swallows**, so it knows **which** paddle was
+pressed. That means:
+
+- each paddle can have its **own command**, and
+- each paddle can do **something different per app** — exactly what the firmware can't do alone,
+  because the signature lives in the controller but the decision lives in the app.
+
+The paddles go through the same gesture engine as every other button, so they're configured on the
+same page with the same "Applies to" selector.
+
+### 3. Mouse as an overlay — L3 + R3
+
+A pointer **drawn by the app on top of the game** (in the spirit of Mantis Gamepad Pro) for whatever
+only understands touch or a mouse, **with no root**:
+
+- **click** where the pointer is, **right click** (the context menu), **double click** and **drag**,
+  injected at the cursor's position;
+- **wheel**, also assignable to the D-pad (this controller's D-pad arrives as an **axis**, not as
+  keys, so it has its own code path);
+- a **"Mouse"** page with speed/DPI, smoothing, curve and dead zone;
+- the pointer is turned on and off with the button you choose and, **while it's on, the rest of the
+  buttons belong to the mouse** (by design: otherwise every button would do two things at once).
+
+### Extras that everyday use asked for
+
+- **Keyboard keys and macros**: the controller does **not** send keyboard keys; the app injects them
+  with Shizuku. Each gesture has its own.
+- **Quick settings assignable to any button** (in the original, only the guide button or L3 + R3).
+- **Other controllers**: if you connect a pad that isn't the G9 (tested with a GameSir Cyclone 2 over
+  Bluetooth), none of the G9 behaviour applies to it: its guide button opens Quick settings and
+  everything else goes straight through to the app.
+- **Automatic reconnect** for the G9 when the tablet sleeps: Android drops the USB permission on
+  disconnect and the app used to stay "disconnected" forever.
+- **App drawer** with a self-check: the app looks at whether the drawer really opened and retries once
+  if it didn't.
+- **Full backup** to a file: profiles **and** app settings, also meant to avoid losing anything when
+  the signing key changes.
+- **Its own signing key** (not the debug one): `adb install -r` updates in place **keeping your data**.
+
+---
+
+## What came from the original project
+
+Controller configuration, using the official app as reference and with no account:
 
 | | |
 |---|---|
-| **Lights** | Both light strips and the Home button: static, breathing, rainbow, off; color, speed and brightness. |
+| **Lights** | Both light strips and the Home button: static, breathing, rainbow, off; colour, speed and brightness. |
 | **Sticks and triggers** | Inner and outer dead zones with a live preview, trigger ranges, hair trigger, drift measurement. |
 | **Vibration** | Five levels per side, test with the triggers. |
 | **Buttons** | Button test, A↔B / X↔Y swap, D-pad diagonal lock, left stick ↔ D-pad swap. |
@@ -40,79 +117,74 @@ It also does a few things the official app can't:
 | **Bypass charging** | While gaming plugged in, the charger powers the tablet and the battery doesn't charge or heat up. Manual (also from the panel) or automatic, with the minimum battery and temperature you choose. Needs Shizuku. |
 | **Charge limit** | While plugged in, at the level you choose (70 to 90 %) bypass turns on: the battery stops charging. ZUI's always stops at 80 %. Needs Shizuku. |
 | **16:9 screen** | For an external monitor: the picture fills it with no borders. |
-| **External monitor** | When connected in mirror mode it switches to 16:9 by itself (on every monitor or per monitor) and back to 16:10 when unplugged. Meanwhile the tablet's screen can be dimmed, backlight-off or off (the last two need Shizuku). |
-| **Legion button** | Tap: Back. Hold: game panel. With RB: screenshot. With LB: hold Back (quits the game in Dolphin; with Shizuku). While streaming from a PC (Artemis, Moonlight…) it's the guide button. |
-| **Auto brightness in games** | Game Assistant turns it off when a game starts; G9 Control can leave it as it is. |
-| **Another controller** | If you play with another controller (an 8BitDo, for example), the G9 doesn't switch mode or ask to go back to Android. |
-| **Swapped volume** | Optional: the tablet's lower button turns the volume up and the upper one turns it down. |
-| **Quick settings** | Android, X-Input and DS5 tiles. |
+| **External monitor** | When connected in mirror mode it switches to 16:9 by itself and back to 16:10 when unplugged. |
+| **Another controller** | If you play with another controller, the G9 doesn't switch mode or ask to go back to Android. |
 | **Languages** | English and Spanish. |
 
-<p>
-<img src="docs/screenshots/lights.png" width="49%"> <img src="docs/screenshots/sticks.png" width="49%">
-<img src="docs/screenshots/paddles.png" width="49%"> <img src="docs/screenshots/settings.png" width="49%">
-</p>
+---
 
-## Requirements
+## Status
 
-- Lenovo Legion Y700 Gen 3 with the Legion Gaming Controller G9 (the controller is made for this tablet).
-- Tested with controller firmware 0.52 on ZUI 17 (Android 15). Android 10 or later.
+- Version in development: **`1.4.17-diag`** (`versionCode` 44). The `-diag` suffix marks the
+  diagnostic builds of the testing rounds on the tablet.
+- Tested on: **Lenovo Legion Y700** (the original targets Gen 3; here it was tested on Gen 5) with the
+  **2026 Legion G9 controller**.
+- Android 15 / 16, `minSdk` 29. It needs the **accessibility service** to see the buttons and
+  **Shizuku** for what Android won't let a normal app do (keyboard keys, app drawer, performance,
+  bypass charging).
+- **No Releases published yet**: the APK comes from the GitHub Actions workflow or from a local build
+  (see "Build from source").
+- Every testing round, with its measurements, is in [`PROGRESS.md`](PROGRESS.md) (in Spanish).
 
 ## Install
 
-1. Download `G9Control-x.y.z.apk` from [Releases](../../releases).
-2. Open it on the tablet. If Android asks, allow installing apps from that source.
-3. Open G9 Control. A quick setup guides you through the rest:
-   - Dock the tablet in the G9 in **Android mode** (dark blue indicator). If it's in X-Input (green) or DS5 (white), hold **View + Menu** for about 2 seconds.
-   - When Android asks for USB access, check **Always** and accept.
-   - Optional: turn on the **accessibility service** for automatic switching (see below).
-   - Optional: add the **Android / X-Input / DS5** tiles to quick settings.
+1. Build the APK (see "Build from source") or download the `g9control-apk` artifact from a workflow
+   run on GitHub Actions.
+2. `adb install -r app-release.apk` — or copy the APK to the tablet and open it (allow installing apps
+   from that source if Android asks).
+3. Open the app: the setup assistant asks for the **accessibility service** and, if you want the
+   features that need it, **Shizuku**.
+4. Dock the tablet in the G9 in **Android mode** (dark blue indicator). If it's in X-Input (green) or
+   DS5 (white), hold **View + Menu** for about 2 seconds. When Android asks for USB access, check
+   **Always** and accept.
 
-### About the accessibility service
+> If you're coming from the author's original app, you have to **uninstall it** once: it's signed with
+> a different key and Android won't update over a different signature.
 
-Automatic switching per game, the View + Menu guide, the quick settings tiles (from X-Input/DS5), the game panel, the Legion button, the swapped volume, automatic bypass, the charge limit and the external monitor use an accessibility service. Android starts it by itself when the tablet turns on: you don't need to open the app. This is what it does with it:
+### The accessibility service and Shizuku
 
-- **Sees which app is on screen** (window changes), to switch mode per game.
-- **Sees the controller's buttons**, to track View + Menu for the guide, to run the game panel and the Legion button and, only if you choose to, block buttons while a notice is on screen. If you swap the volume, also the tablet's volume buttons. While the panel is open it also sees the sticks and D-pad, to move around it (they don't reach the game).
-- **Takes screenshots when you ask** (from the panel, with Legion + RB, by holding L3 + R3 or with M twice in DS5): only of the game window, saved on the tablet (Pictures/Screenshots). While the performance mode changes it shows a frozen picture of the game, kept only in memory and never saved.
-- **Performs gestures only on the tablet's Game Assistant** (Lenovo ZUI): the swipe that opens its panel from the side tab and the tap on its performance button.
-
-To capture only the game window, Android requires the permission to view window content: without it, Android won't say which window is the game. That's why Android warns that the app can read the screen when you turn it on. G9 Control uses that permission only for the list of windows (which one is the game): it doesn't read their text or buttons and doesn't see what you type. The app has no internet permission, so nothing leaves the tablet.
-
-If Android shows **"Restricted setting"** when turning it on: Settings → Apps → G9 Control → ⋮ (top right) → **Allow restricted settings**, then try again.
-
-### Optional: Shizuku and one adb permission
-
-Almost everything works with nothing extra. Two things need more than a regular app's permissions:
-
-- **16:9 screen, brightness from the panel and auto brightness in games:** a permission you grant once from a computer; it stays (also after a reboot or an update):
-  `adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS`
-- **Bypass charging, charge limit, performance mode, hiding Game Assistant, holding Back and turning the tablet's screen off with a monitor:** [Shizuku](https://shizuku.rikka.app/) running (it must be started after every reboot). In Settings → Permissions, tap **Grant permission**. The ROM only lets system apps use these, and Shizuku's shell counts as one. G9 Control only asks it for a fixed list of commands: turn on or read bypass and ZUI's charge limit, show or hide Game Assistant, read its log to know the mode, hold Back, turn the panel (or just its backlight) off or on and, if the permission above is missing, change the screen size. Without Shizuku, what needs it is dimmed in the panel and choosing it opens Shizuku.
-
-Settings → Permissions shows the state of all this and how to turn it on, and Home warns you if something you use is missing.
-
-## Limitations
-
-- **No firmware updates.** That's intentional: a failed update can brick the controller. If you ever need one, use the official Legion app once.
-- The app can only configure the controller in **Android mode**. In X-Input and DS5 modes the controller has no configuration channel, so switching back to Android is always done with View + Menu (the app guides you).
-- In Android mode, games vibrate the tablet, not the controller (firmware behavior).
-- In Android mode, M twice takes the system screenshot (Android handles it before any app). For a clean screenshot, Legion + RB.
-- Android lets the app take at most one screenshot per second: bursts go at that pace.
-- Holding the Legion button for 5 seconds turns the G9 off (firmware behavior).
-- While streaming from a PC, the Legion button goes to the PC: Legion + RB doesn't take screenshots there; with the G9 in DS5, holding L3 + R3 works (Artemis doesn't let M twice through, since it captures the pointer). With the controller taken over by Artemis via USB (X-Input) Android sees no buttons.
-- Some open apps close when switching between 16:9 and 16:10 (Dolphin, for example): switch before opening them.
-- With a monitor, if the tablet's screen stays off by mistake (for example, if G9 Control was force-closed), **pressing the power button twice** always turns it back on. Unplugging the monitor works too. With the monitor on the USB-C port the G9 doesn't respond: use another controller (Bluetooth, for example).
+These are the same permissions the original asks for: the accessibility service is what lets it see
+which app is in the foreground and the controller's buttons (and it now also feeds the gesture engine
+and the mouse), and Shizuku is what lets it inject keyboard keys and do what the ROM only allows
+system apps to do. The full explanation is in the
+[original project's README](https://github.com/sudo-diego/G9Control), and the app walks you through it
+in its assistant and in Settings → Permissions.
 
 ## Build from source
 
-Android Studio (or just the JDK it ships with):
-
-```
-./gradlew assembleRelease
+```bash
+./gradlew :app:assembleRelease          # output in app/build/outputs/apk/release/
 ```
 
-Without a `keystore.properties` file the release build is signed with the debug key. Protocol notes and everything that was tested are in [CONTEXTO.md](CONTEXTO.md) (in Spanish).
+- JDK 17 and the Android 35 SDK.
+- Signing comes from `keystore.properties` (which is **not** committed) pointing at the project's key;
+  without that file it builds with the debug key.
+- On GitHub, the [`android.yml`](.github/workflows/android.yml) workflow is **manual only**
+  (`workflow_dispatch`), never automatic, and uploads the APK as the `g9control-apk` artifact.
+- Protocol notes and everything that was tested are in [`CONTEXTO.md`](CONTEXTO.md) (a document from
+  the original project, in Spanish).
 
-## License
+## Screenshots
 
-[GPL-3.0](LICENSE). You can use, study, modify and share it; modified versions must stay open source under the same license.
+> Pending for this version. The images in `docs/screenshots/` are from the original project and will be
+> replaced with captures of this app (Gestures, Paddles, Mouse and the panel).
+
+## Licence and credits
+
+- **Base:** [G9Control](https://github.com/sudo-diego/G9Control) by
+  [sudo-diego](https://github.com/sudo-diego) — the project that reconstructed the controller's
+  protocol and that almost everything here depends on.
+- **This fork:** [Rarstorm/G9-Control-Remapper](https://github.com/Rarstorm/G9-Control-Remapper),
+  maintained by Roberto ([@Rarstorm](https://github.com/Rarstorm)).
+- **Licence:** [GPL-3.0](LICENSE), the same as the original. You can use, study, modify and share it;
+  modified versions must stay open source under the same licence.
