@@ -2,12 +2,23 @@ name: Build APK
 
 # SOLO manual (botón "Run workflow" en Actions). Nunca automático: el build se ejecuta
 # únicamente con orden explícita de Roberto y con el agente en modelo pagado DeepSeek V4.1.
+#
+# Si se rellena "publicar_tag" (por ejemplo v1.4.17), además del artefacto se publica una
+# GitHub Release con el APK adjunto y con ese tag. Eso es lo que hace falta para que
+# Obtainium pueda seguir la app (lee las Releases de GitHub, no los artefactos del CI).
 on:
   workflow_dispatch:
+    inputs:
+      publicar_tag:
+        description: 'Tag a publicar como Release (vacío = solo artefacto, sin Release)'
+        required: false
+        default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # necesario para crear la Release
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,8 +62,55 @@ jobs:
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)
           if [ -n "$BT" ] && [ -x "$BT/apksigner" ]; then "$BT/apksigner" verify --print-certs "$APK"; else echo "sin apksigner"; fi
 
+      - name: Datos del APK
+        # versionName/versionCode que salieron: van al cuerpo de la Release y al registro.
+        id: apk
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          VN=$("$BT/aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)
+          VC=$("$BT/aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" | head -1)
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VN" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VC" >> "$GITHUB_OUTPUT"
+          echo "APK: $APK ($VN / versionCode $VC)"
+
+      - name: Preparar APK con el nombre de la app
+        # Nombre claro para el archivo publicado: G9-Control-Remapper-<tag>.apk
+        run: |
+          if [ -n "${{ inputs.publicar_tag }}" ]; then
+            OUT="G9-Control-Remapper-${{ inputs.publicar_tag }}.apk"
+          else
+            OUT="G9-Control-Remapper-${{ steps.apk.outputs.version_name }}.apk"
+          fi
+          cp "${{ steps.apk.outputs.path }}" "$OUT"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: g9control-apk
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Publicar Release (para Obtainium)
+        # Solo si se pidió un tag. La Release lleva el APK firmado con la clave del proyecto:
+        # Obtainium sigue las Releases de GitHub, así que esto es lo que lo habilita.
+        if: inputs.publicar_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.publicar_tag }}
+          name: G9 Control Remapper ${{ inputs.publicar_tag }}
+          files: ${{ env.OUT }}
+          fail_on_unmatched_files: true
+          body: |
+            **G9 Control Remapper ${{ inputs.publicar_tag }}** — versión `${{ steps.apk.outputs.version_name }}` (versionCode `${{ steps.apk.outputs.version_code }}`).
+
+            Remapeo del mando Legion G9 en la Legion Y700. Fork independiente de
+            [G9Control](https://github.com/sudo-diego/G9Control) (GPL-3.0).
+
+            - APK firmada con la clave del proyecto: se instala encima de la versión anterior sin
+              desinstalar y **conserva los datos**.
+            - Si vienes de la app original del autor, hay que desinstalarla una vez (firma distinta).
+            - Para actualizar automáticamente, agrega este repo en
+              [Obtainium](https://github.com/ImranR98/Obtainium): `https://github.com/Rarstorm/G9-Control-Remapper`.
+            - Qué cambió en esta versión: ver [`PROGRESS.md`](https://github.com/Rarstorm/G9-Control-Remapper/blob/main/PROGRESS.md).
