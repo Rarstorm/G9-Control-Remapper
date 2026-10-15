@@ -574,3 +574,24 @@ propio del fork). Capturas de pantalla: pendientes (Roberto las dejó para otra 
 `package: name='io.github.rarstorm.g9controlremapper' versionCode='44' versionName='1.4.17'`,
 `application-label:'G9 Control Remapper'`; `apksigner verify --print-certs` → SHA-256
 `a9dea6410ff5899c9f319f7af231044c7fd248fee526e3fc52b5cccb0383e049` (la clave del proyecto, la de siempre).
+
+**Publicación (verificada, no solo el verde del CI):**
+
+- Flujo disparado por API con tag `v1.4.17` (`workflow_dispatch`, ref `main`) → corrida
+  `38823203356`, **success** en 280 s.
+- Release: https://github.com/Rarstorm/G9-Control-Remapper/releases/tag/v1.4.17 — `draft: false`,
+  `prerelease: false`, `target_commitish: main`, asset **`G9-Control-Remapper-v1.4.17.apk`**
+  (2.957.083 B, `application/vnd.android.package-archive`). Con esto **Obtainium ya puede seguir la app**
+  (lee Releases; los artefactos del CI no le sirven).
+- El APK **descargado de la Release** (no el local) y comprobado: sha256
+  `da84e1c3c547a0be643176fbce0364b854e288b9fe472d45486f69f338e57afd`; `aapt2 dump badging` →
+  `package: name='io.github.rarstorm.g9controlremapper' versionCode='44' versionName='1.4.17'`, label
+  `G9 Control Remapper`; `apksigner verify --print-certs` → SHA-256 `a9dea6…3e049`, la clave del
+  proyecto (la misma con la que se firmaron las versiones anteriores). Ojo: la clave coincide, pero como
+  el **ID cambió**, esta 1.4.17 se instala como **app aparte** de la 1.4.17-diag; los ajustes se pasan
+  con Respaldo → Exportar / Importar (está avisado en los dos README).
+- Aviso al autor (requisito de F-Droid): issue abierto en el repo original →
+  https://github.com/sudo-diego/G9Control/issues/1 pidiendo su OK para proponer el fork. **Pendiente de
+  su respuesta**: hasta que conteste, no se manda el MR a `fdroiddata`.
+- Los README ya anuncian la Release y cómo agregarla en Obtainium, y llevan el aviso de las dos firmas
+  (canales GitHub y F-Droid no se pueden actualizar entre sí).

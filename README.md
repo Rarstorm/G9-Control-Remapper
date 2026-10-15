@@ -132,14 +132,15 @@ Controller configuration, using the official app as reference and with no accoun
 - Android 15 / 16, `minSdk` 29. It needs the **accessibility service** to see the buttons and
   **Shizuku** for what Android won't let a normal app do (keyboard keys, app drawer, performance,
   bypass charging).
-- **No Releases published yet**: the APK comes from the GitHub Actions workflow or from a local build
-  (see "Build from source").
+- **Published:** [release v1.4.17](../../releases/latest), with the signed APK ready to install. For
+  automatic updates, add `https://github.com/Rarstorm/G9-Control-Remapper` in
+  [Obtainium](https://github.com/ImranR98/Obtainium) (it follows GitHub releases). You can also build
+  it yourself (see "Build from source").
 - Every testing round, with its measurements, is in [`PROGRESS.md`](PROGRESS.md) (in Spanish).
 
 ## Install
 
-1. Build the APK (see "Build from source") or download the `g9control-apk` artifact from a workflow
-   run on GitHub Actions.
+1. Download the APK from [Releases](../../releases/latest) — or build it (see "Build from source").
 2. `adb install -r app-release.apk` — or copy the APK to the tablet and open it (allow installing apps
    from that source if Android asks).
 3. Open the app: the setup assistant asks for the **accessibility service** and, if you want the
