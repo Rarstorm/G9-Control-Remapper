@@ -354,3 +354,154 @@ punto 1 con dato. **Sin commit** (él lo pidió así).
   pantalla de inicio: en la condición de la primera tecla de L3 + R3 puse `&&` donde iba `||`. Ahora pasa si
   no estás en el inicio **o** si es un botón del ratón con el puntero encendido — sirve para **cualquier**
   botón que el usuario asigne, no solo R3. **Sin commit.**
+
+## 2026-10-13 (17ª parte — 1.4.11-diag, versionCode 38: cajón de apps, rueda sin puntero y aviso de traseros al despertar)
+
+2ª ronda del día, con el reporte de Roberto mientras probaba la 1.4.10-diag (mando **no** conectado;
+la tablet estaba como segunda pantalla con SuperDisplay).
+
+**Lo que reportó:** (1) el cajón de apps **solo funciona en la página principal del launcher**;
+(2) el **aviso rojo** al despertar el mando («No pude preparar 4 trasero(s)»); (3) asignar
+«Rueda arriba/abajo» a la cruceta **no hace nada en ningún lado**. Más 4 preguntas (Artemis en
+X-Input con su «Un toque», X-Input vs HID vs DS5, LoL con Mantis Gamepad Pro, macros en GameHub).
+
+**Arreglos (una sola versión):**
+1. **Cajón desde cualquier página** (`AutoMode.kt`): si el launcher ya está al frente, antes se
+   deslizaba **en el acto** (de ahí que solo valiera en la página principal). Ahora se manda
+   **«Inicio» igualmente** (eso devuelve a la página de casa) y se esperan **260 ms** a que se
+   asiente antes de deslizar (`esperarLauncherYDeslizar(intento, asentar)`).
+2. **Rueda con el puntero apagado** (`AutoMode.kt` → `ruedaDeBoton`; `Mouse.kt` →
+   `wheel(dir, mag, desdeBoton)`): todo el ratón dependía de `mouse.isOn`, así que una rueda
+   asignada a un botón no hacía nada. Ahora la **rueda** se atiende también apagado (un scroll no
+   necesita cursor); **los clics, el arrastre y el clic derecho siguen necesitando el puntero**
+   (apuntan con el cursor). Si el puntero no se encendió nunca, desliza al centro de la pantalla.
+3. **Aviso de traseros que daba la lata** (`MainActivity.preparePaddles`): cuando lo lanza la app
+   sola (conectar, despertar, volver a la app) **reintenta 3 veces cada 1,2 s en silencio**; el
+   botón manual sigue avisando en el acto.
+
+**Verificado:** `assembleRelease --offline` → **BUILD SUCCESSFUL in 1m 52s**; APK 2.957.071 B,
+sha256 `0dec49932fa586bfc6f9a39307c665d10af36eb4ee10a590aac935d2f84dea1f`;
+`adb connect 192.168.68.107:5555` (adb de SuperDisplay) + `adb install -r` → **Success**;
+`dumpsys package` → `versionCode=38 versionName=1.4.11-diag` `lastUpdateTime=2026-10-13 16:10:39`.
+**Sin commit** (la rama `g9-remap-v2` sigue con el árbol sucio, como lo pidió).
+
+**Errores de compilación que se anotaron:** `Log` sin prefijo en `MainActivity` (va
+`android.util.Log`) y la **recursión** de `preparePaddles` sin tipo de retorno
+(`Type checking has run into a recursive problem` → declarar `: Unit`).
+
+**Pendiente de su prueba:** cajón desde otra página, rueda en la cruceta con el puntero apagado, y
+que el aviso de traseros ya no salga al despertar el mando.
+
+### Corrección de la misma ronda — la rueda en la cruceta SIEMPRE fue con el puntero encendido (1.4.12-diag, versionCode 39)
+
+Roberto corrigió mi diagnóstico: **no funciona con el puntero encendido**; él nunca habló del puntero
+apagado. El cambio que hice en la 1.4.11 (`wheel(desdeBoton)` para atender la rueda con el puntero
+apagado) era **no pedido** y quedó **revertido**.
+
+**Causa real:** la **cruceta de este mando llega como eje (HAT)**, no como teclas (la propia app la
+dibuja así en la prueba de botones: `PageTest.kt:52`; `MainActivity.kt:260` lee `AXIS_HAT_X/Y`). El
+camino de los botones del ratón (`AutoModeService.handleKey`) solo mira **eventos de tecla**, así que
+cualquier acción del ratón asignada a la cruceta (la rueda incluida) **no se enteraba nunca**.
+
+**Arreglo:** en `onMotionEvent`, con el puntero encendido se llama también a **`hatMouse(event)`**:
+leen `AXIS_HAT_X/Y` y, **al cambiar de dirección** (una vez por pulsación; mantenerla no cambia el
+valor y al soltar vuelve a 0), disparan la acción del ratón asignada a ese código
+(`Arriba/Abajo/Izquierda/Derecha`). Si esa dirección no tiene nada asignado, no hace nada.
+
+**Rastro para el diagnóstico en vivo:** dos renglones nuevos en el log —
+`ratón: botón <código> -> <acción|nada>` (camino de teclas) y
+`cruceta (HAT x/y) sobre el código <código> -> <acción>` (camino del eje).
+
+**Verificado:** `assembleRelease --offline` → **BUILD SUCCESSFUL in 47s**; APK 2.957.071 B, sha256
+`4d3dcadb8d3582cae8bfb0aa1b115b43a6c858445fce884c7240f03f5f0ef1b0`;
+`adb install -r` → **Success**; `dumpsys package` → `versionCode=39 versionName=1.4.12-diag`
+`lastUpdateTime=2026-10-13 16:19:55`; `logcat -c` limpio antes de la prueba. **Sin commit.**
+
+### 1.4.13-diag (versionCode 40) — el cajón se comprueba solo (red de seguridad)
+
+El deslizamiento del cajón **no se pudo reproducir como fallo** por ADB (abre desde otra página y desde
+dentro de una app; medido con `uiautomator dump` + `input swipe`). En vez de dejar la suposición que puse
+en la 1.4.11, la app ahora **se comprueba a sí misma**:
+
+- Después de deslizar, `revisarCajon()` mira el árbol de la ventana al frente y decide si el cajón está
+  abierto de verdad: marca medida = la caja **«Buscar apps»**; si el idioma no la trae, el otro dato
+  medido (el cajón lista todas las apps: 31 etiquetas frente a 6-11 de una página).
+- Si no abrió, **reintenta una vez desde Inicio** (`CAJON_INTENTOS = 2`) y deja rastro en el log
+  (`cajón de apps: deslizo (intento N)` / `abierto con el intento N` / `no abrió tras N intento(s)`).
+- **Se quitó el «Inicio por adelantado»** de la 1.4.11: la premisa «Inicio vuelve a la página principal»
+  no se pudo confirmar con medición y solo agregaba retraso.
+
+Verificado: `assembleRelease --offline` → **BUILD SUCCESSFUL in 47s**; `adb install -r` → **Success**;
+`dumpsys package` → `versionName=1.4.13-diag` `lastUpdateTime=2026-10-13 16:54:34`; APK sha256
+`b0ee31c147c574ba9e19fd62ae3f495209d401e736ed3a8fef4e7dccd3522d64`; app viva (`pidof` 16704), sin
+errores en logcat y el servicio de accesibilidad activo. **Sin commit.**
+
+## 2026-10-15 (18ª parte — 1.4.14-diag, versionCode 41: otros controles y doble toque para media)
+
+Ronda pedida como **investigación y validación** («Es pregunta… No quiero que echemos a perder nada»)
+y contestada con el mecanismo verificado antes de tocar nada; Roberto dio el OK a las tres en un
+mismo formulario, así que se implementaron **las tres en UNA sola versión** (su regla de una ronda =
+un build). La nota de registro está en el vault: `default/18-sesion-2026-10-15-registro-otros-controles-media.md`.
+
+**1) Select/Start con un control ajeno (GameSir por Bluetooth).** No son botones de la app: llegan
+como `KEYCODE_BUTTON_SELECT` (Vista) y `KEYCODE_BUTTON_START` (Menú) — `Gestures.kt:146-147` — que son
+**exactamente los de la firma de los traseros del G9** (`Signatures.kt:19-22`). El detector de firmas
+los **retenía hasta 90 ms** (`SignatureDetector.WINDOW_MS`) y los devolvía por inyección, y su
+condición (`hayTrasero`) se encendía con la **marca guardada en prefs** (`paddle_sig`), **sin mirar
+qué control estaba conectado**. Arreglo: el detector solo vigila Vista/Menú **cuando la entrada viene
+del G9** (`esDelG9(event.device)`, `AutoMode.kt:857`).
+
+**2) Con un control que no sea el G9, solo los Ajustes rápidos.** Camino nuevo: si el evento viene de
+un pad ajeno (`!esDelG9(...)` + es del mando + no es la app al frente + no es la prueba de botones),
+el servicio devuelve `legionKey(event)` y **nada más**: el botón guía sigue haciendo lo suyo (tocar =
+Atrás, mantener = **Ajustes rápidos**) y **todo lo demás de ese pad pasa tal cual a la app**
+(`AutoMode.kt:827-834`). Lo propio del G9 (ratón, traseros, reglas por app, teclas) no se le aplica.
+
+**3) Doble toque adelante / atrás para media.** El swipe **no se deprecia**: `MEDIA_FF` / `MEDIA_REW`
+se renombran a **«Swipe adelante» / «Swipe atrás»** (`Gestures.kt:42,44`) y se **añaden**
+`MEDIA_FF_DBL` / `MEDIA_REW_DBL` («Doble toque adelante / atrás»), que inyectan **dos toques** en la
+mitad derecha (0,75) o izquierda (0,25) de la pantalla (`AutoMode.seekVideoDouble` + `tapAt`): un
+«toque» es una ruta de **longitud cero** (la referencia de Android de `GestureDescription` dice que
+una ruta sin recorrido es un toque que no se mueve) y se mandan en **dos gestos separados 150 ms**,
+que es lo que hace un dedo en un doble toque real.
+
+**Helper nuevo:** `esDelG9(dev)` (`AutoMode.kt:790`) — nombre con «G9» / «Legion» / «X-Box 360» /
+«DualSense» / «DualShock», o **VID del G9 0x3537**. Lo usa también `onKeyEvent` para decidir qué
+control se apretó por última vez (`lastG9Key` / `lastOtherPad`), que antes repetía la comparación a mano.
+
+**Verificado:** `assembleRelease --offline` → **BUILD SUCCESSFUL in 2m 46s**; APK 2.957.071 B, sha256
+`1fa7a3af949dde9e6b50d8e1309f516e95db4538507ba56d6f89b93ad1d0f437`; `adb connect 192.168.68.106:5555`
+(el ADB inalámbrico se movió del .107 al **.106**; el adb de SuperDisplay), `adb install -r` →
+**Success**; `dumpsys package` → `versionCode=41 versionName=1.4.14-diag`
+`lastUpdateTime=2026-10-15 11:21:13` con `firstInstallTime=2026-10-11 00:42:25` intacto (se actualizó
+conservando los datos); el **servicio de accesibilidad siguió activo** tras instalar; app viva
+(`ps -A` → `io.github.sudodiego.g9control`); el **texto nuevo está en el APK** (`unzip -p … classes.dex
+| grep -a "Doble toque adelante"` → 2 coincidencias). **Sin commit** (el árbol sigue sucio, como él pide).
+
+**Pendiente de medir en la tablet (con el pad conectado):** (a) con qué códigos llega el GameSir por
+Bluetooth (¿manda `BUTTON_SELECT`/`BUTTON_START` y `BUTTON_MODE`, o usa otros?) — `getevent` +
+`dumpsys input` + `logcat -T 1 'G9Auto:D' '*:S'` en una pulsación real; (b) que el doble toque de media
+adelante/atrás se comporte como espera en sus reproductores (el punto de toque es 0,75 / 0,25 del ancho,
+al centro de alto: si alguna app pide el borde, se ajusta).
+
+### Corrección de la misma ronda — medido con el pad conectado (1.4.15 → 1.4.17-diag)
+
+Roberto conectó el GameSir por Bluetooth y la medición (`getevent` + `logcat`) destapó dos cosas que no
+se veían en el código: el pad es un **GameSir-Cyclone 2** y **comparte el fabricante del G9**
+(`vendor=0x3537`, `product=0x1052`; el G9 es `0x1134`/`0x1136`). Mi primer filtro iba por fabricante, así
+que al Cyclone 2 lo trataba **como G9** y Select/Start seguían retenidos. Además el **botón guía** de ese
+pad manda `KEY_HOMEPAGE` → **`KEYCODE_HOME` (3)**, no el botón guía de mando.
+
+- **1.4.15-diag (42)**: el guía de un control ajeno se atiende **por dispositivo** (fuentes GAMEPAD o
+  JOYSTICK) con `guiaAjena()`: mantener 0,6 s = **Ajustes rápidos**, tocar = **Inicio**; Select/Start
+  pasan tal cual; `esDelG9` pasa a distinguir por **producto** además del nombre.
+- **1.4.16-diag (43)**: `DIAG ajeno` temporal (tecla + dispositivo + fuentes). Medido: Select `k=109`,
+  Start `k=108`, guía `k=3`, todos desde el nodo `GameSir-Cyclone 2 Consumer Control`.
+- **1.4.17-diag (44)**: se **quita el DIAG**. Roberto confirmó en pantalla que **mantener el botón guía
+  abre los Ajustes rápidos**.
+
+Verificado: `assembleRelease --offline` → **BUILD SUCCESSFUL in 30s**; APK sha256
+`672ae8f17977b58d30c20b22146ec6a8c000d1697c40f66368fdcc07d32fd0d7`; `adb install -r` → **Success**;
+`dumpsys package` → `versionCode=44 versionName=1.4.17-diag` `lastUpdateTime=2026-10-15 11:54:34`, con
+`firstInstallTime=2026-10-11 00:42:25` intacto; servicio de accesibilidad activo; app viva; sin errores en
+el buffer de crash. **Sin commit.**

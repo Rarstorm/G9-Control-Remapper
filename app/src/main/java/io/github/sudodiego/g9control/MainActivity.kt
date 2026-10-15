@@ -915,7 +915,7 @@ class MainActivity : ComponentActivity() {
      * cada trasero para poder distinguirlos, y la app la pone sola cuando hace falta (al asignarles algo en
      * «Gestos»). [loud] = comprobar los cuatro y avisarlo en el estado (botón manual).
      */
-    fun preparePaddles(loud: Boolean = false) = launchIo {
+    fun preparePaddles(loud: Boolean = false, intento: Int = 0): Unit = launchIo {
         val s = state
         if (!s.connected) {
             if (loud) s.fail(tr("Conecta el mando para preparar los traseros.", "Connect the controller to prepare the paddles."))
@@ -953,6 +953,14 @@ class MainActivity : ComponentActivity() {
         }
         s.appliedBackKeys = s.backKeys.toMap()
         when {
+            // Recién despertado el mando todavía no contesta al configurarlo: era el aviso rojo que salía al
+            // despertar el control («No pude preparar 4 trasero(s)»). Se reintenta solo, tres veces y en
+            // silencio, antes de dar la lata. El botón manual («Preparar los traseros») avisa en el acto.
+            fallos > 0 && !loud && intento < 3 -> {
+                android.util.Log.d("G9Control", "traseros: $fallos sin preparar; reintento ${intento + 1} de 3")
+                kotlinx.coroutines.delay(1200)
+                preparePaddles(loud = loud, intento = intento + 1)
+            }
             fallos > 0 -> s.fail(tr("No pude preparar $fallos trasero(s): apriétalos y vuelve a intentarlo.",
                                     "Couldn't prepare $fallos paddle(s): press them and try again."))
             loud -> s.status = tr("Traseros preparados ($hechos).", "Paddles prepared ($hechos).")

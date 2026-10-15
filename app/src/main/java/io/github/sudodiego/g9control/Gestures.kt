@@ -38,10 +38,14 @@ enum class GestureAction(val es: String, val en: String, val cat: Int) {
     PLAY_PAUSE("Reproducir / Pausa", "Play / Pause", 2),
     MEDIA_NEXT("Siguiente pista", "Next track", 2),
     MEDIA_PREV("Pista anterior", "Previous track", 2),
-    /** Adelanta el video: un deslizamiento del tamaño elegido en «Tiempos» → «Deslizamiento». */
-    MEDIA_FF("Adelantar video", "Seek forward", 2),
-    /** Retrocede el video: un deslizamiento del tamaño elegido en «Tiempos» → «Deslizamiento». */
-    MEDIA_REW("Retroceder video", "Seek back", 2),
+    /** Adelanta el video con un DESLIZAMIENTO, del tamaño elegido en «Tiempos» → «Deslizamiento». */
+    MEDIA_FF("Swipe adelante", "Swipe forward", 2),
+    /** Retrocede el video con un DESLIZAMIENTO, del tamaño elegido en «Tiempos» → «Deslizamiento». */
+    MEDIA_REW("Swipe atrás", "Swipe back", 2),
+    /** Adelanta el video con un DOBLE TOQUE en la mitad derecha de la pantalla (lo entienden más reproductores). */
+    MEDIA_FF_DBL("Doble toque adelante", "Double-tap forward", 2),
+    /** Retrocede el video con un DOBLE TOQUE en la mitad izquierda de la pantalla. */
+    MEDIA_REW_DBL("Doble toque atrás", "Double-tap back", 2),
     MEDIA_STOP("Detener", "Stop", 2),
     MUTE("Silenciar", "Mute", 2),
     VOL_UP("Subir volumen", "Volume up", 2),

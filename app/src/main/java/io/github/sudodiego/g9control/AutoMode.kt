@@ -770,8 +770,7 @@ class AutoModeService : AccessibilityService() {
         if (event.action == KeyEvent.ACTION_DOWN && KeyEvent.isGamepadButton(k)) {
             val now = android.os.SystemClock.uptimeMillis()
             // En X-Input el G9 se llama "Microsoft X-Box 360 pad" (el nombre del driver de Xbox por USB).
-            val name = event.device?.name.orEmpty()
-            if (name.contains("G9", true) || name.contains("x-box 360", true)) lastG9Key = now else lastOtherPad = now
+            if (esDelG9(event.device)) lastG9Key = now else lastOtherPad = now
         }
         if (event.action == KeyEvent.ACTION_UP && delivered.remove(k)) {
             handleKey(event)   // para que el resto (L3 + R3, la guía) se entere de que se soltó
@@ -780,6 +779,52 @@ class AutoModeService : AccessibilityService() {
         val consumed = handleKey(event)
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && !consumed && KeyEvent.isGamepadButton(k)) delivered += k
         return consumed
+    }
+
+    /**
+     * ¿Esta entrada viene del G9? En modo Android el mando se presenta como «GameSir Legion Gaming
+     * Controller G9…» y en X-Input como «Microsoft X-Box 360 pad» (el nombre del driver de Xbox por USB);
+     * es el mismo criterio que ya usa [onKeyEvent] para saber qué control se apretó por última vez. Cualquier
+     * otro nombre —o un VID que no es el del G9 (0x3537)— es OTRO control.
+     */
+    private fun esDelG9(dev: InputDevice?): Boolean {
+        val n = dev?.name.orEmpty()
+        if (n.contains("G9", true) || n.contains("Legion", true) || n.contains("x-box 360", true) ||
+            n.contains("dualsense", true) || n.contains("dualshock", true)) return true
+        // El FABRICANTE no basta: GameSir usa el mismo (0x3537) en otros mandos — el Cyclone 2 por Bluetooth
+        // llega como 0x3537/0x1052 y así se nos colaba como G9. Se distingue por el PRODUCTO de este mando
+        // (los dos PID del filtro USB: 4404 = 0x1134 y 4406 = 0x1136).
+        return dev?.vendorId == 0x3537 && (dev.productId == 0x1134 || dev.productId == 0x1136)
+    }
+
+    /** Guía apretado en un control ajeno: mantener = Ajustes rápidos; tocar = Inicio del sistema. */
+    private var guiaAjenaPendiente = false
+    private val guiaAjenaPanel = Runnable { guiaAjenaPendiente = false; panel.show() }
+
+    /**
+     * El botón guía de un control que NO es el G9. Según el pad llega como `BUTTON_MODE` (botón de mando) o
+     * como la tecla de Inicio; se atiende igual en los dos casos: **mantener 0,6 s abre los Ajustes rápidos**
+     * y **tocar hace el Inicio del sistema** (lo que el pad haría solo). Se consume para que Android no lo
+     * haga por su cuenta a la vez; devuelve si el evento es nuestro.
+     */
+    private fun guiaAjena(e: KeyEvent): Boolean {
+        val k = e.keyCode
+        if (k != KeyEvent.KEYCODE_BUTTON_MODE && k != KeyEvent.KEYCODE_HOME) return false
+        when (e.action) {
+            KeyEvent.ACTION_DOWN -> if (e.repeatCount == 0) {
+                guiaAjenaPendiente = true
+                main.removeCallbacks(guiaAjenaPanel)
+                main.postDelayed(guiaAjenaPanel, 600)
+            }
+            KeyEvent.ACTION_UP -> {
+                main.removeCallbacks(guiaAjenaPanel)
+                if (guiaAjenaPendiente) {
+                    guiaAjenaPendiente = false
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                }
+            }
+        }
+        return true
     }
 
     /**
@@ -810,8 +855,28 @@ class AutoModeService : AccessibilityService() {
             event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD) ||
             k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN ||
             k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
+        // OTRO control (no el G9): de la app SOLO funciona el botón guía —mantenerlo abre los Ajustes
+        // rápidos— y TODO lo demás de ese control pasa tal cual a la app: no se le comen botones, gestos ni
+        // teclas. Lo propio del G9 (traseros por firma, ratón, reglas por app) no se le aplica a un pad ajeno.
+        // Se decide por el DISPOSITIVO (no por la tecla): el guía de un pad ajeno puede llegar como botón de
+        // mando o como la tecla de Inicio (medido en la tablet: GameSir-Cyclone 2 = KEY_HOMEPAGE -> Inicio).
+        val srcAjeno = event.device?.sources ?: 0
+        if (!esDelG9(event.device) &&
+            srcAjeno and (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK) != 0 &&
+            !appInFront && !KeyBus.testing
+        ) {
+            if (guiaAjena(event)) return true
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0)
+                Log.d(TAG, "otro control (${event.device?.name}): pasa tal cual (solo el botón guía es nuestro)")
+            return false
+        }
         if (mouse.isOn && esDelMando && !appInFront && !KeyBus.testing) {
             val act = MouseRules.buttons(this)[k]
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                // Deja rastro en el log para poder diagnosticar: si una acción del ratón «no hace nada», este
+                // renglón dice si el botón llegó como tecla y qué tenía asignado (o «nada»).
+                Log.d(TAG, "ratón: botón $k -> ${act ?: "nada"}")
+            }
             when {
                 event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 ->
                     if (act == GestureAction.MOUSE_DRAG) mouse.rememberOrigin() else act?.let { runMouseAction(it) }
@@ -827,7 +892,10 @@ class AutoModeService : AccessibilityService() {
         // Firmas de los traseros: la secuencia corta con la que el control dice qué trasero se apretó. Se vigila
         // si algún trasero trae su marca EN EL MANDO (o tiene reglas en «Todas las apps» / en la app al frente),
         // y si no, Vista/Menú pasan tal cual sin esperar nada.
-        if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES) {
+        // Solo el G9 firma sus traseros con Vista/Menú: con OTRO control esos dos botones NO se vigilan. La
+        // marca guardada de sesiones anteriores no basta — manda el control conectado, o un pad ajeno se queda
+        // con Select/Start retenidos ~90 ms y devueltos por inyección (su «Select y Start no funcionan»).
+        if (!appInFront && !KeyBus.testing && k in SIG_KEYCODES && esDelG9(event.device)) {
             // La marca (la macro corta) vive en el MANDO: si algún trasero la trae, sus Vista/Menú se vigilan
             // SIEMPRE, tenga o no reglas esa app. Con el filtro viejo («hay alguna regla de trasero») bastaba
             // con tener reglas solo en una app para que en las demás el detector se apartara y la firma llegara
@@ -954,6 +1022,9 @@ class AutoModeService : AccessibilityService() {
             // Adelantar / retroceder: un deslizamiento corto, del tamaño elegido en «Gestos» → «Tiempos».
             GestureAction.MEDIA_FF -> seekVideo(1)
             GestureAction.MEDIA_REW -> seekVideo(-1)
+            // Doble toque: para los reproductores que no entienden un deslizamiento (mitad derecha / izquierda).
+            GestureAction.MEDIA_FF_DBL -> seekVideoDouble(1)
+            GestureAction.MEDIA_REW_DBL -> seekVideoDouble(-1)
             GestureAction.MEDIA_STOP -> mediaKey(KeyEvent.KEYCODE_MEDIA_STOP)
             GestureAction.MUTE -> SystemLevels.toggleMute(this)
             GestureAction.BRIGHT_UP -> SystemLevels.stepBrightness(this, 1)
@@ -1081,6 +1152,30 @@ class AutoModeService : AccessibilityService() {
         else swipe(0.5f + pct / 2, 0.5f, 0.5f - pct / 2, 0.5f, ms = 120)
     }
 
+    /**
+     * Adelantar / retroceder video con DOBLE TOQUE: para los reproductores que no entienden un deslizamiento,
+     * dos toques en la mitad derecha (adelantar) o izquierda (retroceder) es lo que sí reconocen.
+     * Un «toque» es una ruta de longitud cero (la referencia de Android de `GestureDescription` dice que una
+     * ruta sin recorrido es un toque que no se mueve) y se mandan en DOS gestos separados 150 ms, que es lo
+     * que hace un dedo en un doble toque de verdad.
+     */
+    private fun seekVideoDouble(dir: Int) {
+        val x = if (dir > 0) 0.75f else 0.25f
+        if (!tapAt(x, 0.5f)) return
+        main.postDelayed({ tapAt(x, 0.5f) }, 150)
+    }
+
+    /** Un toque en un punto de la pantalla (tanto por uno del ancho y del alto). */
+    private fun tapAt(x: Float, y: Float, ms: Long = 40): Boolean {
+        val m = resources.displayMetrics
+        val path = Path().apply { moveTo(x * m.widthPixels, y * m.heightPixels) }
+        val g = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
+        val ok = dispatchGesture(g, null, null)
+        if (!ok) Log.w(TAG, "el toque NO se pudo despachar (había otro gesto en marcha o el servicio no está listo)")
+        return ok
+    }
+
     /** Tecla multimedia (reproducir, siguiente, anterior, detener…): el sistema la lleva al que esté sonando. */
     private fun mediaKey(code: Int) {
         val am = getSystemService(AudioManager::class.java)
@@ -1102,9 +1197,13 @@ class AutoModeService : AccessibilityService() {
         // de verdad es el del dedo: ir al inicio y deslizar hacia arriba.
         main.removeCallbacks(cajonDeslizar)
         cajonPedido = android.os.SystemClock.uptimeMillis()
+        cajonIntento = 0
         if (esLauncherAlFrente()) {
-            // Ya estamos en la pantalla de inicio (o en el propio cajón): no hay que esperar a que se dibuje
-            // nada, el deslizamiento sale en el acto — así el cajón no se siente lento.
+            // Ya en la pantalla de inicio (o en el propio cajón): el deslizamiento sale en el acto — así el
+            // cajón no se siente lento. Si no abre, [revisarCajon] lo mide y reintenta con Inicio.
+            // NO se manda «Inicio» por adelantado: la premisa «Inicio vuelve a la página principal» no la pude
+            // confirmar con medición (medido en la tableta, con el cajón abierto no hace nada más que abrir la
+            // página donde estabas), así que mandarlo solo agregaba retraso.
             Log.d(TAG, "cajón de apps: ya en el launcher -> deslizamiento inmediato")
             main.post(cajonDeslizar)
         } else {
@@ -1145,13 +1244,70 @@ class AutoModeService : AccessibilityService() {
         ).any { it.activityInfo.packageName == pkg }
     }.getOrDefault(pkg == "com.zui.launcher")
 
-    /** Desliza para abrir el cajón. Si ya se hizo (o se canceló), no repite. */
+    /** Cuántos deslizamientos llevamos en esta petición del cajón (máximo [CAJON_INTENTOS]). */
+    private var cajonIntento = 0
+
+    /** Desliza para abrir el cajón y después comprueba si de verdad abrió (ver [revisarCajon]). */
     private val cajonDeslizar = Runnable {
         if (cajonPedido == 0L) return@Runnable
-        cajonPedido = 0L
+        cajonIntento++
+        Log.d(TAG, "cajón de apps: deslizo (intento $cajonIntento)")
         // 120 ms: mínimo que ZUI reconoce como swipe y no como toque.
         swipe(0.5f, 0.72f, 0.5f, 0.30f, ms = 120)
+        main.postDelayed({ revisarCajon() }, 700)
     }
+
+    /**
+     * ¿Está el cajón de apps abierto? Se mira el árbol de la ventana al frente: el cajón es el único sitio
+     * del launcher donde aparece la caja de búsqueda («Buscar apps») y, si no se encuentra (otro idioma), se
+     * usa el otro dato medido: el cajón lista TODAS las apps, así que tiene muchas más etiquetas que una
+     * página de inicio (medido en la tableta: 31 frente a 6-11).
+     */
+    private fun cajonAbierto(): Boolean {
+        val raiz = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        val pila = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+        pila.add(raiz)
+        var etiquetas = 0
+        var vistos = 0
+        while (pila.isNotEmpty() && vistos < 500) {
+            val n = pila.removeFirst()
+            vistos++
+            val t = n.text?.toString()?.lowercase().orEmpty()
+            val d = n.contentDescription?.toString()?.lowercase().orEmpty()
+            if (t.contains("buscar apps") || t.contains("search apps") || d.contains("buscar apps") ||
+                d.contains("search apps") || t == "buscar" || d == "buscar"
+            ) return true
+            if (t.isNotEmpty()) etiquetas++
+            for (i in 0 until n.childCount) n.getChild(i)?.let { pila.add(it) }
+        }
+        return etiquetas > 15
+    }
+
+    /**
+     * Comprueba el cajón y, si no abrió, lo reintenta UNA vez volviendo a Inicio. Es el seguro contra los
+     * casos que no se pueden prever: si el deslizamiento se pierde en la animación del launcher, si la
+     * página no era la de casa o si el cajón ya estaba abierto, se mide y se corrige en vez de quedarse en
+     * nada (antes, un deslizamiento perdido era «el botón no hizo nada»).
+     */
+    private fun revisarCajon() {
+        if (cajonPedido == 0L) return
+        if (cajonAbierto()) {
+            Log.d(TAG, "cajón de apps: abierto con el intento $cajonIntento")
+            cajonPedido = 0L
+            return
+        }
+        if (cajonIntento >= CAJON_INTENTOS) {
+            Log.w(TAG, "cajón de apps: no abrió tras $cajonIntento intento(s)")
+            cajonPedido = 0L
+            return
+        }
+        Log.d(TAG, "cajón de apps: no abrió; reintento desde Inicio")
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        main.postDelayed(cajonDeslizar, 400)
+    }
+
+    /** Intentos de abrir el cajón por petición (el segundo es el seguro). */
+    private val CAJON_INTENTOS = 2
 
     /**
      * El mando se duerme solo si no lo usas y, al despertar, la conexión USB ya se había caído: antes había que
@@ -1406,7 +1562,10 @@ class AutoModeService : AccessibilityService() {
         // Ejes del control: los usa el panel (para navegarlo) o el puntero del ratón (para moverse). Mientras
         // uno de los dos está activo, los ejes son suyos y no llegan al juego.
         if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
-            if (panel.isOpen) panel.onStick(event) else if (mouse.isOn) mouse.onStick(event)
+            if (panel.isOpen) panel.onStick(event) else if (mouse.isOn) {
+                mouse.onStick(event)
+                hatMouse(event)
+            }
             return
         }
         if (!event.isFromSource(InputDevice.SOURCE_MOUSE)) return
@@ -1417,6 +1576,37 @@ class AutoModeService : AccessibilityService() {
         if (event.device?.name?.contains("g9", true) != true || ModeSwitcher.detect() != PadMode.DS5) return
         Log.d(TAG, "M dos veces en DS5 (touchpad): captura")
         panel.capture()
+    }
+
+    /**
+     * Dirección de la cruceta que se disparó la última vez. La cruceta de este mando llega como **eje** (HAT),
+     * no como teclas (comprobado en la app: la prueba de botones la dibuja como eje, `PageTest`), así que el
+     * camino de los botones nunca se enteraba de ella: una acción del ratón asignada a «Arriba/Abajo» (la
+     * rueda, por ejemplo) **no hacía nada**. Aquí se traduce el cambio de dirección del HAT a la acción del
+     * ratón que tenga asignada esa dirección, una sola vez por pulsación (mientras se mantiene, el valor no
+     * cambia; al soltar, vuelve a 0).
+     */
+    private var hatX = 0f
+    private var hatY = 0f
+
+    private fun hatMouse(e: MotionEvent) {
+        if (appInFront || KeyBus.testing) return
+        val hx = e.getAxisValue(MotionEvent.AXIS_HAT_X)
+        val hy = e.getAxisValue(MotionEvent.AXIS_HAT_Y)
+        if (hx == hatX && hy == hatY) return
+        hatX = hx
+        hatY = hy
+        val k = when {
+            hy <= -0.5f -> KeyEvent.KEYCODE_DPAD_UP
+            hy >= 0.5f -> KeyEvent.KEYCODE_DPAD_DOWN
+            hx <= -0.5f -> KeyEvent.KEYCODE_DPAD_LEFT
+            hx >= 0.5f -> KeyEvent.KEYCODE_DPAD_RIGHT
+            else -> 0
+        }
+        if (k == 0) return
+        val act = MouseRules.buttons(this)[k] ?: return
+        Log.d(TAG, "cruceta (HAT $hx/$hy) sobre el código $k -> $act")
+        runMouseAction(act)
     }
 
     /** L3 y R3 apretados ahora mismo, con el momento en que se apretó cada uno. */

@@ -329,8 +329,8 @@ fun GesturesPage(s: AppState, a: MainActivity) {
                             "Here, “Nothing” on all three makes the button work normally in this app (it reaches the game).")
                     )
                     Hint(
-                        tr("El cajón de apps y las páginas del launcher primero prueban el intent del launcher y, si no lo atiende, van al inicio y deslizan. «Adelantar / Retroceder video» usan el tamaño de «Tiempos» → «Deslizamiento».",
-                            "The app drawer and launcher pages first try the launcher's intent and, if it doesn't answer, go home and swipe. “Seek forward / back” use the size from “Timings” → “Swipe”.")
+                        tr("El cajón de apps y las páginas del launcher primero prueban el intent del launcher y, si no lo atiende, van al inicio y deslizan. «Swipe adelante / atrás» usan el tamaño de «Tiempos» → «Deslizamiento»; «Doble toque adelante / atrás» son dos toques en la mitad derecha / izquierda, que es lo que entienden más reproductores.",
+                            "The app drawer and launcher pages first try the launcher's intent and, if it doesn't answer, go home and swipe. “Swipe forward / back” use the size from “Timings” → “Swipe”; “Double-tap forward / back” are two taps on the right / left half, which more players understand.")
                     )
                     if (launcherPkg != null) Hint(
                         tr("«Pantalla de inicio» en «Aplica a» sirve para lo que solo pasa en el launcher (cajón de apps, páginas).",
