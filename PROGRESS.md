@@ -595,3 +595,18 @@ propio del fork). Capturas de pantalla: pendientes (Roberto las dejó para otra 
   su respuesta**: hasta que conteste, no se manda el MR a `fdroiddata`.
 - Los README ya anuncian la Release y cómo agregarla en Obtainium, y llevan el aviso de las dos firmas
   (canales GitHub y F-Droid no se pueden actualizar entre sí).
+
+**Instalada en la Y700 (15-10):** el APK **de la Release** (descargado, no el local) por ADB inalámbrico
+(`adb connect 192.168.68.106:5555`, adb de SuperDisplay) → `adb install -r` = **Success**.
+`dumpsys package io.github.rarstorm.g9controlremapper` → `versionCode=44 versionName=1.4.17`
+`firstInstallTime=2026-10-15 17:49:02`. Ahora conviven las dos apps:
+
+| ID | versión | estado |
+|---|---|---|
+| `io.github.sudodiego.g9control` | `1.4.17-diag` | la de siempre, con los datos desde el 11-10 y el **servicio de accesibilidad activo** |
+| `io.github.rarstorm.g9controlremapper` | `1.4.17` | nueva, **sin datos y sin accesibilidad** |
+
+Ojo con esto: las dos se llaman igual en el lanzador (**G9 Control Remapper**), así que se distinguen por
+la versión que muestra Ajustes (`1.4.17-diag` = vieja, `1.4.17` = nueva). La migración es a mano: exportar
+el respaldo en la vieja e importarlo en la nueva, y volver a activar el servicio de accesibilidad en la
+nueva (el de la vieja sigue encendido con su ID).
