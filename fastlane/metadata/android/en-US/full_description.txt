@@ -1,0 +1,27 @@
+<b>G9 Control Remapper</b> brings button remapping to the Legion G9 controller on the Lenovo Legion Y700 tablet.
+
+It is an independent fork of <b>G9Control</b> (sudo-diego, GPL-3.0), which is what configures the controller: lights, sticks, vibration, profiles, game panel and per-app mode switching. On top of that base, this fork adds what was missing: making the controller do whatever you want.
+
+<b>1. Button remapping (Gestures page)</b>
+- Three gestures per button: tap, hold and double tap, each with its own action.
+- Actions: Back, Home, Recents, Notifications, Screenshot, Quick settings, media (play/pause, next and previous track, seek forward and back by swipe or by double tap, stop, mute, volume), brightness up and down, open an app, app drawer and launcher pages, a keyboard key or a key sequence.
+- Per app: an app's rules override the general ones and, with "Nothing", the button passes straight through to the app.
+- Key Mapper-style interception, and you pick the button by pressing it ("Learn from the controller").
+
+<b>2. Paddles L4, R4, L5 and R5, each with its own command</b>
+The firmware only lets a paddle copy a button, which makes all four indistinguishable (measured with getevent: L4 sends what Y sends). This fork gives each paddle a signature: a very short, unique macro that the service recognises and swallows. That way each paddle can have its own command and do something different per app.
+
+<b>3. Mouse as an overlay (L3 + R3)</b>
+A pointer the app draws on top of the game, with no root: click, right click, double click, drag and wheel, injected at the cursor's position. It has its own page with speed/DPI, smoothing, curve and dead zone.
+
+<b>Extras</b>
+- Keyboard keys and macros per gesture (with Shizuku).
+- Quick settings assignable to any button.
+- Other controllers: if you connect another pad, none of the G9 behaviour applies to it.
+- Automatic reconnect when the tablet sleeps.
+- Full backup of settings and profiles to a file.
+
+<b>Permissions</b>
+It needs the accessibility service (to see the foreground app and the buttons) and, for some features, Shizuku. The app has no internet permission and collects no data.
+
+Not affiliated with Lenovo, Legion or GameSir; those are their owners' trademarks. The original project and this fork are free software under GPL-3.0.

@@ -1,0 +1,4 @@
+Round of remapping, paddles and mouse, plus support for other controllers.
+- Other controllers: if the pad is not the G9 (tested with a GameSir Cyclone 2 over Bluetooth), none of the G9 behaviour applies: its guide button opens Quick settings and everything else passes through. Now told apart by product, not vendor.
+- Media: double-tap seek forward and back, alongside the swipes.
+- Its own fork ID (io.github.rarstorm.g9controlremapper).

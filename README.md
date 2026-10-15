@@ -148,8 +148,18 @@ Controller configuration, using the official app as reference and with no accoun
    DS5 (white), hold **View + Menu** for about 2 seconds. When Android asks for USB access, check
    **Always** and accept.
 
-> If you're coming from the author's original app, you have to **uninstall it** once: it's signed with
-> a different key and Android won't update over a different signature.
+> **ID change (important if you already had it installed).** Up to `1.4.17-diag` the app used the
+> original project's `applicationId` (`io.github.sudodiego.g9control`); from **1.4.17** it uses its own,
+> `io.github.rarstorm.g9controlremapper`, because F-Droid automatically rejects duplicate IDs and
+> requires forks to have their own. That means **1.4.17 installs as a separate app and doesn't inherit
+> your settings**: move them by exporting the backup from the old one (Backup → Export) and importing it
+> in the new one (Backup → Import). The same applies if you're coming from the author's original app,
+> which is also signed with a different key and can't be updated over.
+
+> **Two channels, two signatures.** The APK in these Releases is signed with the project's key. If the
+> app ever enters F-Droid, that copy is signed with F-Droid's key, and Android won't update across
+> signatures: switching channels means uninstalling and installing, moving your settings with
+> Backup → Export / Import. Pick one channel and stay on it.
 
 ### The accessibility service and Shizuku
 
@@ -186,5 +196,6 @@ in its assistant and in Settings → Permissions.
   protocol and that almost everything here depends on.
 - **This fork:** [Rarstorm/G9-Control-Remapper](https://github.com/Rarstorm/G9-Control-Remapper),
   maintained by Roberto ([@Rarstorm](https://github.com/Rarstorm)).
+- **Icon and store graphics:** Roberto, made with **Nano Banana 2.1** in Google Flow.
 - **Licence:** [GPL-3.0](LICENSE), the same as the original. You can use, study, modify and share it;
   modified versions must stay open source under the same licence.

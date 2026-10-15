@@ -505,3 +505,72 @@ Verificado: `assembleRelease --offline` → **BUILD SUCCESSFUL in 30s**; APK sha
 `dumpsys package` → `versionCode=44 versionName=1.4.17-diag` `lastUpdateTime=2026-10-15 11:54:34`, con
 `firstInstallTime=2026-10-11 00:42:25` intacto; servicio de accesibilidad activo; app viva; sin errores en
 el buffer de crash. **Sin commit.**
+
+## 2026-10-15 (19ª parte — identidad del fork y publicación: repo renombrado, READMEs, Release y metadatos de tienda)
+
+Roberto revisó el repo en GitHub y el diagnóstico fue correcto: **el trabajo estaba, pero no se veía**.
+Medido antes de tocar nada:
+
+- `README.md` y `README.es.md` eran **byte a byte iguales** a los del proyecto original (`diff` contra
+  `../G9Control-upstream`), y `CONTEXTO.md` también. O sea: la portada del repo mostraba el proyecto
+  original (incluso su crédito a Claude Code), no el fork.
+- La descripción del repo era la del original, y los topics estaban vacíos.
+- El repo se llamaba `G9Control` aunque la app se llama **G9 Control Remapper** desde el commit
+  `4929821` (el código ya estaba renombrado: `app_name` + los 16 textos).
+- El árbol tenía 6 archivos **sin commitear** (la ronda 1.4.14→1.4.17).
+
+**Identidad (commit `b1accae`):** repo renombrado a **`Rarstorm/G9-Control-Remapper`** (la API devolvió
+`full_name` nuevo), descripción propia, 10 topics (`android`, `gamepad`, `controller-remapper`,
+`legion-g9`, `lenovo-y700`, `kotlin`, `accessibility-service`, `shizuku`, `input-mapping`,
+`jetpack-compose`) y `remote` local actualizado. Los dos README se reescribieron desde cero:
+qué es el fork, qué viene del original (tabla), y **lo nuestro en tres bloques** —remapeo, traseros con
+comando propio por firma, y ratón por overlay— más los extras. Autoría corregida: **DeepSeek vía Hermes
+Agent** (antes decía Claude/Anthropic; el aviso legal dentro de la app ya estaba limpio: se verificó con
+`grep` que no menciona a Anthropic en ningún archivo de `app/src`).
+
+**Publication (Obtainium):** el flujo `android.yml` ahora tiene la entrada `publicar_tag`; con un tag
+publica una **GitHub Release con el APK adjunto** (`G9-Control-Remapper-<tag>.apk`), que es lo que
+Obtainium necesita (lee Releases, no artefactos del CI) y sigue siendo **solo manual**. Se añadió
+`permissions: contents: write`.
+
+**Publicación en tiendas — dos requisitos duros de F-Droid** (documentación oficial consultada:
+*Inclusion Policy* y *Submitting to F-Droid*):
+
+1. **ID nuevo obligatorio.** La política dice: *«Any application with a duplicate android application ID
+   matching another domain name will receive automatic rejection»* y *«Forked applications need to obtain
+   a fresh Android ID that differs from the original … and must receive corresponding name, icon and
+   string changes»*. La app seguía con el `applicationId` del autor original. Ahora es
+   **`io.github.rarstorm.g9controlremapper`** (el `namespace`/paquete Kotlin se queda como estaba: no es
+   el ID de Android y moverlo no aporta). Consecuencia dicha a Roberto: al cambiar el ID, la app pasa a
+   ser **otra app** en la tablet — se instala aparte y los datos se recuperan con el **Respaldo** que ya
+   tiene la app.
+2. **Ícono: SÍ es nuestro — comprobación mía equivocada y corregida.** Yo comparé los XML de
+   `drawable/ic_launcher_bg.xml` y `ic_launcher_fg.xml` (idénticos al upstream) y concluí que el arte era
+   del original. **Estaba mal**: el ícono que Android dibuja sale de `mipmap-anydpi-v26/ic_launcher.xml`,
+   que apunta a **`@mipmap/ic_launcher_bg|fg|mono`**, y esos PNG **no existen en el upstream** (verificado
+   archivo por archivo: `NO existe en upstream`). Además los XML de `drawable/` no los referencia nada
+   (`grep`: las únicas menciones son las de `ic_launcher.xml`, y esas son `@mipmap/…`): son restos
+   heredados. O sea que el arte (la «L» y el tridente en neón) **lo hizo Roberto con Nano Banana 2.1 en
+   Google Flow**, y el crédito ya está en los dos README. No hace falta rehacer el ícono para F-Droid.
+
+   **Lección para este repo:** para saber qué arte se usa hay que seguir la referencia que resuelve el
+   sistema (`@mipmap/…`), no comparar los archivos que *parecen* ser el ícono. Y el `mipmap` gana al
+   `drawable` del mismo nombre, así que un XML idéntico al upstream puede ser ruido.
+
+**Metadatos y gráficos para las tiendas (en el repo, como pide la guía):**
+`fastlane/metadata/android/{es-ES,en-US}/` con `title.txt`, `short_description.txt` (71 / 64 caracteres,
+límite 80), `full_description.txt` (2327 / 2318, límite 4000), `changelogs/44.txt` (449 / 440, límite 500)
+e `images/icon.png` (512×512) + `images/featureGraphic.png` (1024×500). Los gráficos se generaron con PIL
+a partir de las capas del ícono adaptativo, recortando el **centro 66.7 %** (la zona visible de 72/108 dp)
+para que el PNG de la tienda se vea como lo ve el usuario. El banner se verificó **viéndolo**: el primer
+intento cortaba el subtítulo por el borde derecho, así que ahora el cuerpo de cada línea se ajusta solo
+(`fit()` baja el tamaño hasta que el texto entra en el ancho disponible) y se volvió a comprobar a ojo.
+El ícono de tienda y el banner son, por ahora, el arte del ícono actual (ver el punto 2: falta el ícono
+propio del fork). Capturas de pantalla: pendientes (Roberto las dejó para otra sesión; las de
+`docs/screenshots/` son del original).
+
+**Verificado en local antes de publicar:** `JAVA_HOME=%LOCALAPPDATA%\Android\jdk-17`,
+`./gradlew :app:assembleRelease --offline` → **BUILD SUCCESSFUL**, APK 2.957.087 B; `aapt2 dump badging` →
+`package: name='io.github.rarstorm.g9controlremapper' versionCode='44' versionName='1.4.17'`,
+`application-label:'G9 Control Remapper'`; `apksigner verify --print-certs` → SHA-256
+`a9dea6410ff5899c9f319f7af231044c7fd248fee526e3fc52b5cccb0383e049` (la clave del proyecto, la de siempre).

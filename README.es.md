@@ -146,8 +146,18 @@ Configuración del control, con la app oficial como referencia y sin cuenta:
    DS5 (blanco), mantén **Vista + Menú** unos 2 segundos. Cuando Android pida acceso USB, marca
    **Usar siempre** y acepta.
 
-> Si venías de la app original del autor, hay que **desinstalarla** una vez: está firmada con otra
-> clave y Android no deja actualizar encima con firma distinta.
+> **Cambio de ID (importante si ya la tenías instalada).** Hasta la `1.4.17-diag` la app usaba el
+> `applicationId` del proyecto original (`io.github.sudodiego.g9control`); desde la **1.4.17** usa uno
+> propio, `io.github.rarstorm.g9controlremapper`, porque F-Droid rechaza automáticamente los IDs
+> duplicados y obliga a los forks a tener el suyo. Eso significa que **la 1.4.17 se instala como una app
+> aparte y no hereda los ajustes**: se pasan exportando el respaldo en la vieja (Respaldo → Exportar) e
+> importándolo en la nueva (Respaldo → Importar). Lo mismo aplica si venías de la app original del autor,
+> que además está firmada con otra clave y Android no deja actualizar encima.
+
+> **Dos canales, dos firmas.** El APK de estas Releases va firmado con la clave del proyecto. Si la app
+> entra en F-Droid, esa copia va firmada con la clave de F-Droid, y Android no deja actualizar de una
+> firma a otra: para cambiar de canal hay que desinstalar e instalar, pasando los ajustes con
+> Respaldo → Exportar / Importar. Elige un canal y quédate en él.
 
 ### El servicio de accesibilidad y Shizuku
 
@@ -184,5 +194,6 @@ asistente y en Ajustes → Permisos.
   del que sale casi todo lo que hace funcionar a esta app.
 - **Este fork:** [Rarstorm/G9-Control-Remapper](https://github.com/Rarstorm/G9-Control-Remapper),
   mantenido por Roberto ([@Rarstorm](https://github.com/Rarstorm)).
+- **Ícono y gráficos de tienda:** Roberto, hechos con **Nano Banana 2.1** en Google Flow.
 - **Licencia:** [GPL-3.0](LICENSE), la misma del original. Puedes usarla, estudiarla, modificarla y
   compartirla; las versiones modificadas deben seguir siendo de código abierto con la misma licencia.

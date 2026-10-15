@@ -1,0 +1,27 @@
+<b>G9 Control Remapper</b> es el remapeo del mando Legion G9 en la tablet Lenovo Legion Y700.
+
+Es un fork independiente de <b>G9Control</b> (sudo-diego, GPL-3.0), que es el que hace toda la configuración del control: luces, sticks, vibración, perfiles, panel de juego y cambio de modo por app. Sobre esa base, este fork agrega lo que faltaba: que el mando haga lo que tú quieras.
+
+<b>1. Remapeo de botones (página Gestos)</b>
+- Tres gestos por botón: tocar, mantener y doble toque, cada uno con su acción.
+- Acciones: Atrás, Inicio, Recientes, Notificaciones, Captura, Ajustes rápidos, media (reproducir/pausa, pista siguiente y anterior, adelantar y retroceder con deslizamiento o con doble toque, detener, silenciar, volumen), subir y bajar brillo, abrir una app, cajón de apps y páginas del launcher, una tecla del teclado o una secuencia de teclas.
+- Por app: las reglas de una app pisan a las generales y, con «Nada», el botón pasa tal cual a la app.
+- Intercepción estilo Key Mapper y botón que se elige apretándolo («Aprender del mando»).
+
+<b>2. Traseros L4, R4, L5 y R5, cada uno con su propio comando</b>
+El firmware solo deja que un trasero copie un botón y así los cuatro son indistinguibles (medido con getevent: L4 manda lo mismo que Y). Este fork le da a cada trasero una firma: una macro cortísima y única que el servicio reconoce y se come. Con eso cada trasero puede tener su propio comando y hacer algo distinto según la app.
+
+<b>3. Ratón por overlay (L3 + R3)</b>
+Un puntero que la app dibuja sobre el juego, sin root: clic, clic derecho, doble clic, arrastre y rueda, inyectados en la posición del cursor. Trae página propia con velocidad/DPI, suavidad, curva y zona muerta.
+
+<b>Extras</b>
+- Teclas de teclado y macros por gesto (con Shizuku).
+- Ajustes rápidos asignable a cualquier botón.
+- Otros mandos: si conectas otro pad, nada de lo del G9 se le aplica.
+- Reconexión sola del mando cuando la tablet duerme.
+- Respaldo completo de ajustes y perfiles en un archivo.
+
+<b>Permisos</b>
+Necesita el servicio de accesibilidad (para ver la app al frente y los botones) y, para algunas funciones, Shizuku. La app no tiene permiso de internet y no recopila datos.
+
+No está afiliada a Lenovo, Legion ni GameSir; son marcas de sus dueños. El proyecto original y este fork son software libre con licencia GPL-3.0.

@@ -21,7 +21,9 @@ import kotlin.math.min
  * (Dolphin): conviene cambiarlo antes de abrirlas.
  */
 object Aspect {
-    const val GRANT_COMMAND = "adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS"
+    // El ID que va aquí es el applicationId del fork (io.github.rarstorm.g9controlremapper), no el del
+    // proyecto original: si no coincide, el comando no da el permiso a ESTA app.
+    const val GRANT_COMMAND = "adb shell pm grant io.github.rarstorm.g9controlremapper android.permission.WRITE_SECURE_SETTINGS"
 
     private fun display(ctx: Context): Display? =
         ctx.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)

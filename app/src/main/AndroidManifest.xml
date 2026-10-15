@@ -8,7 +8,7 @@
     <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
 
     <!-- Pantalla 16:9 sin Shizuku. No se pide en la app: se da una vez con
-         adb shell pm grant io.github.sudodiego.g9control android.permission.WRITE_SECURE_SETTINGS -->
+         adb shell pm grant io.github.rarstorm.g9controlremapper android.permission.WRITE_SECURE_SETTINGS -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />

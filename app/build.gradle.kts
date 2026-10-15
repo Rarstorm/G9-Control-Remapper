@@ -11,11 +11,14 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.sudodiego.g9control"
+        // ID propio del fork. No puede ser el del proyecto original: F-Droid rechaza de forma
+        // automática cualquier app cuyo applicationId duplique el de otra (política de inclusión,
+        // «duplicate android application ID … automatic rejection») y exige a los forks un ID nuevo.
+        applicationId = "io.github.rarstorm.g9controlremapper"
         minSdk = 29
         targetSdk = 35
         versionCode = 44
-        versionName = "1.4.17-diag"
+        versionName = "1.4.17"
     }
 
     // Firma de las versiones publicadas: keystore.properties (no va a git) apunta a la clave.

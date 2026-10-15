@@ -1,0 +1,4 @@
+Ronda de remapeo, traseros y ratón, y soporte para otros mandos.
+- Otros controles: si el pad no es el G9 (probado con un GameSir Cyclone 2 por Bluetooth), nada de lo del G9 se le aplica: su botón guía abre los Ajustes rápidos y lo demás pasa tal cual a la app. Ahora se distingue por producto, no por fabricante.
+- Media: Adelantar y Retroceder con doble toque, además del deslizamiento.
+- ID propio del fork (io.github.rarstorm.g9controlremapper).
