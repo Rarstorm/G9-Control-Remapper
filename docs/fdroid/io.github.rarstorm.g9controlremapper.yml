@@ -1,0 +1,74 @@
+# Borrador del archivo de F-Droid para G9 Control Remapper (fork de G9Control).
+#
+# No se ejecuta desde este repo: es el contenido que se copia a
+# `metadata/io.github.rarstorm.g9controlremapper.yml` en un fork de
+# https://gitlab.com/fdroid/fdroiddata y se manda como merge request.
+# El nombre del archivo ES el applicationId de la app.
+#
+# Verificado contra la referencia oficial (Build Metadata Reference):
+#   - `gradle: yes` -> sin flavors: la tarea es `assembleRelease`.
+#   - `subdir` NO se pone: el `gradlew` y el `settings.gradle.kts` estan en la raiz
+#     del repo (el modulo es `:app`), y `subdir` es "el directorio donde se ejecutan
+#     los scripts", no el modulo.
+#   - `commit` va con el HASH COMPLETO, no con el nombre del tag.
+#   - versionName/versionCode viven en el bloque `android` de `app/build.gradle.kts`,
+#     que es la ubicacion normal: no hace falta `UpdateCheckData`.
+
+Categories:
+  - System
+
+License: GPL-3.0-only
+
+AutoName: G9 Control Remapper
+
+WebSite: https://github.com/Rarstorm/G9-Control-Remapper
+SourceCode: https://github.com/Rarstorm/G9-Control-Remapper
+IssueTracker: https://github.com/Rarstorm/G9-Control-Remapper/issues
+Changelog: https://github.com/Rarstorm/G9-Control-Remapper/blob/main/PROGRESS.md
+
+# Sin AuthorEmail a proposito: no se inventa un correo. Si se quiere, se agrega
+# (el del mantenedor) o se deja asi, que es valido.
+
+RepoType: git
+Repo: https://github.com/Rarstorm/G9-Control-Remapper.git
+
+Builds:
+  - versionName: '1.4.17'
+    versionCode: 44
+    commit: 70f2419f0009a9d2ef1b2cce3b3a4caf015d09dd
+    gradle:
+      - yes
+    output: app/build/outputs/apk/release/app-release.apk
+    # Sin `keystore.properties` (que no va a git) el build sale firmado con la clave
+    # de depuracion y funciona igual: F-Droid verifica versionName/versionCode y
+    # despues firma el APK con SU clave. No hace falta ninguna clave nuestra aca.
+
+# Los tags son vX.Y.Z y coinciden con el versionName del bloque android.
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+
+CurrentVersion: 1.4.17
+CurrentVersionCode: 44
+
+MaintainerNotes: |
+  Fork independiente de G9Control (https://github.com/sudo-diego/G9Control, GPL-3.0),
+  que configura el mando Legion G9 en la tablet Lenovo Legion Y700. Este fork agrega el
+  remapeo: gestos por boton y por app, traseros L4/R4/L5/R5 cada uno con su propio
+  comando (por firma) y raton por overlay con L3+R3.
+
+  - applicationId propio (exigido a los forks): io.github.rarstorm.g9controlremapper.
+  - Mismo ID, nombre e icono NO son los del proyecto original: el icono lo hizo el
+    mantenedor del fork (Nano Banana 2.1 / Google Flow).
+  - Metadatos de tienda (textos e imagenes) en `fastlane/metadata/android/{es-ES,en-US}/`
+    del propio repo; el contenido del APK tambien trae el nombre y la descripcion.
+  - El autor original fue notificado en
+    https://github.com/sudo-diego/G9Control/issues/1 (requisito de la politica de
+    inclusion) y no se ha tocado su repositorio ni sus releases.
+  - La app no pide permiso de internet y no recopila datos. Usa el servicio de
+    accesibilidad (ver la app al frente y los botones del mando) y, opcionalmente,
+    Shizuku para las funciones que la ROM solo deja a apps del sistema. NO requiere
+    root.
+  - No tiene flavors ni submodulos; el build es `./gradlew assembleRelease` en la raiz.
+  - Ojo con la firma: el APK publicado en GitHub va firmado con la clave del proyecto,
+    asi que el APK de F-Droid (firmado por F-Droid) NO se instala encima. Los ajustes se
+    pasan con la funcion de Respaldo de la propia app.
