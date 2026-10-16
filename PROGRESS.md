@@ -755,6 +755,39 @@ Instalada con `adb install -r` → **Success**; `versionCode=47 versionName=1.4.
 `lastUpdateTime=2026-10-16 11:17:13`, `firstInstallTime` intacto; sha256
 `7ce217d9f4c95bd73b6f4fd1c235924c11b56e91fdff15f892340ca980001ce9`. Compilado local: `BUILD SUCCESSFUL in 34s`.
 
+### Prueba del guardián, hecha por el agente (`1.4.21-diag`, 48)
+
+El log de la prueba de Roberto no bastaba: la línea `luces: no escribo (…)` **no distinguía el motivo**
+(podía ser «no había nada que escribir»). En la **1.4.21** el log dice el motivo con sus datos
+(`luces: no escribo (conectado=…, sucio=…, base=…, tocado=…, dedo=…)` y lo mismo en `flushSaves`).
+
+Prueba controlada (proceso recién arrancado = **nada leído**, y salir de la app antes de que termine la
+lectura), que es EXACTAMENTE el estado que dañó su configuración:
+
+```
+11:35:03.624 D G9Control: flushSaves: NO escribo luces (base=false, tocado=false, sucio=true)
+11:35:03.624 D G9Control: flushSaves: NO escribo sticks (base=false, sucio=true)
+11:35:03.624 D G9Control: flushSaves: NO escribo vibración (base=false, sucio=true)
+11:35:04.236 D G9Control: vibración: no escribo (conectado=true, sucio=false, base=true)
+11:35:06.335 D G9Control: luces: no escribo (conectado=true, sucio=false, base=true, tocado=false, dedo=false)
+```
+
+`base=false, sucio=true` = el estado que antes escribía los valores de fábrica en los TRES grupos; ahora
+**no escribe ninguno**. Después la lectura se completa (`base=true`) y no hay nada que escribir.
+
+**Y un aviso que hay que recordar:** `am force-stop` deja la app en estado «detenido» y **Android NO
+vuelve a levantar su servicio de accesibilidad** (a diferencia de una instalación, que a veces sí lo
+mantiene). Se comprobó y se reactivó por ADB:
+`settings put secure enabled_accessibility_services '<otros>:io.github.rarstorm.g9controlremapper/io.github.sudodiego.g9control.AutoModeService'`
++ `settings put secure accessibility_enabled 1`. Verificado después: el servicio registra (`G9Auto: app al
+frente al arrancar`) y el control sigue conectado.
+
+Estado verificado al cerrar la prueba: la página de Luces muestra **su** configuración (tira en 264°,
+velocidad 128, sin el aviso de «valores de ejemplo») y el mando sigue **Conectado por USB · modo Android**.
+
+Instalada con `adb install -r` → **Success**: `versionCode=48 versionName=1.4.21-diag`; sha256
+`c3ed206ac2472f9654f9aa87495647bf725486feb49b767dfa7a789a6467eb60`. Compilado local: `BUILD SUCCESSFUL in 29s`.
+
 ### Lecciones
 
 - Un gesto calculado con el tamaño que dan los recursos de la app puede caer **fuera de la pantalla**:

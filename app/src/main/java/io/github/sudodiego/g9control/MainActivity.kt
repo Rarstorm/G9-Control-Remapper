@@ -120,13 +120,13 @@ class MainActivity : ComponentActivity() {
     private fun startAutoSave() {
         fun <T> watch(
             quietMs: Long, read: () -> T, ready: () -> Boolean, name: String = "",
-            onChange: () -> Unit = {}, save: () -> Unit
+            why: () -> String = { "" }, onChange: () -> Unit = {}, save: () -> Unit
         ) = lifecycleScope.launch {
             snapshotFlow(read).drop(1).onEach { onChange() }.debounce(quietMs).collect {
                 if (!ready() || applyingProfile) {
-                    // Deja constancia de por qué NO se escribe: antes se callaba y se veía como un fallo raro.
+                    // Deja constancia de por qué NO se escribe, con los datos: antes se callaba y se veía como un fallo raro.
                     if (name.isNotEmpty() && !applyingProfile)
-                        android.util.Log.d("G9Control", "$name: no escribo (base sin leer o cambio en curso)")
+                        android.util.Log.d("G9Control", "$name: no escribo ${why()}")
                     return@collect
                 }
                 // Antes, sin control conectado, el cambio se quedaba sin guardar en silencio (y no había forma
@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
         watch(
             LIGHTS_QUIET_MS + LIGHTS_SAVE_MS, { listOf(s.left, s.right, s.homeToSend(), s.sliderHeld) },
             { s.connected && s.lightsDirty && !s.sliderHeld && (s.lightsKnown || s.lightsTouched) }, "luces",
+            why = { "(conectado=${s.connected}, sucio=${s.lightsDirty}, base=${s.lightsKnown}, tocado=${s.lightsTouched}, dedo=${s.sliderHeld})" },
             onChange = {
                 s.lightsChangedAt = android.os.SystemClock.uptimeMillis()
                 s.queued(LIGHTS_SAVE_MS, LIGHTS_QUIET_MS)
@@ -153,8 +154,10 @@ class MainActivity : ComponentActivity() {
         // los cambios del usuario se escriben igual en vez de perderse en silencio.
         watch(700, { listOf(s.deadZones.toMap(), s.quickL, s.quickR, s.dpadLock, s.swapDpad, s.sliderHeld) },
             { s.connected && s.sticksDirty && !s.sliderHeld }, "sticks",
+            why = { "(conectado=${s.connected}, sucio=${s.sticksDirty}, base=${s.appliedDeadZones != null}, dedo=${s.sliderHeld})" },
             onChange = { s.queued(0L, 0L) }) { saveSticks() }
         watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) }, "vibración",
+            why = { "(conectado=${s.connected}, sucio=${s.vibrationDirty}, base=${s.appliedVibration != null})" },
             onChange = { s.queued(0L, 0L) }) { saveVibration() }
     }
 
@@ -217,11 +220,11 @@ class MainActivity : ComponentActivity() {
         // salir de la app para ir a Shizuku dejó las tiras en cian al 50 % y el botón Home en blanco al 100 %.
         if (st.lightsDirty && !st.sliderHeld && (st.lightsKnown || st.lightsTouched)) applyLights()
         else if (st.lightsDirty && !st.sliderHeld)
-            android.util.Log.d("G9Control", "flushSaves: NO escribo luces (sin base leída y sin edición del usuario)")
+            android.util.Log.d("G9Control", "flushSaves: NO escribo luces (base=${st.lightsKnown}, tocado=${st.lightsTouched}, sucio=${st.lightsDirty})")
         if (st.sticksDirty && st.appliedDeadZones != null) saveSticks()
-        else if (st.sticksDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo sticks (sin base leída)")
+        else if (st.sticksDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo sticks (base=${st.appliedDeadZones != null}, sucio=${st.sticksDirty})")
         if (st.vibrationDirty && st.appliedVibration != null) saveVibration()
-        else if (st.vibrationDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo vibración (sin base leída)")
+        else if (st.vibrationDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo vibración (base=${st.appliedVibration != null}, sucio=${st.vibrationDirty})")
     }
 
     /**
