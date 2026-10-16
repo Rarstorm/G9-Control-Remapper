@@ -798,3 +798,51 @@ Instalada con `adb install -r` → **Success**: `versionCode=48 versionName=1.4.
   «está distinto» si no hay base leída. Marcar la edición del usuario es lo que permite escribir sin
   base.
 - Al reportar se dice «se escribió al salir de la app», no «al abrir Shizuku»: la secuencia es el dato.
+
+---
+
+## Publicación — 16-10-2026: `1.4.21` (versionCode 49), Release y capturas de tienda
+
+Con la orden explícita de Roberto («Publica») y sus **6 capturas** de la tablet.
+
+### Capturas de tienda (preparadas y verificadas mirándolas)
+
+Las capturas venían en **3040x1904 (16:10), con canal alfa y con la barra de estado del sistema**. Reglas
+oficiales aplicadas (Google Play, «Add preview assets», *Requirements*): **JPEG o PNG de 24 bits SIN alfa**,
+mínimo 320 px, máximo 3840 px, y el lado mayor no más del doble del menor; para pantallas grandes
+**16:9 en horizontal** y entre 1.080 y 7.680 px.
+
+Recorte: `crop=3040:1710:0:129` + `format=rgb24` → **3040x1710 (16:9 exacto, sin alfa)** y **sin la barra de
+estado** (el recorte empieza por debajo de ella; la barra inferior de la app queda completa, verificado
+mirando la hoja de contacto: nada cortado a medias).
+
+Colocadas en el repo (donde las leen las tiendas, estructura fastlane):
+
+- `fastlane/metadata/android/es-ES/images/tenInchScreenshots/{1..6}.png`
+- `fastlane/metadata/android/en-US/images/tenInchScreenshots/{1..6}.png`
+- Orden: 1 Gestos (chips de bumpers/gatillos + traseros), 2 selector de app, 3 Ratón, 4 Ratón con el
+  puntero encendido, 5 panel de juego (Ajustes rápidos), 6 Ajustes/permisos.
+- `README.md`: sección **Screenshots** con las 4 principales (antes decía «pendiente»).
+- `fastlane/metadata/android/{es-ES,en-US}/changelogs/49.txt`: el «qué cambió» de esta versión (necesario
+  para la pestaña *Latest* de F-Droid y para el what's-new de la tienda).
+
+**Pendiente suave:** las capturas son de la **interfaz en español**; para el directorio `en-US` convendría
+un juego con la app en inglés (se pueden cambiar cuando él quiera).
+
+### Publicación
+
+- Versión **limpia** para publicar: `versionCode = 49`, `versionName = "1.4.21"` (sin `-diag`), en el mismo
+  commit que las capturas (el árbol queda limpio: `9aa6891`).
+- Flujo manual disparado por la API (no hay `gh` en este equipo; credencial de GitHub desde
+  `git credential fill`, sin mostrarla): `POST …/actions/workflows/android.yml/dispatches`
+  `{"ref":"main","inputs":{"publicar_tag":"v1.4.21"}}` → **204**; run **38944501138** → **success**.
+- **Artefacto verificado (no el verde del CI):** descargado el asset de la Release y comprobado con
+  `aapt2 dump badging` + `apksigner verify --print-certs`:
+  - Release **`v1.4.21`** (no borrador, no pre-release, publicada 2026-10-16T18:08:55Z), asset
+    **`G9-Control-Remapper-v1.4.21.apk`** (2.973.471 B).
+  - `package=io.github.rarstorm.g9controlremapper versionCode=49 versionName=1.4.21`;
+    firma **`a9dea641…`** (la del proyecto) → **Obtainium** ya puede actualizar y se instala encima.
+  - sha256 del APK publicado: `5e0e69b02afe13a0a890f8e3b455be2731c6fb48aed92eb760e6bca70eb5fdd4`.
+- **Instalado en la tableta desde la Release** (`adb install -r` → **Success**): `versionCode=49
+  versionName=1.4.21`, `firstInstallTime` intacto (datos conservados), servicio de accesibilidad **activo**
+  y `WRITE_SECURE_SETTINGS granted=true`.
