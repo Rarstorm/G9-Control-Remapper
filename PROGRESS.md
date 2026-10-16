@@ -610,3 +610,17 @@ Ojo con esto: las dos se llaman igual en el lanzador (**G9 Control Remapper**), 
 la versión que muestra Ajustes (`1.4.17-diag` = vieja, `1.4.17` = nueva). La migración es a mano: exportar
 el respaldo en la vieja e importarlo en la nueva, y volver a activar el servicio de accesibilidad en la
 nueva (el de la vieja sigue encendido con su ID).
+
+**Migración (misma fecha, 18:35):** antes de borrar nada se comprobó que el respaldo existiera de verdad —
+`ls` en `/sdcard/Download` mostraba solo los dos **del 11-10 y en la papelera** (`.trashed-…`), o sea que
+un `uninstall` en ese momento se habría llevado la configuración de la 1.4.17-diag sin copia. Roberto
+exportó uno nuevo: **`G9Control-respaldo-2026-10-15-1831.json`** (12.983 B; el del 11-10 era de 2.607 B).
+Verificado antes de usarlo: JSON válido → `app: G9 Control Remapper`, `version: 2`, `date:
+2026-10-15-1832`, **2 perfiles** y las `prefs`. Copia de seguridad en la PC:
+`OneDrive\Documentos\G9Control-respaldos\`. Con eso, `adb uninstall io.github.sudodiego.g9control` =
+**Success**: queda solo la nueva. La accesibilidad de la vieja desapareció con ella, así que hay que
+volver a activarla en la 1.4.17 (comprobado: ya no está en `enabled_accessibility_services`).
+
+**Ojo con este detalle, que casi cuesta los datos:** al desinstalar la app del ID viejo, Android **también
+le quita el permiso de accesibilidad**; y hasta que se vuelva a activar en la nueva, los botones del mando
+no hacen nada (aunque la app se vea bien).
