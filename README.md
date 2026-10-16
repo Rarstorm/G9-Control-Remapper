@@ -187,8 +187,16 @@ in its assistant and in Settings → Permissions.
 
 ## Screenshots
 
-> Pending for this version. The images in `docs/screenshots/` are from the original project and will be
-> replaced with captures of this app (Gestures, Paddles, Mouse and the panel).
+Captures of this app (Legion Y700, landscape 16:9). The whole set lives in
+[`fastlane/metadata/android/en-US/images/tenInchScreenshots/`](fastlane/metadata/android/en-US/images/tenInchScreenshots)
+— the folder the stores read the images from — and the same set is under `es-ES`.
+
+| Gestures: paddles, bumpers and triggers | Choosing the app it applies to | Mouse pointer (L3 + R3) | Game panel |
+|---|---|---|---|
+| ![Gestures](fastlane/metadata/android/en-US/images/tenInchScreenshots/1.png) | ![App picker](fastlane/metadata/android/en-US/images/tenInchScreenshots/2.png) | ![Mouse pointer](fastlane/metadata/android/en-US/images/tenInchScreenshots/4.png) | ![Game panel](fastlane/metadata/android/en-US/images/tenInchScreenshots/5.png) |
+
+More: [`3.png`](fastlane/metadata/android/en-US/images/tenInchScreenshots/3.png) (the pointer switched off) and
+[`6.png`](fastlane/metadata/android/en-US/images/tenInchScreenshots/6.png) (settings, permissions and firmware).
 
 ## Licence and credits
 

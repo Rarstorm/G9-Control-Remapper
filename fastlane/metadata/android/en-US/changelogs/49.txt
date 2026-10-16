@@ -1,0 +1,4 @@
+The app drawer, opening on connect and the lights.
+- App drawer: it actually opens now (it presses the launcher's own “All apps” button instead of swiping blind).
+- On connect: the app no longer jumps to the front by itself; the first time it asks, with a checkbox.
+- Lights, sticks and vibration: it no longer writes its sample values over the controller's, and it says when it hasn't read the configuration yet.

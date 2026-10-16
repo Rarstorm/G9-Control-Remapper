@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.rarstorm.g9controlremapper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 48
-        versionName = "1.4.21-diag"
+        versionCode = 49
+        versionName = "1.4.21"
     }
 
     // Firma de las versiones publicadas: keystore.properties (no va a git) apunta a la clave.

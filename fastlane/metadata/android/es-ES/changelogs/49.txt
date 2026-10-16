@@ -1,0 +1,4 @@
+El cajón de apps, el arranque al conectar y las luces.
+- Cajón de aplicaciones: ahora abre de verdad (pulsa el botón «Todas las apps» del propio launcher, no un deslizamiento a ciegas).
+- Al conectar el control: la app ya no se pone al frente sola; la primera vez lo pregunta, con su casilla.
+- Luces, sticks y vibración: ya no escribe sus valores de ejemplo encima de los del control, y avisa cuando aún no ha leído la configuración.
