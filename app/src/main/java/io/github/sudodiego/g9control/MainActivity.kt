@@ -119,10 +119,16 @@ class MainActivity : ComponentActivity() {
     @OptIn(FlowPreview::class)
     private fun startAutoSave() {
         fun <T> watch(
-            quietMs: Long, read: () -> T, ready: () -> Boolean, onChange: () -> Unit = {}, save: () -> Unit
+            quietMs: Long, read: () -> T, ready: () -> Boolean, name: String = "",
+            onChange: () -> Unit = {}, save: () -> Unit
         ) = lifecycleScope.launch {
             snapshotFlow(read).drop(1).onEach { onChange() }.debounce(quietMs).collect {
-                if (!ready() || applyingProfile) return@collect
+                if (!ready() || applyingProfile) {
+                    // Deja constancia de por qué NO se escribe: antes se callaba y se veía como un fallo raro.
+                    if (name.isNotEmpty() && !applyingProfile)
+                        android.util.Log.d("G9Control", "$name: no escribo (base sin leer o cambio en curso)")
+                    return@collect
+                }
                 // Antes, sin control conectado, el cambio se quedaba sin guardar en silencio (y no había forma
                 // de saberlo): ahora se avisa en la barra de abajo.
                 if (G9Usb.isOpen()) save()
@@ -137,7 +143,7 @@ class MainActivity : ComponentActivity() {
         // Con el dedo sobre un slider no se guarda: la espera empieza al soltarlo.
         watch(
             LIGHTS_QUIET_MS + LIGHTS_SAVE_MS, { listOf(s.left, s.right, s.homeToSend(), s.sliderHeld) },
-            { s.connected && s.lightsDirty && !s.sliderHeld && (s.lightsKnown || s.lightsTouched) },
+            { s.connected && s.lightsDirty && !s.sliderHeld && (s.lightsKnown || s.lightsTouched) }, "luces",
             onChange = {
                 s.lightsChangedAt = android.os.SystemClock.uptimeMillis()
                 s.queued(LIGHTS_SAVE_MS, LIGHTS_QUIET_MS)
@@ -146,9 +152,9 @@ class MainActivity : ComponentActivity() {
         // Listo para escribir = el control conectado, NO que su lectura haya salido bien: si la lectura falló,
         // los cambios del usuario se escriben igual en vez de perderse en silencio.
         watch(700, { listOf(s.deadZones.toMap(), s.quickL, s.quickR, s.dpadLock, s.swapDpad, s.sliderHeld) },
-            { s.connected && s.sticksDirty && !s.sliderHeld },
+            { s.connected && s.sticksDirty && !s.sliderHeld }, "sticks",
             onChange = { s.queued(0L, 0L) }) { saveSticks() }
-        watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) },
+        watch(500, { s.vibration }, { s.connected && (s.vibrationDirty || s.appliedVibration == null) }, "vibración",
             onChange = { s.queued(0L, 0L) }) { saveVibration() }
     }
 
@@ -210,8 +216,12 @@ class MainActivity : ComponentActivity() {
         // Sin esto se escribían los valores de FÁBRICA encima de lo que el control tenía guardado: el 16-10-2026,
         // salir de la app para ir a Shizuku dejó las tiras en cian al 50 % y el botón Home en blanco al 100 %.
         if (st.lightsDirty && !st.sliderHeld && (st.lightsKnown || st.lightsTouched)) applyLights()
+        else if (st.lightsDirty && !st.sliderHeld)
+            android.util.Log.d("G9Control", "flushSaves: NO escribo luces (sin base leída y sin edición del usuario)")
         if (st.sticksDirty && st.appliedDeadZones != null) saveSticks()
+        else if (st.sticksDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo sticks (sin base leída)")
         if (st.vibrationDirty && st.appliedVibration != null) saveVibration()
+        else if (st.vibrationDirty) android.util.Log.d("G9Control", "flushSaves: NO escribo vibración (sin base leída)")
     }
 
     /**
@@ -614,6 +624,8 @@ class MainActivity : ComponentActivity() {
                     s.swapDpad = swap == 1
                     s.appliedFuncs = s.funcs
                 }
+                if (left == null || right == null || home == null)
+                    android.util.Log.d("G9Control", "luces: lectura incompleta (tira1=${left != null}, tira2=${right != null}, home=${home != null})")
                 left?.let { s.left = it.copy(id = 1); s.appliedLeft = s.left }
                 right?.let { s.right = it.copy(id = 2); s.appliedRight = s.right }
                 home?.let {

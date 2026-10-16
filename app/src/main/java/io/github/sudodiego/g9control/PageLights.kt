@@ -77,9 +77,23 @@ fun LightsPage(s: AppState, a: MainActivity) {
             }
         },
         side = {
+            if (!s.lightsKnown && !s.lightsTouched) NotReadHint(a)
             if (s.lightTarget == LightTarget.HOME) HomeEditor(s) else RingEditor(s)
         }
     )
+}
+
+/**
+ * Antes de leer el control, lo que enseña la app son valores de EJEMPLO, no los del control. Se dice y se
+ * ofrece leerlo: nada se escribe hasta que haya lectura (o hasta que el usuario toque algo).
+ */
+@Composable
+private fun NotReadHint(a: MainActivity) {
+    Panel {
+        Hint(tr("Todavía no se ha leído el control: lo que ves son valores de ejemplo, no los que tiene el control. No se escribe nada hasta leerlo.",
+            "The controller hasn't been read yet: what you see are sample values, not the controller's. Nothing is written until you read it."))
+        OutlinedButton(onClick = { a.readAll() }) { Text(tr("Leer el control", "Read the controller")) }
+    }
 }
 
 @Composable

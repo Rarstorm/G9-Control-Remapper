@@ -734,6 +734,27 @@ app ya no cambia nada.
 Compilación local: `JAVA_HOME="C:/Users/Roberto/AppData/Local/Android/jdk-17" ./gradlew :app:assembleRelease --offline`
 → `BUILD SUCCESSFUL` las dos veces.
 
+### Corrección dentro de la misma sesión — `1.4.20-diag` (47)
+
+Roberto corrigió la secuencia: el cambio de luces **«sucedió después de que inicié el servicio de
+Shizuku»**, no al salir de la app (mi primera explicación, el `flushSaves` de `onPause`, no cierra con
+eso). El camino que sí encaja es el **vigilante de luces** (`MainActivity.kt:138-146`): al **volver a la
+app** con Shizuku ya corriendo se relee el control y, si la lectura de un grupo **no vuelve**, el vigilante
+escribe justo ese grupo (sin base). Los dos caminos quedaron tapados en la 1.4.19; en la **1.4.20** además
+se deja constancia:
+
+- **Sí se puede ver lo que pasó:** cada escritura (`luces: escribo …`, `sticks: escribo …`,
+  `vibración: escribo …`) **y cada vez que NO se escribe** (`luces: no escribo (base sin leer o cambio en
+  curso)`, `flushSaves: NO escribo luces (sin base leída y sin edición del usuario)`) quedan en el log.
+- **La lectura incompleta se dice:** `luces: lectura incompleta (tira1=…, tira2=…, home=…)` en `readAll`.
+- **La página de Luces ya no disimula:** mientras no se haya leído el control (ni el usuario haya tocado
+  las luces) aparece un aviso — «lo que ves son valores de ejemplo, no los que tiene el control. No se
+  escribe nada hasta leerlo» — con un botón **«Leer el control»**.
+
+Instalada con `adb install -r` → **Success**; `versionCode=47 versionName=1.4.20-diag`,
+`lastUpdateTime=2026-10-16 11:17:13`, `firstInstallTime` intacto; sha256
+`7ce217d9f4c95bd73b6f4fd1c235924c11b56e91fdff15f892340ca980001ce9`. Compilado local: `BUILD SUCCESSFUL in 34s`.
+
 ### Lecciones
 
 - Un gesto calculado con el tamaño que dan los recursos de la app puede caer **fuera de la pantalla**:
