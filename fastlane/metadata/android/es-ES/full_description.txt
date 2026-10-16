@@ -22,6 +22,6 @@ Un puntero que la app dibuja sobre el juego, sin root: clic, clic derecho, doble
 - Respaldo completo de ajustes y perfiles en un archivo.
 
 <b>Permisos</b>
-Necesita el servicio de accesibilidad (para ver la app al frente y los botones) y, para algunas funciones, Shizuku. La app no tiene permiso de internet y no recopila datos.
+Necesita el servicio de accesibilidad (para ver la app al frente y los botones) y, para algunas funciones, Shizuku. Si instalas el APK a mano, Android 13 o superior pide primero «Permitir ajustes restringidos» (Ajustes → Apps → G9 Control Remapper → los tres puntos de arriba a la derecha). La app no tiene permiso de internet y no recopila datos.
 
 No está afiliada a Lenovo, Legion ni GameSir; son marcas de sus dueños. El proyecto original y este fork son software libre con licencia GPL-3.0.

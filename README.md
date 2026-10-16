@@ -145,6 +145,11 @@ Controller configuration, using the official app as reference and with no accoun
    from that source if Android asks).
 3. Open the app: the setup assistant asks for the **accessibility service** and, if you want the
    features that need it, **Shizuku**.
+   - **Android 13+ blocks that toggle for apps installed by hand.** Before turning the accessibility
+     service on, go to **Settings → Apps → G9 Control Remapper → ⋮ (top right) → Allow restricted
+     settings**, and only then enable the service. If you skip it, the switch looks broken: Android
+     refuses to turn it on. (Installs over `adb` or from a store never hit this — it only affects an
+     APK you opened yourself from a file manager or the browser.)
 4. Dock the tablet in the G9 in **Android mode** (dark blue indicator). If it's in X-Input (green) or
    DS5 (white), hold **View + Menu** for about 2 seconds. When Android asks for USB access, check
    **Always** and accept.
@@ -169,7 +174,9 @@ which app is in the foreground and the controller's buttons (and it now also fee
 and the mouse), and Shizuku is what lets it inject keyboard keys and do what the ROM only allows
 system apps to do. The full explanation is in the
 [original project's README](https://github.com/sudo-diego/G9Control), and the app walks you through it
-in its assistant and in Settings → Permissions.
+in its assistant and in Settings → Permissions. The one Android friction worth knowing up front: if you
+installed the APK by hand, **Settings → Apps → G9 Control Remapper → ⋮ → Allow restricted settings** comes
+first, or the accessibility toggle won't turn on.
 
 ## Build from source
 

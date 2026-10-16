@@ -829,6 +829,12 @@ Colocadas en el repo (donde las leen las tiendas, estructura fastlane):
 **Pendiente suave:** las capturas son de la **interfaz en español**; para el directorio `en-US` convendría
 un juego con la app en inglés (se pueden cambiar cuando él quiera).
 
+**Corrección del mismo día (lo notó Roberto):** el README **no contaba** el candado de Android 13+
+**«Permitir ajustes restringidos»** (Ajustes → Apps → G9 Control Remapper → ⋮ arriba a la derecha), que hace
+falta **antes** de poder activar el servicio de accesibilidad cuando el APK se instala a mano (la app sí lo
+avisa en su asistente, pero quien llega por la Release lo lee después). Está agregado al **paso 3 del
+instalador** del README, a la sección de permisos y a las **fichas de tienda** de los dos idiomas.
+
 ### Publicación
 
 - Versión **limpia** para publicar: `versionCode = 49`, `versionName = "1.4.21"` (sin `-diag`), en el mismo

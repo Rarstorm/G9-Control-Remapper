@@ -22,6 +22,6 @@ A pointer the app draws on top of the game, with no root: click, right click, do
 - Full backup of settings and profiles to a file.
 
 <b>Permissions</b>
-It needs the accessibility service (to see the foreground app and the buttons) and, for some features, Shizuku. The app has no internet permission and collects no data.
+It needs the accessibility service (to see the foreground app and the buttons) and, for some features, Shizuku. If you install the APK by hand, Android 13 or newer asks for **Allow restricted settings** first (Settings → Apps → G9 Control Remapper → the three dots at the top right). The app has no internet permission and collects no data.
 
 Not affiliated with Lenovo, Legion or GameSir; those are their owners' trademarks. The original project and this fork are free software under GPL-3.0.
