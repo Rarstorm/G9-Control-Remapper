@@ -624,3 +624,17 @@ volver a activarla en la 1.4.17 (comprobado: ya no está en `enabled_accessibili
 **Ojo con este detalle, que casi cuesta los datos:** al desinstalar la app del ID viejo, Android **también
 le quita el permiso de accesibilidad**; y hasta que se vuelva a activar en la nueva, los botones del mando
 no hacen nada (aunque la app se vea bien).
+
+**Migración cerrada (misma fecha):** Roberto importó el respaldo en la 1.4.17 y quedó todo comprobado por
+ADB —
+`settings get secure enabled_accessibility_services` incluye
+`io.github.rarstorm.g9controlremapper/io.github.sudodiego.g9control.AutoModeService` (el nombre del
+componente usa el **applicationId nuevo** para el paquete y la **clase Kotlin vieja** para el servicio, que
+es lo correcto al no haber movido el `namespace`) y
+`dumpsys package … | grep WRITE_SECURE_SETTINGS` → **`granted=true`**, o sea que el «Permiso de pantalla»
+(16:9 sin Shizuku) ya está dado con `pm grant` por ADB (es el mismo comando que la app muestra, con el ID
+nuevo).
+
+**Cuenta de GitLab (para el MR):** `rarstorm` — la creó Roberto con su cuenta de Google (el alta le asignó
+`rstrempler`) y después la cambió. Verificado sin sesión: `gitlab.com/rstrempler` **redirige** a
+`gitlab.com/rarstorm` (1 redirección) y la página muestra `@rarstorm`.

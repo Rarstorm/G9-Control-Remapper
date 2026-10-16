@@ -19,7 +19,7 @@ control.
       (`v1.4.17` → `70f2419f0009a9d2ef1b2cce3b3a4caf015d09dd`). Al publicar una versión nueva hay que
       **agregar un bloque `Builds`** con su `versionName`, `versionCode` y `commit` (hash completo).
 
-## Cómo se manda (cuenta de GitLab: `rstrempler`)
+## Cómo se manda (cuenta de GitLab: `rarstorm` — https://gitlab.com/rarstorm)
 
 1. Entrar en <https://gitlab.com/fdroid/fdroiddata> y **Fork**.
 2. En el fork, crear una rama: `io.github.rarstorm.g9controlremapper`.
