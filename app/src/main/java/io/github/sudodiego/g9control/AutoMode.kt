@@ -278,6 +278,8 @@ class AutoModeService : AccessibilityService() {
     private lateinit var guide: ModeGuide
     private lateinit var panel: GamePanel
     private lateinit var perfHud: PerfHud
+    /** Aviso de una sola vez: ¿abrir la app sola al conectar el control? (con su casilla). */
+    private lateinit var openAsk: OpenAsk
     /** Se salió de una app con regla y el control aún no vuelve a Android. */
     private var returnPending = false
     /** G9 Control está al frente: tiene su propia franja de modo, así que la guía se quita. */
@@ -625,6 +627,8 @@ class AutoModeService : AccessibilityService() {
             ModeTileService.refreshAll(this@AutoModeService)
             updateTouchpad()
             updatePadWatch()
+            // La primera vez que el control aparece: se pregunta (con su casilla) si quiere que la app se abra sola.
+            if (::openAsk.isInitialized && G9Usb.findDevice(this@AutoModeService) != null) openAsk.askOnce()
             if (ModeSwitcher.detect() == PadMode.ANDROID) returnPending = false
             reconnectController()
             guide.update()
@@ -638,6 +642,7 @@ class AutoModeService : AccessibilityService() {
         guide = ModeGuide(this)
         panel = GamePanel(this)
         perfHud = PerfHud(this).also { it.update() }
+        openAsk = OpenAsk(this)
         Shell.init(this)
         ZuiBattery.init(this)
         ZuiGame.initPerf(this)
@@ -1116,10 +1121,10 @@ class AutoModeService : AccessibilityService() {
      * el toque (el launcher de ZUI tarda en dibujarse) y por eso el cajón no se siente lento.
      */
     private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 260): Boolean {
-        val m = resources.displayMetrics
+        val (sw, sh) = pantallaDeGesto()
         val path = Path().apply {
-            moveTo(x1 * m.widthPixels, y1 * m.heightPixels)
-            lineTo(x2 * m.widthPixels, y2 * m.heightPixels)
+            moveTo(x1 * sw, y1 * sh)
+            lineTo(x2 * sw, y2 * sh)
         }
         val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
         // Si el gesto anterior todavía no terminó, el nuevo se despacha igual (Android no permite cancelarlo).
@@ -1165,10 +1170,42 @@ class AutoModeService : AccessibilityService() {
         main.postDelayed({ tapAt(x, 0.5f) }, 150)
     }
 
+    /**
+     * Tamaño de la pantalla para los gestos, en el MISMO espacio en el que el sistema recibe los toques.
+     * Antes se usaban los recursos de la app y en esta tableta eso daba 1904x3040 con la pantalla en horizontal
+     * (medido el 16-10-2026): el deslizamiento del cajón caía FUERA de la pantalla y no hacía nada.
+     * Primero manda la ventana al frente (sus límites SON ese espacio); si no, lo que diga el sistema.
+     */
+    private fun pantallaDeGesto(): Pair<Int, Int> {
+        runCatching {
+            val r = android.graphics.Rect()
+            rootInActiveWindow?.getBoundsInScreen(r)
+            if (r.width() > 0 && r.height() > 0) return r.width() to r.height()
+        }
+        val p = android.graphics.Point()
+        runCatching {
+            val wm = getSystemService(WindowManager::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                val b = wm.currentWindowMetrics.bounds
+                p.x = b.width(); p.y = b.height()
+            } else {
+                @Suppress("DEPRECATION") wm.defaultDisplay.getRealSize(p)
+            }
+        }
+        if (p.x > 0 && p.y > 0) return p.x to p.y
+        val m = resources.displayMetrics
+        return m.widthPixels to m.heightPixels
+    }
+
     /** Un toque en un punto de la pantalla (tanto por uno del ancho y del alto). */
     private fun tapAt(x: Float, y: Float, ms: Long = 40): Boolean {
-        val m = resources.displayMetrics
-        val path = Path().apply { moveTo(x * m.widthPixels, y * m.heightPixels) }
+        val (sw, sh) = pantallaDeGesto()
+        return tapPx(x * sw, y * sh, ms)
+    }
+
+    /** Un toque en un punto exacto de la pantalla (en píxeles, como los ve el sistema). */
+    private fun tapPx(px: Float, py: Float, ms: Long = 40): Boolean {
+        val path = Path().apply { moveTo(px, py) }
         val g = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
         val ok = dispatchGesture(g, null, null)
@@ -1251,10 +1288,50 @@ class AutoModeService : AccessibilityService() {
     private val cajonDeslizar = Runnable {
         if (cajonPedido == 0L) return@Runnable
         cajonIntento++
-        Log.d(TAG, "cajón de apps: deslizo (intento $cajonIntento)")
-        // 120 ms: mínimo que ZUI reconoce como swipe y no como toque.
-        swipe(0.5f, 0.72f, 0.5f, 0.30f, ms = 120)
+        // 1) El camino bueno: el botón que el PROPIO launcher publica («Todas las apps»). Medido en la tableta
+        //    el 16-10-2026: pulsarlo abre el cajón al instante, sin deslizar y desde cualquier página de inicio.
+        if (!pulsarTodasLasApps()) {
+            // 2) Respaldo: deslizar hacia arriba con el tamaño de pantalla REAL (ver [pantallaDeGesto]).
+            val (sw, sh) = pantallaDeGesto()
+            Log.d(TAG, "cajón de apps: deslizo (intento $cajonIntento) con pantalla ${sw}x$sh")
+            // 120 ms: mínimo que ZUI reconoce como swipe y no como toque.
+            swipe(0.5f, 0.72f, 0.5f, 0.30f, ms = 120)
+        } else {
+            Log.d(TAG, "cajón de apps: intento $cajonIntento por el botón del launcher")
+        }
         main.postDelayed({ revisarCajon() }, 700)
+    }
+
+    /** Nombres con los que el launcher publica su propio botón del cajón (en esta tableta: «Todas las apps»). */
+    private val ETIQUETAS_CAJON = setOf("todas las apps", "todas las aplicaciones", "all apps", "all applications")
+
+    /**
+     * Pulsa el botón del cajón que trae el launcher en su dock (nodo de accesibilidad «Todas las apps»).
+     * Es la vía que el propio launcher ofrece, no un gesto inventado: medido en la tableta, abre el cajón al
+     * instante. Si el sistema no deja pulsar el nodo, se toca justo donde está. Devuelve si lo encontró.
+     */
+    private fun pulsarTodasLasApps(): Boolean {
+        val raiz = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        val pila = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+        pila.add(raiz)
+        var vistos = 0
+        while (pila.isNotEmpty() && vistos < 500) {
+            val n = pila.removeFirst()
+            vistos++
+            val etiquetas = listOf(n.text, n.contentDescription).map { it?.toString()?.lowercase().orEmpty() }
+            if (n.isClickable && etiquetas.any { it in ETIQUETAS_CAJON }) {
+                if (n.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) {
+                    Log.d(TAG, "cajón de apps: pulsado el botón del launcher (" + (n.contentDescription ?: n.text) + ")")
+                    return true
+                }
+                val r = android.graphics.Rect()
+                n.getBoundsInScreen(r)
+                Log.d(TAG, "cajón de apps: el nodo no acepta la pulsación; toco en ${r.exactCenterX()},${r.exactCenterY()}")
+                return tapPx(r.exactCenterX(), r.exactCenterY())
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let { pila.add(it) }
+        }
+        return false
     }
 
     /**
@@ -1800,6 +1877,7 @@ class AutoModeService : AccessibilityService() {
         if (::guide.isInitialized) guide.hide()
         if (::panel.isInitialized) panel.release()
         if (::perfHud.isInitialized) perfHud.release()
+        if (::openAsk.isInitialized) openAsk.hide()
         padWatch?.destroy()
         scope.cancel()
         super.onDestroy()

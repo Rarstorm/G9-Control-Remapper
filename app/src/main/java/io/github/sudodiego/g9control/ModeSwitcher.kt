@@ -41,6 +41,10 @@ object Prefs {
     fun openOnConnect(ctx: Context) = sp(ctx).getBoolean("open_on_connect", false)
     fun setOpenOnConnect(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("open_on_connect", v).apply()
 
+    /** Ya se preguntó (una sola vez) si quiere que la app se abra sola al conectar el control. */
+    fun openAsked(ctx: Context) = sp(ctx).getBoolean("open_on_connect_asked", false)
+    fun setOpenAsked(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("open_on_connect_asked", v).apply()
+
     /** Herramientas de desarrollo visibles (se activan tocando la versión 5 veces). */
     fun devTools(ctx: Context) = sp(ctx).getBoolean("dev_tools", false)
     fun setDevTools(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("dev_tools", v).apply()

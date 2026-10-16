@@ -638,3 +638,109 @@ nuevo).
 **Cuenta de GitLab (para el MR):** `rarstorm` — la creó Roberto con su cuenta de Google (el alta le asignó
 `rstrempler`) y después la cambió. Verificado sin sesión: `gitlab.com/rstrempler` **redirige** a
 `gitlab.com/rarstorm` (1 redirección) y la página muestra `@rarstorm`.
+
+
+---
+
+## 20ª parte — 16-10-2026: cajón de apps (botón del launcher), aviso con casilla y el fallo de las luces
+
+Tres cosas de Roberto, en UNA sola compilación (con una segunda inmediata por la tercera).
+
+### 1) «El cajón de aplicaciones sigue fallando: me deja en la pantalla de inicio»
+
+Medido en la tableta (adb por Wi-Fi, `192.168.68.107:5555`), desde la pantalla de inicio, con
+`uiautomator dump` para saber si el cajón abrió (marca: la caja **«Buscar apps»**):
+
+| Vía | Resultado medido |
+|---|---|
+| Pulsar el nodo **«Todas las apps»** del dock (nodo pulsable del propio launcher) | **ABRE el cajón** («Buscar apps», 31 etiquetas) |
+| Deslizar con las coordenadas que calculaba la app (1904x3040) | **NO abre** (queda igual que la pantalla de inicio, 6 etiquetas) |
+| Deslizar con las coordenadas reales del espacio de toque (3040x1904) | **ABRE el cajón** |
+
+Causa: el deslizamiento se calculaba con `resources.displayMetrics` y en esta tableta eso da
+**1904x3040 con la pantalla en horizontal** — la `y` de arranque (0,72 × 3040 = 2189) cae **fuera** de
+la pantalla (1904 de alto), así que el gesto no hacía nada y el reintento fallaba igual.
+
+Arreglo (`AutoMode.kt`): `pantallaDeGesto()` (primero los límites de la ventana al frente, después
+`WindowManager#getCurrentWindowMetrics`, y solo como último recurso los recursos de la app) y, sobre
+todo, **`pulsarTodasLasApps()`**: se busca el nodo pulsable del launcher con la etiqueta del cajón
+(`todas las apps` / `all apps`…) y se pulsa con la API de accesibilidad
+(`AccessibilityNodeInfo.performAction(ACTION_CLICK)`), con un toque en su centro como respaldo y el
+deslizamiento ya con el tamaño real como último recurso.
+
+**Verificado con el log de la app y el mando (tres veces: dentro de Brave, dentro de Gmail y desde
+Inicio):** `cajón de apps: pulsado el botón del launcher (Todas las apps)` →
+`cajón de apps: abierto con el intento 1`.
+
+### 2) «La app se pone en primera vista al reconectar el control»
+
+Medido: el único camino que abre la app sola es **`UsbAttachActivity`** (la pantalla invisible que
+Android arranca al conectar el control, `AndroidManifest.xml:53-66`) y esa pantalla solo abre
+`MainActivity` si el ajuste **«Abrir la app al conectar el G9»** está encendido (`UsbAttachActivity.kt:15`)
+— y **en su instalación estaba encendido** (se probó el arranque con el intento real
+`USB_DEVICE_ATTACHED` y abrió `MainActivity` al frente, `flg=0x10000000`).
+
+Decisión de Roberto (**opción A**, textual): «aviso con casilla la primera vez… pero se supone que ya
+está así, sólo que no funciona como debe ser» → lo que había era un **interruptor escondido en
+G9 → Ajustes**, sin aviso ni casilla.
+
+Arreglo: **`OpenAsk.kt`** (nuevo) — el SERVICIO muestra una vez, en una ventana de accesibilidad, una
+tarjeta con la casilla **«Abrir la app al conectar el control»** (sin marcar) y un botón «Guardar»; la
+elección se guarda (`open_on_connect` + `open_on_connect_asked`) y **manda**. La opción de Ajustes
+sigue, ahora con su explicación de una línea, y la actividad la relee al volver (`onResume`).
+
+**Verificado:** el aviso salió al conectar el control, Roberto lo dejó sin marcar →
+`aviso al conectar: la app se abrirá sola = false`; apagó y despertó el control y **no se abrió**.
+
+### 3) «Al entrar a la app para darle permisos a Shizuku se me cambió la configuración de luces»
+
+Lo que vio en el control: **tiras cian al ~49 %** y **botón Home blanco al 100 %**. Esos son
+exactamente los valores de **fábrica** de la app (`Gcm.kt:170-173`: `hue = 180, sat = 100, lum = 50`;
+`MainActivity.kt:1146`: `Light(0, hue = 0, sat = 0, lum = 100)`), no un perfil suyo.
+
+Causa (`MainActivity.kt:206-214`, código de una sesión anterior): `flushSaves()` corría al **salir de la
+app** (`onPause`) y escribía cada grupo «sucio»; `lightsDirty` es `true` mientras
+`appliedLeft/appliedRight/appliedHome` sean `null` (nunca leídos) porque los valores de la app **nunca
+son iguales a `null`**. Al instalar la 1.4.18 el proceso arrancó con el estado de fábrica; la lectura
+del control no había dejado base, y salir de la app (a Shizuku) **escribió las luces de fábrica** encima
+de su configuración. El mismo camino podía haber escrito también **sticks** (zonas muertas, gatillo
+rápido) y **vibración**, porque su base también estaba sin leer.
+
+Aclaración de Roberto: **no fue al abrir Shizuku, fue después** — es decir, al salir de la app; queda
+anotado así.
+
+Arreglo (`MainActivity.kt`, `PageLights.kt`):
+- `val lightsKnown get() = appliedLeft != null && appliedRight != null && appliedHome != null`.
+- `flushSaves()` solo vacía lo que tiene **base leída** o **edición del usuario**:
+  `(st.lightsKnown || st.lightsTouched)` para luces, `appliedDeadZones != null` para sticks y
+  `appliedVibration != null` para vibración.
+- El vigilante de luces usa la misma condición (si falla la lectura de UNA luz, ya no se escribe la de
+  fábrica).
+- `lightsTouched` se marca donde el usuario edita luces (los `edit(...)`, los cambios de tira/arcoíris
+  y el editor del botón Home): una edición suya sí se escribe aunque la lectura haya fallado.
+- **Registro nuevo** (para que la próxima vez se vea, no se suponga): `luces: escribo tira1 …, tira2 …,
+  home … (base leída=…)`, `sticks: escribo zonas …`, `vibración: escribo …`.
+
+Roberto confirmó los dos pasos: su perfil restauró todo (luces, sticks, vibración) y entrar/salir de la
+app ya no cambia nada.
+
+### Versiones y verificación
+
+| Versión | Cómo se instaló | Verificación |
+|---|---|---|
+| `1.4.18-diag` (45) | `adb install -r` (Success) | `dumpsys package`: `versionCode=45 versionName=1.4.18-diag`, `firstInstallTime` intacto; accesibilidad activa; `WRITE_SECURE_SETTINGS granted=true`; sha256 del APK `308edc960e06a7ee93ec392ee08416e20600cfe7e5a3d9f506df4b2e79dfbc8c` |
+| `1.4.19-diag` (46) | `adb install -r` (Success) | `dumpsys package`: `versionCode=46 versionName=1.4.19-diag`; firma `a9dea641…` (la del proyecto); sha256 del APK `c8dfa6d28cfb7c23806c58d36fd4e99c3c72ebf872392245da3bbca2fe6360a3` |
+
+Compilación local: `JAVA_HOME="C:/Users/Roberto/AppData/Local/Android/jdk-17" ./gradlew :app:assembleRelease --offline`
+→ `BUILD SUCCESSFUL` las dos veces.
+
+### Lecciones
+
+- Un gesto calculado con el tamaño que dan los recursos de la app puede caer **fuera de la pantalla**:
+  usar el espacio de toque real (ventana al frente → `WindowMetrics`).
+- Cuando el launcher publica el control que se necesita (el nodo «Todas las apps»), pulsarlo por
+  accesibilidad es más fiable que inventar el gesto.
+- Un valor que la app muestra ANTES de leer el control **no es el del control**: nunca escribir por
+  «está distinto» si no hay base leída. Marcar la edición del usuario es lo que permite escribir sin
+  base.
+- Al reportar se dice «se escribió al salir de la app», no «al abrir Shizuku»: la secuencia es el dato.

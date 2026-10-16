@@ -58,7 +58,7 @@ fun LightsPage(s: AppState, a: MainActivity) {
                 ControllerPreview(s, Modifier.fillMaxWidth(), selected = s.lightTarget, labels = true) { t ->
                     val target = if (linked && (t == LightTarget.LEFT || t == LightTarget.RIGHT)) LightTarget.BOTH else t
                     // Al pasar a "ambas", la tira derecha copia a la izquierda.
-                    if (target == LightTarget.BOTH && s.lightTarget != LightTarget.BOTH) s.right = s.left.copy(id = 2)
+                    if (target == LightTarget.BOTH && s.lightTarget != LightTarget.BOTH) { s.right = s.left.copy(id = 2); s.lightsTouched = true }
                     s.lightTarget = target
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,7 +69,7 @@ fun LightsPage(s: AppState, a: MainActivity) {
                     Switch(linked, { on ->
                         linked = on
                         if (on && s.lightTarget != LightTarget.HOME) {
-                            s.right = s.left.copy(id = 2); s.lightTarget = LightTarget.BOTH
+                            s.right = s.left.copy(id = 2); s.lightTarget = LightTarget.BOTH; s.lightsTouched = true
                         }
                         if (!on && s.lightTarget == LightTarget.BOTH) s.lightTarget = LightTarget.LEFT
                     })
@@ -86,6 +86,7 @@ fun LightsPage(s: AppState, a: MainActivity) {
 private fun RingEditor(s: AppState) {
     val l = if (s.lightTarget == LightTarget.RIGHT) s.right else s.left
     fun edit(f: (Light) -> Light) {
+        s.lightsTouched = true
         when (s.lightTarget) {
             LightTarget.LEFT -> s.left = f(s.left).copy(id = 1)
             LightTarget.RIGHT -> s.right = f(s.right).copy(id = 2)
@@ -99,7 +100,7 @@ private fun RingEditor(s: AppState) {
             val rainbow = e == 4 || s.left.effect == 4 || s.right.effect == 4
             if (rainbow && s.lightTarget != LightTarget.BOTH) {
                 val n = l.copy(effect = e)
-                s.left = n.copy(id = 1); s.right = n.copy(id = 2); s.lightTarget = LightTarget.BOTH
+                s.left = n.copy(id = 1); s.right = n.copy(id = 2); s.lightTarget = LightTarget.BOTH; s.lightsTouched = true
             } else edit { it.copy(effect = e) }
         }
         if (l.effect == 4) Hint(tr("El arcoíris va en las dos tiras: el control no lo permite en una sola.", "Rainbow applies to both strips: the controller doesn't allow it on just one."))
@@ -121,9 +122,9 @@ private fun RingEditor(s: AppState) {
 @Composable
 private fun HomeEditor(s: AppState) {
     Panel(tr("Botón Home", "Home button")) {
-        SwitchRow(tr("Luz encendida", "Light on"), !s.homeOff, tr("Solo admite luz fija.", "Static light only.")) { s.homeOff = !it }
+        SwitchRow(tr("Luz encendida", "Light on"), !s.homeOff, tr("Solo admite luz fija.", "Static light only.")) { s.homeOff = !it; s.lightsTouched = true }
     }
-    if (!s.homeOff) Panel(tr("Color", "Color")) { ColorEditor(s.home) { s.home = it.copy(id = 0, effect = 1) } }
+    if (!s.homeOff) Panel(tr("Color", "Color")) { ColorEditor(s.home) { s.home = it.copy(id = 0, effect = 1); s.lightsTouched = true } }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

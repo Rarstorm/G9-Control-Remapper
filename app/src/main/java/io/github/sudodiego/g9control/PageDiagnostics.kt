@@ -64,7 +64,12 @@ fun DiagnosticsPage(s: AppState, a: MainActivity) {
                     }
                     Text(tr("Posición del dibujo", "Drawing position"), fontSize = 14.sp)
                     ChoiceChips(DrawPos.entries.map { it to it.label }, s.drawPos) { s.drawPos = it; Prefs.setDrawPos(a, it) }
-                    SwitchRow(tr("Abrir la app al conectar el G9", "Open the app when the G9 is connected"), s.openOnConnect) {
+                    SwitchRow(
+                        tr("Abrir la app al conectar el G9", "Open the app when the G9 is connected"),
+                        s.openOnConnect,
+                        sub = tr("Si está apagado, la app no se pone al frente al conectar el control.",
+                            "If it is off, the app won't come to the front when the controller is connected.")
+                    ) {
                         s.openOnConnect = it; Prefs.setOpenOnConnect(a, it)
                     }
                     // El identificador solo con las herramientas de desarrollo.

@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
         // Con el dedo sobre un slider no se guarda: la espera empieza al soltarlo.
         watch(
             LIGHTS_QUIET_MS + LIGHTS_SAVE_MS, { listOf(s.left, s.right, s.homeToSend(), s.sliderHeld) },
-            { s.connected && s.lightsDirty && !s.sliderHeld },
+            { s.connected && s.lightsDirty && !s.sliderHeld && (s.lightsKnown || s.lightsTouched) },
             onChange = {
                 s.lightsChangedAt = android.os.SystemClock.uptimeMillis()
                 s.queued(LIGHTS_SAVE_MS, LIGHTS_QUIET_MS)
@@ -174,6 +174,8 @@ class MainActivity : ComponentActivity() {
         resumed = true
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputListener, null)
         refreshDevice()
+        // El aviso del servicio puede haber cambiado esta opción: se relee al volver a la app.
+        state.openOnConnect = Prefs.openOnConnect(this)
         // La app puede recrearse (por ejemplo al importar un respaldo) con el puerto USB todavía abierto: en
         // ese caso autoConnect no lee nada y la app quedaría sin la configuración del control (no se podría
         // aplicar un perfil ni guardar ningún cambio, sin ningún aviso). Se lee aquí.
@@ -204,9 +206,12 @@ class MainActivity : ComponentActivity() {
     private fun flushSaves() {
         val st = state
         if (!G9Usb.isOpen() || applyingProfile) return
-        if (st.lightsDirty && !st.sliderHeld) applyLights()
-        if (st.sticksDirty) saveSticks()
-        if (st.vibrationDirty) saveVibration()
+        // Solo se vacía lo que YA tiene una base leída del control (o una edición del usuario en esta sesión).
+        // Sin esto se escribían los valores de FÁBRICA encima de lo que el control tenía guardado: el 16-10-2026,
+        // salir de la app para ir a Shizuku dejó las tiras en cian al 50 % y el botón Home en blanco al 100 %.
+        if (st.lightsDirty && !st.sliderHeld && (st.lightsKnown || st.lightsTouched)) applyLights()
+        if (st.sticksDirty && st.appliedDeadZones != null) saveSticks()
+        if (st.vibrationDirty && st.appliedVibration != null) saveVibration()
     }
 
     /**
@@ -641,6 +646,7 @@ class MainActivity : ComponentActivity() {
             if (home != s.appliedHome) add(Gcm.setHome(home))
         }
         if (ops.isEmpty()) { s.status = tr("No hay cambios en las luces.", "No light changes."); return }
+        android.util.Log.d("G9Control", "luces: escribo tira1 ${left.hue}/${left.sat}/${left.lum}, tira2 ${right.hue}/${right.sat}/${right.lum}, home ${home.hue}/${home.sat}/${home.lum} (base leída=${s.lightsKnown})")
         withContext(Dispatchers.IO) { ops.forEach { G9Usb.transact(it) } }
         s.appliedLeft = left; s.appliedRight = right; s.appliedHome = home
         s.status = tr("Luces aplicadas.", "Lights applied.")
@@ -651,6 +657,7 @@ class MainActivity : ComponentActivity() {
     /** Devuelve true si el control tomó los valores (verificado releyendo). */
     private suspend fun saveVibrationNow(): Boolean {
         val v = state.vibration
+        android.util.Log.d("G9Control", "vibración: escribo izq ${v.leftGrip}, der ${v.rightGrip}")
         val back = withContext(Dispatchers.IO) {
             G9Usb.transact(Gcm.setVibration(v))
             G9Usb.transact(Gcm.readVibration())?.let { Vibration.parse(it) }
@@ -673,6 +680,7 @@ class MainActivity : ComponentActivity() {
     private suspend fun saveSticksNow(): Boolean {
         val s = state
         val wanted = s.deadZones.toMap()
+        android.util.Log.d("G9Control", "sticks: escribo zonas $wanted, gatillo rápido ${s.quickL}/${s.quickR}")
         val changed = wanted.filter { (id, v) -> s.appliedDeadZones?.get(id) != v }
         val quick = s.quickL to s.quickR
         val quickChanged = quick != s.appliedQuick
@@ -1206,6 +1214,14 @@ class AppState {
     var sliderHeld by mutableStateOf(false)
     fun homeToSend() = home.copy(effect = 1, lum = if (homeOff) 0 else home.lum)
     val lightsDirty get() = left != appliedLeft || right != appliedRight || homeToSend() != appliedHome
+
+    /**
+     * Ya se leyó (o se aplicó) la configuración de luces del control. Sin esto, lo que tiene la app son los
+     * valores de FÁBRICA y escribirlos pisa lo que el control guarda (pasó el 16-10-2026).
+     */
+    val lightsKnown get() = appliedLeft != null && appliedRight != null && appliedHome != null
+    /** El usuario tocó las luces en esta sesión: una edición suya sí se escribe, aunque la lectura haya fallado. */
+    var lightsTouched by mutableStateOf(false)
 
     // Sticks y gatillos.
     val deadZones = mutableStateMapOf(1 to 10, 2 to 10, 3 to 100, 4 to 100, 5 to 5, 6 to 5, 7 to 95, 8 to 95)
